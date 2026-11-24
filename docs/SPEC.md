@@ -407,9 +407,15 @@ The server forwards these as WebSocket events to the browser.
 
 Breaks syntax used by Reclassify: rules separated by `|`. A single number is
 an exact match; `a-b` means a < x ≤ b. Exact rules are checked first.
-Classes are numbered 1…N in rule order; 0 means no rule matched.
-Example: `0 | 0-20 | 20-40 | 40-60 | 60-80 | 80-100 | 100` gives one raster
-with 7 classes.
+Classes are numbered 1…N in rule order; 0 means no rule matched (nodata
+pixels also get 0). With `no_match="nodata"` the output marks 0 as nodata;
+with `keep`, 0 is an ordinary value. Example:
+`0 | 0-20 | 20-40 | 40-60 | 60-80 | 80-100 | 100` gives one raster with 7
+classes. The parser is `geoknit.helpers.parse_breaks`.
+
+An output cannot share its name with an input (section 4), so components
+that return a changed copy name their output after the result (`clipped`,
+`selected`, `reprojected`).
 
 | Tab | Component | Inputs | Outputs | Settings / notes |
 |-----|-----------|--------|---------|------------------|
@@ -417,25 +423,25 @@ with 7 classes.
 | Params | Text | – | Text | value; edit inline on double-click |
 | Params | Panel | data: Any | data: Any (pass-through) | shows `describe()`; yellow, resizable |
 | Params | Map Viewer | layers: Any (list) | – | double-click opens map window (section 8) |
-| Raster | Read Raster | path: Text | raster | bands="all", masked=True |
-| Raster | Write Raster | map: Raster, path: Text | file: Text | COG, compress="deflate" |
+| Raster | Read Raster | path: Text | raster | bands="all", masked=True; lazy, 512 px chunks with all bands |
+| Raster | Write Raster | map: Raster, path: Text (`file: write`) | file: Text | COG, compress="deflate" |
 | Raster | Reclassify | raster, breaks: Text | classes: Raster | no_match, dtype |
-| Raster | Clip | raster, aoi: Vector | raster | all_touched=False |
-| Raster | Align Raster | source, reference: Raster | raster | resampling="nearest" |
-| Raster | Band Select | raster, bands: Text | raster | bands as "1,2,3" or names |
+| Raster | Clip | raster, aoi: Vector | clipped: Raster | all_touched=False; AOI reprojected to the raster CRS |
+| Raster | Align Raster | source, reference: Raster | raster | resampling="nearest"; reads the whole source (the one built-in that is not lazy) |
+| Raster | Band Select | raster, bands: Text | selected: Raster | bands as "1,2,3" or names |
 | Vector | Read Vector | path: Text | vector | layer=None |
-| Vector | Write Vector | vector, path: Text | file: Text | format from extension |
-| Vector | Reproject | vector, crs: Text | vector | |
-| Sampling | Stratified Sample | classes: Raster, value: Raster, aoi: Vector, n: Number, seed: Number | points: Vector | equal n per class (warn if a class has fewer pixels); points at pixel centres; value_field="value", class_field="cls" |
-| Sampling | Random Sample | raster, aoi: Vector, n, seed | points: Vector | only valid (non-nodata) pixels |
+| Vector | Write Vector | vector, path: Text (`file: write`) | file: Text | format from extension: .gpkg, .shp, .geojson, .parquet |
+| Vector | Reproject | vector, crs: Text | reprojected: Vector | |
+| Sampling | Stratified Sample | classes: Raster, value: Raster, aoi: Vector, n: Number, seed: Number | points: Vector | equal n per class (warn if a class has fewer pixels); points at pixel centres; value_field="value", class_field="cls"; classes and value on one grid; reads band 1 of both inside the AOI's bounding box |
+| Sampling | Random Sample | raster, aoi: Vector, n, seed | points: Vector | only valid (non-nodata) pixels of band 1; an `id` column |
 | Sampling | Extract Values | points: Vector, raster: Raster | table: Table | columns from band descriptions, else b01…; keeps point attributes; drops nodata rows with a warning; sets `table.attrs["feature_columns"]` |
 | Sampling | Train/Test Split | table | train: Table, test: Table | test_fraction=0.3, seed=42, stratify_by=None |
-| Model | Random Forest | table, target: Text, n_trees, max_depth, min_leaf, seed | model: Model | task="regression", max_features="sqrt", features="auto" (feature_columns attr, else numeric columns except target) |
+| Model | Random Forest | table, target: Text, n_trees, max_depth, min_leaf, seed | model: Model | task="regression", max_features="sqrt", features="auto" (feature_columns attr, else numeric columns except target); trains on all cores, predicts on one thread so maps are repeatable |
 | Model | SVM | table, target: Text | model: Model | task, kernel="rbf", C=1.0, gamma="scale", standardize=True |
 | Model | Predict Raster | model, raster | map: Raster | window=512; band names must equal `model.feature_names`, else error listing the missing ones; float32 for regression, smallest int type for classes |
-| Validation | Accuracy | map: Raster, reference: Vector, field: Text | metrics: Table | n, RMSE, MAE, R², bias (observed − predicted); nearest pixel; points outside or on nodata dropped and counted |
-| Validation | Confusion Matrix | map, reference: Vector, field: Text | matrix: Table, metrics: Table | overall accuracy, kappa, producer's/user's accuracy and F1 per class |
-| Script | Python | user-defined | user-defined + out: Text | ports added/removed in the component window |
+| Validation | Accuracy | map: Raster, reference: Vector, field: Text | metrics: Table | one row: n, dropped, RMSE, MAE, R², bias (observed − predicted); nearest pixel; points outside, on nodata or without a value dropped and counted |
+| Validation | Confusion Matrix | map, reference: Vector, field: Text | matrix: Table, metrics: Table | matrix: reference classes as rows, map classes as columns; metrics: columns metric, class, value; overall accuracy and kappa first, then producer's/user's accuracy and F1 per class |
+| Script | Python | user-defined | user-defined + out: Text | ports added/removed in the component window; the template has no inputs |
 
 Random Forest and SVM inputs that also appear as settings (n_trees, max_depth,
 min_leaf, seed) can be left unwired; the setting is then used.

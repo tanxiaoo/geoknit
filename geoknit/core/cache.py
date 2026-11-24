@@ -34,6 +34,9 @@ from geoknit.core.graph import PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Nod
 CACHE_FORMAT = 1
 """Bump when the key recipe or the disk layout changes; old entries then miss."""
 
+RASTER_CHUNKS: dict[str, int] = {"band": -1, "y": 512, "x": 512}
+"""Dask chunks for rasters opened lazily: all bands together, 512 × 512 px windows."""
+
 EMPTY_KEY = hashlib.sha256(b"geoknit:empty").hexdigest()
 """Port key of an unconnected Panel's output (value ``None``)."""
 
@@ -536,8 +539,8 @@ def _read_raster(path: Path, info: dict[str, Any]) -> Any:
             raise CacheMiss(f"{src} is gone") from None
         if (st.st_size, st.st_mtime_ns) != (ref["size"], ref["mtime_ns"]):
             raise CacheMiss(f"{src} has changed")
-        chunks: Any = True if info.get("chunked", True) else None
+        chunks: Any = dict(RASTER_CHUNKS) if info.get("chunked", True) else None
         da = rioxarray.open_rasterio(src, chunks=chunks, masked=masked)
         da.attrs["long_name"] = tuple(ref["long_name"])
         return da
-    return rioxarray.open_rasterio(path, chunks=True, masked=masked)
+    return rioxarray.open_rasterio(path, chunks=dict(RASTER_CHUNKS), masked=masked)

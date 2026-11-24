@@ -448,6 +448,7 @@ that return a changed copy name their output after the result (`clipped`,
 | Vector | Reproject | vector, crs: Text | reprojected: Vector | |
 | Sampling | Stratified Sample | classes: Raster, value: Raster, aoi: Vector, n: Number, seed: Number | points: Vector | equal n per class (warn if a class has fewer pixels); points at pixel centres; value_field="value", class_field="cls"; classes and value on one grid; reads band 1 of both inside the AOI's bounding box |
 | Sampling | Random Sample | raster, aoi: Vector, n, seed | points: Vector | only valid (non-nodata) pixels of band 1; an `id` column |
+| Sampling | Split Points | points: Vector | train: Vector, test: Vector | test_fraction=0.3, seed=42, stratify_by=None; holds out points for validation |
 | Sampling | Extract Values | points: Vector, raster: Raster | table: Table | columns from band descriptions, else b01…; keeps point attributes; drops nodata rows with a warning; sets `table.attrs["feature_columns"]` |
 | Sampling | Train/Test Split | table | train: Table, test: Table | test_fraction=0.3, seed=42, stratify_by=None |
 | Model | Random Forest | table, target: Text, n_trees, max_depth, min_leaf, seed | model: Model | task="regression", max_features="sqrt", features="auto" (feature_columns attr, else numeric columns except target); trains on all cores, predicts on one thread so maps are repeatable |
@@ -466,12 +467,18 @@ min_leaf, seed) can be left unwired; the setting is then used.
 Text data/CLMS_2018_Milan_UTM32N.tif ─ Read Raster ─┬─ Reclassify ← Text breaks ─┐
                                                     └──────────── value ─────────┤
 Text data/aoi_milan.gpkg ── Read Vector ─────────────────────── aoi ─────────────┤
-Slider n, Slider seed ───────────────────────────────────────────────────────────┴─ Stratified Sample
-Text data/AlphaEarth_2018_Milan_UTM32N.tif ─ Read Raster ──┬─ Extract Values ← points
-                                                           │        └─ Random Forest ← Text "IMD", Slider n_trees
+Slider n, Slider seed ───────────────────────────────────────────────────────────┴─ Stratified Sample ─ Split Points ─┬─ train
+Text data/AlphaEarth_2018_Milan_UTM32N.tif ─ Read Raster ──┬─ Extract Values ← train points                           │
+                                                           │        └─ Random Forest ← Text "IMD", Slider n_trees     │
                                                            └─ Predict Raster ← model ─┬─ Write Raster ← Text outputs/imd_rf.tif
-Text data/earthlabel_2018.gpkg ─ Read Vector ─────────────────────── reference ───────┴─ Accuracy ← Text "imd_ref" ─ Panel
+                                                                                      └─ Accuracy ← test points, Text "IMD" ─ Panel
 ```
+
+Validation uses held-out sample points, not separate reference data:
+Stratified Sample stores the CLMS IMD of each point in the field `IMD`;
+Split Points (stratified by class, 30 % test) sends the training points to
+Extract Values and the test points to Accuracy, which compares the predicted
+map at each test point with its `IMD`.
 
 The data files are copied into `examples/milan_imd/data/` by the user and are
 git-ignored:
@@ -481,14 +488,9 @@ git-ignored:
 | `CLMS_2018_Milan_UTM32N.tif` | 1 band, CLMS IMD 2018 in %, float32, nodata 255 |
 | `aoi_milan.gpkg` | one polygon (layer `milano_city_rect_UTM32N`) |
 | `AlphaEarth_2018_Milan_UTM32N.tif` | 64 bands named A00…A63, float32, nodata NaN |
-| `milan_imd_2018_results_cells.csv` | 450 EarthLabel plots (`LAT`/`LON` in WGS84, `ref_label`, `cells_json`) |
 
 All rasters are EPSG:32632, 10 m. The AlphaEarth GeoTIFF is exported from
-Earth Engine once, outside GeoKnit. The EarthLabel CSV is turned into
-`earthlabel_2018.gpkg` once, also outside GeoKnit, by
-`examples/milan_imd/prepare_reference.py`: points in EPSG:32632 with fields
-`PLOTID`, `stratum` (from `ref_label`) and `imd_ref`, the impervious share in %
-of the plot's resolvable sub-cells in `cells_json`.
+Earth Engine once, outside GeoKnit.
 
 ---
 

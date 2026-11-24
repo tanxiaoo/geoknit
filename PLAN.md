@@ -72,7 +72,7 @@ review its plan before it writes code.
 - [x] Python component template (empty component with editable ports, `out` output)
 - [x] Registry: built-ins, `~/.geoknit/components/`, entry-point packs (test with a tiny fake pack)
 - [x] `examples/synthetic/imd.geoknit`: the Milan-shaped workflow on synthetic data
-- [x] `examples/milan_imd/prepare_reference.py`: EarthLabel CSV → `earthlabel_2018.gpkg` (SPEC 7)
+- [x] Validation on held-out sample points (Split Points) instead of separate reference data (SPEC 7)
 - [x] `examples/milan_imd/milan_imd.geoknit` + README (which four files to copy into `data/`, expected CRS and band names)
 
 **Done when:**

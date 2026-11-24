@@ -121,3 +121,25 @@ def test_train_test_split() -> None:
     assert again["test"].equals(test)
     bad = run_builtin("sampling/train_test_split", table=table, stratify_by="nope")
     assert 'no column "nope"' in (bad.error or "")
+
+
+def test_split_points_holds_out_test_points(layers: dict) -> None:
+    points = ok(
+        "sampling/stratified_sample",
+        classes=layers["classes"], value=layers["imd"], aoi=layers["aoi"], n=10, seed=1,
+    )["points"]  # fmt: skip
+    out = ok("sampling/split_points", points=points, stratify_by="cls")
+    train, test = out["train"], out["test"]
+    assert (len(train), len(test)) == (49, 21)
+    assert train.crs == points.crs and test.crs == points.crs
+    assert set(test["cls"]) == set(points["cls"])  # every class in the test part
+
+    def keys(g: gpd.GeoDataFrame) -> set[tuple[float, float]]:
+        return set(zip(g.geometry.x, g.geometry.y, strict=True))
+
+    assert keys(train).isdisjoint(keys(test))
+    assert keys(train) | keys(test) == keys(points)
+    again = ok("sampling/split_points", points=points, stratify_by="cls")
+    assert again["test"].geometry.equals(test.geometry)  # same seed, same split
+    bad = run_builtin("sampling/split_points", points=points, test_fraction=1.5)
+    assert "between 0 and 1" in (bad.error or "")

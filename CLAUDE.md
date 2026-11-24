@@ -49,8 +49,7 @@ frontend/                 React + TypeScript + Vite
   src/strings.ts          ALL user-facing text lives here
 examples/
   synthetic/              make_data.py + imd.geoknit (used by tests and CI)
-  milan_imd/              milan_imd.geoknit, prepare_reference.py, README; data/ and
-                          outputs/ are git-ignored
+  milan_imd/              milan_imd.geoknit + README; data/ and outputs/ are git-ignored
 tests/
 docs/SPEC.md
 ```

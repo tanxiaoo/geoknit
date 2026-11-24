@@ -12,7 +12,13 @@ FILES = sorted(p for p in BUILTIN_DIR.glob("*/*.py") if not p.name.startswith("_
 EXPECTED = {
     "raster": {"read_raster", "write_raster", "reclassify", "clip", "align_raster", "band_select"},
     "vector": {"read_vector", "write_vector", "reproject"},
-    "sampling": {"stratified_sample", "random_sample", "extract_values", "train_test_split"},
+    "sampling": {
+        "stratified_sample",
+        "random_sample",
+        "split_points",
+        "extract_values",
+        "train_test_split",
+    },
     "model": {"random_forest", "svm", "predict_raster"},
     "validation": {"accuracy", "confusion_matrix"},
     "script": {"python"},

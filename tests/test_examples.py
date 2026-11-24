@@ -40,7 +40,7 @@ def test_synthetic_example_runs_headless(
     assert main(["run", "-q", str(tmp_path / "imd.geoknit")]) == 0
     first = capsys.readouterr()
     metrics = _metrics(first.out)
-    assert metrics["n"] == 150
+    assert metrics["n"] == 42  # the held-out 30 % of 7 × 20 sample points
     assert metrics["R²"] > 0.5
     assert (tmp_path / "outputs" / "imd_rf.tif").is_file()
     assert "0 failed" in first.err

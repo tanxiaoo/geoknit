@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Folder } from "lucide-react";
 import type { FileNode } from "../apiTypes";
 import { store, useStore } from "../store";
 import { MIME_PATH } from "./Canvas";
+import { openWorkflow } from "./TopBar";
 
 const RASTER = [".tif", ".tiff", ".vrt", ".img", ".jp2", ".nc"];
 const VECTOR = [".gpkg", ".shp", ".geojson", ".json", ".parquet", ".fgb", ".kml"];
@@ -29,7 +30,9 @@ function Entry({ node, depth }: { node: FileNode; depth: number }) {
         </div>
         {open && (
           <ul>
-            {node.children?.map((c) => <Entry key={c.path} node={c} depth={depth + 1} />)}
+            {node.children?.map((c) => (
+              <Entry key={c.path} node={c} depth={depth + 1} />
+            ))}
           </ul>
         )}
       </li>
@@ -47,6 +50,9 @@ function Entry({ node, depth }: { node: FileNode; depth: number }) {
           e.dataTransfer.effectAllowed = "copy";
         }}
         title={node.path}
+        onDoubleClick={() => {
+          if (badge?.kind === "workflow") openWorkflow(node.path);
+        }}
         data-testid={`file-${node.path}`}
       >
         <span className={`gk-file-badge gk-badge-${badge?.kind ?? "other"}`}>
@@ -69,7 +75,11 @@ export function FolderTree() {
   return (
     <aside className="gk-folder" data-testid="folder-tree">
       <div className="gk-folder-title">{files?.name}</div>
-      <ul>{files?.children?.map((c) => <Entry key={c.path} node={c} depth={0} />)}</ul>
+      <ul>
+        {files?.children?.map((c) => (
+          <Entry key={c.path} node={c} depth={0} />
+        ))}
+      </ul>
     </aside>
   );
 }

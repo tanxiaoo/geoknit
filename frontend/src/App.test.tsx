@@ -5,7 +5,10 @@ import type { ComponentEntry, GraphView, NodeView } from "./apiTypes";
 import { categories, fittingPort, paramEntries } from "./catalog";
 import { fileBadge } from "./components/FolderTree";
 import { TextNode } from "./components/nodes/TextNode";
-import { initialState, reduceEvent, Store, store } from "./store";
+import { groupBox } from "./components/Groups";
+import type { GkNode } from "./components/nodes/kinds";
+import { workflowFiles } from "./components/TopBar";
+import { clipOf, initialState, portSummary, reduceEvent, Store, store } from "./store";
 import { strings } from "./strings";
 import { canConnect } from "./types";
 import type { Api } from "./api";
@@ -32,6 +35,10 @@ function graph(nodes: NodeView[], wires: GraphView["workflow"]["wires"] = []): G
     path: null,
     trusted: true,
     running: false,
+    dirty: false,
+    can_undo: false,
+    can_redo: false,
+    recovery: false,
   };
 }
 
@@ -129,9 +136,10 @@ describe("events from /ws", () => {
 });
 
 function fakeApi(over: Partial<Api> = {}): Api {
-  const g = graph([node("n1"), node("n2", { component: "builtin/model/rf", title: "RF" })], [
-    { from: ["n1", "value"], to: ["n2", "target"] },
-  ]);
+  const g = graph(
+    [node("n1"), node("n2", { component: "builtin/model/rf", title: "RF" })],
+    [{ from: ["n1", "value"], to: ["n2", "target"] }],
+  );
   return {
     graph: vi.fn(async () => g),
     patchNode: vi.fn(async () => g.nodes.n1),
@@ -188,5 +196,67 @@ describe("Text node", () => {
     fireEvent.change(input, { target: { value: "data/imd.tif" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(patch).toHaveBeenCalledWith("n1", { value: "data/imd.tif" });
+  });
+});
+
+describe("editing helpers", () => {
+  const wires = [{ from: ["n1", "value"], to: ["n2", "data"] }] as GraphView["workflow"]["wires"];
+
+  test("a port's summary: its own output, or the output wired into it, after a run", () => {
+    const g = graph(
+      [node("n1", { state: "done" }), node("n2", { component: "param/panel" })],
+      wires,
+    );
+    const state = { ...initialState, graph: g, summaries: { n1: { value: "Text 'hi'" } } };
+    expect(portSummary(state, "n1", "out", "value")).toBe("Text 'hi'");
+    expect(portSummary(state, "n2", "in", "data")).toBe("Text 'hi'");
+    expect(portSummary(state, "n2", "in", "other")).toBeNull();
+    const stale = { ...state, graph: graph([node("n1", { state: "out_of_date" })], wires) };
+    expect(portSummary(stale, "n1", "out", "value")).toBeNull();
+  });
+
+  test("copy keeps only the wires among the copied nodes", () => {
+    const g = graph(
+      [node("n1"), node("n2"), node("n3")],
+      [...wires, { from: ["n2", "data"], to: ["n3", "text"] }],
+    );
+    g.workflow.nodes = ["n1", "n2", "n3"].map((id) => ({ id, position: [0, 0] }));
+    const clip = clipOf(g, ["n1", "n2"]);
+    expect(clip.nodes.map((n) => n.id)).toEqual(["n1", "n2"]);
+    expect(clip.wires).toEqual(wires);
+  });
+
+  test("Open lists every .geoknit file in the project", () => {
+    const tree = {
+      name: "p",
+      path: "",
+      kind: "dir" as const,
+      children: [
+        { name: "a.geoknit", path: "a.geoknit", kind: "file" as const },
+        {
+          name: "data",
+          path: "data",
+          kind: "dir" as const,
+          children: [
+            { name: "x.tif", path: "data/x.tif", kind: "file" as const },
+            { name: "b.GEOKNIT", path: "data/b.GEOKNIT", kind: "file" as const },
+          ],
+        },
+      ],
+    };
+    expect(workflowFiles(tree)).toEqual(["a.geoknit", "data/b.GEOKNIT"]);
+    expect(workflowFiles(null)).toEqual([]);
+  });
+
+  test("a group box wraps its measured nodes with room for the label", () => {
+    const n = (id: string, x: number, y: number) =>
+      ({ id, position: { x, y }, measured: { width: 100, height: 50 }, data: {} }) as GkNode;
+    const box = groupBox({ title: "G", nodes: ["a", "b"] }, [
+      n("a", 0, 0),
+      n("b", 200, 100),
+      n("c", 900, 900),
+    ]);
+    expect(box).toEqual({ x: -14, y: -38, w: 328, h: 202 });
+    expect(groupBox({ title: "G", nodes: ["zz"] }, [n("a", 0, 0)])).toBeNull();
   });
 });

@@ -10,12 +10,15 @@ import type {
   Display,
   FileNode,
   GraphView,
+  NodeJson,
   NodePatch,
   NodeState,
   RunReport,
   ServerEvent,
   Status,
+  WireJson,
 } from "./apiTypes";
+import { strings } from "./strings";
 
 export interface Toast {
   id: number;
@@ -23,6 +26,14 @@ export interface Toast {
   x?: number;
   y?: number;
 }
+
+export interface Tip {
+  text: string;
+  x: number;
+  y: number;
+}
+
+export type FileMenu = "closed" | "menu" | "saveAs";
 
 export interface AppState {
   graph: GraphView | null;
@@ -37,6 +48,11 @@ export interface AppState {
   lastReport: RunReport | null;
   /** Finished runs since the page loaded. */
   runCount: number;
+  /** Hover tooltip with a port's describe() summary. */
+  tip: Tip | null;
+  fileMenu: FileMenu;
+  /** Node ids the canvas selects once the next graph arrives (after paste). */
+  pendingSelect: string[] | null;
 }
 
 export const initialState: AppState = {
@@ -51,7 +67,43 @@ export const initialState: AppState = {
   toast: null,
   lastReport: null,
   runCount: 0,
+  tip: null,
+  fileMenu: "closed",
+  pendingSelect: null,
 };
+
+/** What a port carries after a run: its own output, or the output wired into it. */
+export function portSummary(
+  state: AppState,
+  nodeId: string,
+  side: "in" | "out",
+  name: string,
+): string | null {
+  const g = state.graph;
+  if (!g) return null;
+  let src: [string, string] = [nodeId, name];
+  if (side === "in") {
+    const wire = g.workflow.wires.find((w) => w.to[0] === nodeId && w.to[1] === name);
+    if (!wire) return null;
+    src = wire.from;
+  }
+  if (g.nodes[src[0]]?.state !== "done") return null;
+  return state.summaries[src[0]]?.[src[1]] ?? null;
+}
+
+/** The nodes and the wires among them, as POST /api/paste takes them. */
+export interface Clip {
+  nodes: NodeJson[];
+  wires: WireJson[];
+}
+
+export function clipOf(graph: GraphView, ids: string[]): Clip {
+  const keep = new Set(ids);
+  return {
+    nodes: graph.workflow.nodes.filter((n) => keep.has(n.id)),
+    wires: graph.workflow.wires.filter((w) => keep.has(w.from[0]) && keep.has(w.to[0])),
+  };
+}
 
 export interface Point {
   x: number;
@@ -111,6 +163,8 @@ let toastId = 0;
 export class Store {
   private state: AppState = initialState;
   private listeners = new Set<() => void>();
+  private clip: Clip | null = null;
+  private pastes = 0;
 
   constructor(readonly api: Api = defaultApi) {}
 
@@ -121,7 +175,7 @@ export class Store {
     return () => this.listeners.delete(fn);
   };
 
-  private set(patch: Partial<AppState>): void {
+  set(patch: Partial<AppState>): void {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach((fn) => fn());
   }
@@ -254,7 +308,7 @@ export class Store {
     if (label) this.set({ lastChange: label });
   }
 
-  /** Move nodes locally at once, then tell the server. */
+  /** Move nodes locally at once, then tell the server (one undo step). */
   async moveNodes(moves: { id: string; position: [number, number] }[]): Promise<void> {
     const g = this.state.graph;
     if (g) {
@@ -262,15 +316,18 @@ export class Store {
       for (const m of moves) if (nodes[m.id]) nodes[m.id] = { ...nodes[m.id], position: m.position };
       this.set({ graph: { ...g, nodes } });
     }
-    await this.mutate(() =>
-      Promise.all(moves.map((m) => this.api.patchNode(m.id, { position: m.position }))),
-    );
+    const positions = Object.fromEntries(moves.map((m) => [m.id, m.position]));
+    await this.mutate(() => this.api.move(positions));
+  }
+
+  /** Delete nodes and wires as one undo step. */
+  async remove(ids: string[], wires: WireJson[] = []): Promise<void> {
+    if (!ids.length && !wires.length) return;
+    await this.mutate(() => this.api.remove(ids, wires));
   }
 
   async removeNodes(ids: string[]): Promise<void> {
-    await this.mutate(async () => {
-      for (const id of ids) await this.api.removeNode(id);
-    });
+    await this.remove(ids);
   }
 
   async addWire(from: [string, string], to: [string, string], at?: Point): Promise<boolean> {
@@ -282,10 +339,86 @@ export class Store {
     return ok === true;
   }
 
-  async removeWires(wires: { from: [string, string]; to: [string, string] }[]): Promise<void> {
-    await this.mutate(async () => {
-      for (const w of wires) await this.api.removeWire(w.from, w.to);
+  async removeWires(wires: WireJson[]): Promise<void> {
+    await this.remove([], wires);
+  }
+
+  async undo(): Promise<void> {
+    if (this.state.graph?.can_undo) await this.mutate(() => this.api.undo());
+  }
+
+  async redo(): Promise<void> {
+    if (this.state.graph?.can_redo) await this.mutate(() => this.api.redo());
+  }
+
+  // ── clipboard and groups ──
+  copy(ids: string[]): void {
+    const g = this.state.graph;
+    if (!g || !ids.length) return;
+    this.clip = clipOf(g, ids);
+    this.pastes = 0;
+  }
+
+  get hasClip(): boolean {
+    return this.clip !== null && this.clip.nodes.length > 0;
+  }
+
+  /** Paste the copied nodes; with ``at``, their top-left corner goes there. */
+  async paste(at?: Point): Promise<string[] | undefined> {
+    const clip = this.clip;
+    if (!clip?.nodes.length) return undefined;
+    let offset: [number, number];
+    if (at) {
+      const x0 = Math.min(...clip.nodes.map((n) => n.position[0]));
+      const y0 = Math.min(...clip.nodes.map((n) => n.position[1]));
+      offset = [Math.round(at.x - x0), Math.round(at.y - y0)];
+    } else {
+      this.pastes += 1;
+      offset = [30 * this.pastes, 30 * this.pastes];
+    }
+    return this.mutate(async () => {
+      const { ids } = await this.api.paste(clip.nodes, clip.wires, offset);
+      this.set({ pendingSelect: ids });
+      return ids;
     });
+  }
+
+  async group(ids: string[]): Promise<void> {
+    if (ids.length) await this.mutate(() => this.api.addGroup(strings.newGroup, ids));
+  }
+
+  async renameGroup(index: number, title: string): Promise<void> {
+    await this.mutate(() => this.api.patchGroup(index, { title }));
+  }
+
+  async ungroup(index: number): Promise<void> {
+    await this.mutate(() => this.api.removeGroup(index));
+  }
+
+  // ── files ──
+  /** Save to the open file, or to ``path`` (relative to the project folder). */
+  async save(path?: string): Promise<boolean> {
+    const g = this.state.graph;
+    if (!path && !g?.path) {
+      this.set({ fileMenu: "saveAs" });
+      return false;
+    }
+    const target = path && !path.toLowerCase().endsWith(".geoknit") ? `${path}.geoknit` : path;
+    const ok = await this.mutate(() => this.api.save(target).then(() => true));
+    if (ok) {
+      this.set({ fileMenu: "closed" });
+      void this.refreshFiles();
+    }
+    return ok === true;
+  }
+
+  async open(path: string): Promise<void> {
+    this.set({ fileMenu: "closed" });
+    await this.mutate(() => this.api.open(path));
+  }
+
+  async recover(restore: boolean): Promise<void> {
+    await this.mutate(() => this.api.recover(restore));
   }
 
   async setDisplay(display: Exclude<Display, "default">): Promise<void> {

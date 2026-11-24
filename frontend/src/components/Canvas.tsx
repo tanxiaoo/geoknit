@@ -12,7 +12,7 @@ import {
   type NodeChange,
   type OnConnectStartParams,
 } from "@xyflow/react";
-import type { ComponentEntry, GraphView, PortType } from "../apiTypes";
+import type { ComponentEntry, GraphView, GroupJson, PortType } from "../apiTypes";
 import { fittingPort, type WireFrom } from "../catalog";
 import { store, useStore } from "../store";
 import { strings } from "../strings";
@@ -20,9 +20,10 @@ import { needsRun, PARAM_TEXT, PORT_COLOURS } from "../types";
 import { ComponentNode } from "./nodes/ComponentNode";
 import { nodeKind, PANEL_SIZE, type GkNode } from "./nodes/kinds";
 import { PanelNode } from "./nodes/PanelNode";
-import { DragContext, portName, type DragFrom } from "./nodes/Port";
+import { DragContext, hideTip, portName, type DragFrom } from "./nodes/Port";
 import { SliderNode } from "./nodes/SliderNode";
 import { TextNode } from "./nodes/TextNode";
+import { Groups } from "./Groups";
 import { SearchPopup } from "./SearchPopup";
 import { TypedEdge, type GkEdge } from "./TypedEdge";
 
@@ -36,9 +37,11 @@ const nodeTypes = {
   panel: PanelNode,
 };
 const edgeTypes = { typed: TypedEdge };
+const NO_GROUPS: GroupJson[] = [];
 
-function toNodes(graph: GraphView, previous: GkNode[]): GkNode[] {
+function toNodes(graph: GraphView, previous: GkNode[], select: string[] | null): GkNode[] {
   const prev = new Map(previous.map((n) => [n.id, n]));
+  const chosen = select ? new Set(select) : null;
   return Object.values(graph.nodes).map((view) => {
     const old = prev.get(view.id);
     const kind = nodeKind(view);
@@ -48,7 +51,7 @@ function toNodes(graph: GraphView, previous: GkNode[]): GkNode[] {
       // keep the local position while the node is being dragged
       position: old?.dragging ? old.position : { x: view.position[0], y: view.position[1] },
       data: { view },
-      selected: old?.selected ?? false,
+      selected: chosen ? chosen.has(view.id) : (old?.selected ?? false),
       dragging: old?.dragging,
       // keep the measured size, or React Flow hides the node's wires until it re-measures
       measured: old?.measured,
@@ -104,7 +107,8 @@ interface Search {
 interface Menu {
   x: number;
   y: number;
-  nodeId: string;
+  nodeId?: string;
+  group?: number;
 }
 
 export function Canvas() {
@@ -117,10 +121,14 @@ export function Canvas() {
   const [menu, setMenu] = useState<Menu | null>(null);
   const wrapper = useRef<HTMLDivElement>(null);
   const fitted = useRef(false);
+  const groups = useStore((s) => s.graph?.workflow.groups ?? NO_GROUPS);
 
   useEffect(() => {
     if (!graph) return;
-    setNodes((prev) => toNodes(graph, prev));
+    const select = store.getState().pendingSelect;
+    if (select) store.set({ pendingSelect: null });
+    setNodes((prev) => toNodes(graph, prev, select));
+    if (select) setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
     setEdges((prev) => toEdges(graph, prev));
     if (!fitted.current) {
       // Fit once, when the page first gets the workflow; never zoom past 100 %.
@@ -134,6 +142,34 @@ export function Canvas() {
     (changes: NodeChange<GkNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
     [],
   );
+
+  // ── keyboard (SPEC 8): Ctrl+Z / Ctrl+Y, Ctrl+C / Ctrl+V, Ctrl+G, Ctrl+S ──
+  const pointer = useRef<{ x: number; y: number } | null>(null);
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key === "s") {
+        e.preventDefault(); // even while typing
+        void store.save();
+        return;
+      }
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName))) return;
+      const selected = nodesRef.current.filter((n) => n.selected).map((n) => n.id);
+      if (key === "z" && !e.shiftKey) void store.undo();
+      else if (key === "y" || (key === "z" && e.shiftKey)) void store.redo();
+      else if (key === "c") store.copy(selected);
+      else if (key === "v") void store.paste(pointer.current ?? undefined);
+      else if (key === "g") void store.group(selected);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const onEdgesChange = useCallback(
     (changes: EdgeChange<GkEdge>[]) => setEdges((es) => applyEdgeChanges(changes, es)),
     [],
@@ -223,12 +259,17 @@ export function Canvas() {
     async ({ nodes: ns, edges: es }: { nodes: GkNode[]; edges: GkEdge[] }) => {
       const gone = new Set(ns.map((n) => n.id));
       const wires = es.filter((e) => !gone.has(e.source) && !gone.has(e.target)).map(edgeWire);
-      if (wires.length) await store.removeWires(wires);
-      if (ns.length) await store.removeNodes(ns.map((n) => n.id));
+      await store.remove(ns.map((n) => n.id), wires); // one undo step
       return false; // the refreshed graph removes them
     },
     [],
   );
+
+  /** A right-clicked selected node acts on the whole selection. */
+  const menuTargets = (id: string): string[] => {
+    const node = nodes.find((n) => n.id === id);
+    return node?.selected ? nodes.filter((n) => n.selected).map((n) => n.id) : [id];
+  };
 
   const runToHere = useMemo(
     () => (id: string) => {
@@ -247,6 +288,14 @@ export function Canvas() {
         onDrop={onDrop}
         onDoubleClick={onDoubleClick}
         onPointerUpCapture={(e) => (lastPointer.current = { x: e.clientX, y: e.clientY })}
+        onMouseMove={(e) =>
+          (pointer.current = flow.screenToFlowPosition({
+            x: e.clientX,
+            y: e.clientY,
+          }))
+        }
+        onMouseLeave={() => (pointer.current = null)}
+        onPointerDown={hideTip}
         data-testid="canvas"
       >
         <ReactFlow<GkNode, GkEdge>
@@ -283,6 +332,15 @@ export function Canvas() {
           proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Lines} gap={24} color="#d4d8de" />
+          <Groups
+            groups={groups}
+            nodes={nodes}
+            onSelect={(ids) => {
+              setNodes((ns) => ns.map((n) => ({ ...n, selected: ids.includes(n.id) })));
+              setEdges((es) => es.map((e) => ({ ...e, selected: false })));
+            }}
+            onMenu={(group, x, y) => setMenu({ ...local(x, y), group })}
+          />
         </ReactFlow>
         {search && (
           <SearchPopup
@@ -295,17 +353,50 @@ export function Canvas() {
         )}
         {menu && (
           <div className="gk-popover gk-menu" style={{ left: menu.x, top: menu.y }}>
-            <button onClick={() => runToHere(menu.nodeId)} data-testid="menu-run-to-here">
-              {strings.runToHere}
-            </button>
-            <button
-              onClick={() => {
-                setMenu(null);
-                void store.removeNodes([menu.nodeId]);
-              }}
-            >
-              {strings.deleteNode}
-            </button>
+            {menu.group !== undefined ? (
+              <button
+                onClick={() => {
+                  setMenu(null);
+                  void store.ungroup(menu.group!);
+                }}
+                data-testid="menu-ungroup"
+              >
+                {strings.ungroup}
+              </button>
+            ) : (
+              <>
+                <button onClick={() => runToHere(menu.nodeId!)} data-testid="menu-run-to-here">
+                  {strings.runToHere}
+                </button>
+                <button
+                  onClick={() => {
+                    setMenu(null);
+                    store.copy(menuTargets(menu.nodeId!));
+                  }}
+                  data-testid="menu-copy"
+                >
+                  {strings.shortcut(strings.copy, "Ctrl+C")}
+                </button>
+                <button
+                  onClick={() => {
+                    setMenu(null);
+                    void store.group(menuTargets(menu.nodeId!));
+                  }}
+                  data-testid="menu-group"
+                >
+                  {strings.shortcut(strings.group, "Ctrl+G")}
+                </button>
+                <button
+                  onClick={() => {
+                    setMenu(null);
+                    void store.removeNodes(menuTargets(menu.nodeId!));
+                  }}
+                  data-testid="menu-delete"
+                >
+                  {strings.deleteNode}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

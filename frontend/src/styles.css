@@ -70,14 +70,64 @@ button:disabled {
 .gk-logo svg {
   color: #5eead4;
 }
+.gk-file {
+  position: relative;
+}
 .gk-filename {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   font-family: var(--mono);
   font-size: 13px;
   color: #cbd5e1;
+  cursor: pointer;
+}
+.gk-filename:hover {
+  background: rgb(255 255 255 / 0.08);
 }
 .gk-save-state {
   color: #94a3b8;
   font-family: inherit;
+  white-space: pre;
+}
+.gk-save-state.gk-dirty {
+  color: #fbbf24;
+}
+.gk-file-menu {
+  top: 34px;
+  left: 0;
+  min-width: 240px;
+  color: var(--ink, #0f172a);
+}
+.gk-menu-heading {
+  margin: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.gk-menu button.gk-current {
+  font-weight: 600;
+}
+.gk-file-menu .gk-muted {
+  padding: 4px 10px;
+}
+.gk-save-as {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+}
+.gk-save-as input {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
 }
 .gk-worker {
   display: flex;
@@ -786,5 +836,76 @@ button:disabled {
   color: #fff;
   font-size: 13px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+}
+
+/* ── toolbar extras ── */
+.gk-toolbar > button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.gk-toolbar-gap {
+  width: 4px;
+}
+.gk-banner-recovery {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+.gk-banner-recovery button {
+  background: #1d4ed8;
+}
+.gk-banner-recovery button + button {
+  background: transparent;
+  color: #1e3a8a;
+}
+
+/* ── groups (SPEC 8): labelled boxes behind the nodes ── */
+.gk-group {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  border: 1px dashed #b6bec9;
+  border-radius: 10px;
+  background: rgb(148 163 184 / 0.08);
+  pointer-events: none;
+}
+.gk-group-title {
+  position: absolute;
+  top: 4px;
+  left: 10px;
+  padding: 0 4px;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #475569;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+}
+input.gk-group-title {
+  width: 220px;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  background: #fff;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── hover summary of a port or wire ── */
+.gk-tip {
+  position: fixed;
+  z-index: 50;
+  max-width: 360px;
+  padding: 6px 9px;
+  border: 1px solid #e5d98b;
+  border-radius: 6px;
+  background: #fffbe6;
+  box-shadow: 0 4px 14px rgb(15 23 42 / 0.15);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
   pointer-events: none;
 }

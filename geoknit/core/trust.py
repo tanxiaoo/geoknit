@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 TRUST_FILE = Path.home() / ".geoknit" / "trusted.json"
+TRUST_FILE_ENV = "GEOKNIT_TRUST_FILE"
+"""Environment variable that moves the trust file (used by end-to-end tests)."""
 FORMAT = 1
 
 
@@ -24,7 +27,10 @@ class TrustStore:
     """The set of trusted workflow content hashes, kept in a JSON file."""
 
     def __init__(self, path: Path | None = None) -> None:
-        self.path = Path(path) if path is not None else TRUST_FILE
+        if path is None:
+            env = os.environ.get(TRUST_FILE_ENV)
+            path = Path(env) if env else TRUST_FILE
+        self.path = Path(path)
 
     def _load(self) -> list[str]:
         try:

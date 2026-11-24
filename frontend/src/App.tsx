@@ -1,10 +1,50 @@
-import { strings } from "./strings";
+import { useEffect } from "react";
+import { ReactFlowProvider } from "@xyflow/react";
+import { Assistant } from "./components/Assistant";
+import { Canvas } from "./components/Canvas";
+import { CanvasToolbar } from "./components/CanvasToolbar";
+import { FolderTree } from "./components/FolderTree";
+import { Ribbon } from "./components/Ribbon";
+import { StatusBar } from "./components/StatusBar";
+import { TopBar } from "./components/TopBar";
+import { store, useStore } from "./store";
+import { connectEvents } from "./ws";
+
+function Toast() {
+  const toast = useStore((s) => s.toast);
+  if (!toast) return null;
+  const style =
+    toast.x !== undefined && toast.y !== undefined
+      ? { left: toast.x + 12, top: toast.y + 12 }
+      : { left: "50%", bottom: 48, transform: "translateX(-50%)" };
+  return (
+    <div className="gk-toast" style={style} role="alert" data-testid="toast">
+      {toast.message}
+    </div>
+  );
+}
 
 export function App() {
+  useEffect(() => {
+    void store.load();
+    return connectEvents(store);
+  }, []);
   return (
-    <main>
-      <h1>{strings.appTitle}</h1>
-      <p>{strings.appTagline}</p>
-    </main>
+    <ReactFlowProvider>
+      <div className="gk-app">
+        <TopBar />
+        <Ribbon />
+        <div className="gk-main">
+          <FolderTree />
+          <section className="gk-center">
+            <CanvasToolbar />
+            <Canvas />
+            <StatusBar />
+          </section>
+          <Assistant />
+        </div>
+        <Toast />
+      </div>
+    </ReactFlowProvider>
   );
 }

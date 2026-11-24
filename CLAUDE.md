@@ -50,6 +50,11 @@ geoknit/                  Python package
   cli.py                  `geoknit`, `geoknit run`
 frontend/                 React + TypeScript + Vite
   src/strings.ts          ALL user-facing text lives here
+  src/api.ts, apiTypes.ts typed client for the SPEC 9 API
+  src/store.ts, ws.ts     app state, /ws events
+  src/components/         top bar, ribbon, folder tree, canvas, nodes/
+  e2e/                    Playwright tests; serve.py starts a server on synthetic data
+docs/ui/                  design mockups (SPEC 8)
 examples/
   synthetic/              make_data.py + imd.geoknit (used by tests and CI)
   milan_imd/              milan_imd.geoknit + README; data/ and outputs/ are git-ignored
@@ -72,7 +77,7 @@ cd frontend && npm install
 npm run dev                        # Vite dev server, proxies /api to the backend
 npm run build                      # builds into geoknit/server/static
 npm test                           # Vitest
-npx playwright test                # end-to-end
+npm run e2e                        # build, then Playwright end-to-end tests
 ```
 
 ## Rules

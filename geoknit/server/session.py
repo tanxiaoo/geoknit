@@ -9,6 +9,7 @@ interrupt it.
 from __future__ import annotations
 
 import json
+import platform
 import threading
 from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
@@ -18,6 +19,7 @@ from geoknit.components.registry import Registry, default_registry
 from geoknit.core.executor import Event, RunReport
 from geoknit.core.graph import (
     INLINE,
+    PARAM_PANEL,
     PARAM_SLIDER,
     PARAM_TEXT,
     Graph,
@@ -213,6 +215,8 @@ class Session:
             view["value"] = node.value
         elif node.component == PARAM_SLIDER:
             view.update(min=node.min, max=node.max, step=node.step, value=node.value)
+        elif node.component == PARAM_PANEL:
+            view["size"] = node.extra.get("size")
         elif not node.is_param:
             spec = node.spec
             view.update(
@@ -226,6 +230,26 @@ class Session:
                 settings=[_setting_view(s) for s in spec.settings.values()] if spec else [],
             )
         return view
+
+    def status(self) -> dict[str, Any]:
+        """Python version and worker state, for the top bar."""
+        return {
+            "python": ".".join(platform.python_version_tuple()[:2]),
+            "worker": "running" if self._running else "idle",
+            "pid": self._executor.pid if self._executor is not None else None,
+        }
+
+    def _publish_worker(self) -> None:
+        self.events.publish({"type": "worker", **self.status()})
+
+    def set_view(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """Canvas-wide view: ``display`` (text | icon), ``zoom``, ``offset``."""
+        with self.lock:
+            self._check_trusted()
+            if "display" in changes and changes["display"] not in ("text", "icon"):
+                raise BadRequest("display must be text or icon")
+            self.graph.view.update(changes)
+            return dict(self.graph.view)
 
     def graph_view(self) -> dict[str, Any]:
         with self.lock:
@@ -275,7 +299,7 @@ class Session:
         with self.lock:
             self._check_trusted()
             node = self._node(node_id)
-            affects_results = set(changes) - {"position", "display"}
+            affects_results = set(changes) - {"position", "display", "size"}
             if affects_results:
                 self._check_idle()
             g = self.graph
@@ -297,6 +321,16 @@ class Session:
                 g.set_position(node_id, changes["position"])
             if "display" in changes:
                 g.set_display(node_id, changes["display"])
+            if "size" in changes:
+                if node.component != PARAM_PANEL:
+                    raise BadRequest(f"{node.title} has no size")
+                size = changes["size"]
+                if size is None:
+                    node.extra.pop("size", None)
+                elif len(size) != 2 or min(size) <= 0:
+                    raise BadRequest("size must be [width, height] above 0")
+                else:
+                    node.extra["size"] = list(size)
             if affects_results:
                 self._publish_states()
             return self.node_view(node_id)
@@ -335,6 +369,7 @@ class Session:
                 self._node(node_id)
             plan = self.solver.plan(mode, node_id)
             self._running = True
+            self._publish_worker()
             self._thread = threading.Thread(
                 target=self._run, args=(mode, node_id), name="geoknit-run", daemon=True
             )
@@ -352,6 +387,7 @@ class Session:
             with self.lock:
                 self._running = False
             self._publish_states()
+            self._publish_worker()
             finished: dict[str, Any] = {"type": "run_finished"}
             finished["report"] = report_dict(report) if report is not None else None
             if message is not None:

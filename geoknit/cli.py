@@ -1,8 +1,9 @@
-"""Command-line entry point: ``geoknit`` and ``geoknit run file.geoknit``."""
+"""Command-line entry point: ``geoknit [folder]`` and ``geoknit run file.geoknit``."""
 
 from __future__ import annotations
 
 import argparse
+import socket
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,7 +12,7 @@ from geoknit import __version__
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Create the argument parser for the ``geoknit`` command."""
+    """Create the parser for ``geoknit run``-style commands."""
     parser = argparse.ArgumentParser(
         prog="geoknit",
         description="Local visual programming for geospatial analysis.",
@@ -36,11 +37,32 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_serve_parser() -> argparse.ArgumentParser:
+    """Create the parser for ``geoknit [folder]``."""
+    parser = argparse.ArgumentParser(
+        prog="geoknit",
+        description="Local visual programming for geospatial analysis. "
+        "Starts GeoKnit on 127.0.0.1 and opens it in the browser.",
+        epilog="geoknit run FILE.geoknit runs a workflow headless (see geoknit run --help).",
+    )
+    parser.add_argument("--version", action="version", version=f"geoknit {__version__}")
+    parser.add_argument(
+        "folder",
+        nargs="?",
+        type=Path,
+        default=Path("."),
+        help="project folder, or a .geoknit file to open (default: current folder)",
+    )
+    parser.add_argument("--port", type=int, default=None, help="port (default: a free one)")
+    parser.add_argument("--no-browser", action="store_true", help="do not open the browser")
+    return parser
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return the process exit code."""
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    if args.command == "run":
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    if args_list and args_list[0] == "run":
+        args = build_parser().parse_args(args_list)
         return run_workflow(
             args.workflow,
             quiet=args.quiet,
@@ -48,7 +70,51 @@ def main(argv: Sequence[str] | None = None) -> int:
             use_cache=not args.no_cache,
             cache_limit_gb=args.cache_limit,
         )
-    parser.print_help()
+    args = build_serve_parser().parse_args(args_list)
+    return serve(args.folder, port=args.port, open_browser=not args.no_browser)
+
+
+def find_free_port(host: str = "127.0.0.1") -> int:
+    """A port that is free on ``host`` right now."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, 0))
+        return int(s.getsockname()[1])
+
+
+HOST = "127.0.0.1"
+
+
+def serve(target: Path, *, port: int | None = None, open_browser: bool = True) -> int:
+    """``geoknit [folder]``: start the server on 127.0.0.1 and open the browser."""
+    target = Path(target)
+    workflow: Path | None = None
+    if target.is_file():
+        if target.suffix.lower() != ".geoknit":
+            print(f"geoknit: {target} is not a folder or a .geoknit file", file=sys.stderr)
+            return 2
+        project, workflow = target.resolve().parent, target.resolve()
+    elif target.is_dir():
+        project = target.resolve()
+    else:
+        print(f"geoknit: {target} does not exist", file=sys.stderr)
+        return 2
+
+    import webbrowser
+
+    import uvicorn
+
+    from geoknit.server.app import create_app
+
+    port = port or find_free_port(HOST)
+    url = f"http://{HOST}:{port}/"
+
+    def on_ready() -> None:
+        print(f"GeoKnit {__version__} at {url} (Ctrl+C to quit)", file=sys.stderr)
+        if open_browser:
+            webbrowser.open(url)
+
+    app = create_app(project, workflow=workflow, on_ready=on_ready)
+    uvicorn.run(app, host=HOST, port=port, log_level="warning")
     return 0
 
 

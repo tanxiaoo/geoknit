@@ -27,9 +27,52 @@ def test_module_entry_point() -> None:
     assert result.stdout.strip() == f"geoknit {__version__}"
 
 
-def test_no_arguments_prints_help(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main([]) == 0
-    assert "geoknit" in capsys.readouterr().out
+def test_help_mentions_both_commands(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--help"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "folder" in out and "geoknit run" in out
+
+
+# ── geoknit [folder] ──
+
+
+def test_find_free_port_can_be_bound() -> None:
+    import socket
+
+    from geoknit.cli import find_free_port
+
+    port = find_free_port()
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", port))
+
+
+def test_serve_binds_to_localhost(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import uvicorn
+
+    calls: list[dict] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: calls.append({"app": app, **kw}))
+    opened: list[str] = []
+    monkeypatch.setattr("webbrowser.open", opened.append)
+
+    assert main([str(tmp_path), "--port", "8765"]) == 0
+    assert calls[0]["host"] == "127.0.0.1" and calls[0]["port"] == 8765
+    assert calls[0]["app"].state.session.project == tmp_path.resolve()
+
+    wf = _workflow(tmp_path)
+    assert main([str(wf), "--no-browser"]) == 0
+    assert calls[1]["port"] > 0
+    session = calls[1]["app"].state.session
+    assert session.project == tmp_path.resolve() and session._initial == wf.resolve()
+    assert opened == []  # the browser opens only once the server has started
+
+
+def test_serve_refuses_a_missing_folder(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main([str(tmp_path / "nope")]) == 2
+    assert "does not exist" in capsys.readouterr().err
+    (tmp_path / "a.txt").write_text("x", encoding="utf-8")
+    assert main([str(tmp_path / "a.txt")]) == 2
 
 
 # ── geoknit run ──

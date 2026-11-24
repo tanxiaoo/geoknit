@@ -31,12 +31,16 @@ dependencies = [
     "pyarrow>=14",        # Parquet / GeoParquet disk cache (SPEC 6)
     "joblib>=1.3",        # Model disk cache (SPEC 6)
     "scikit-learn>=1.3",  # Random Forest, SVM, train/test split, metrics (SPEC 7)
+    "fastapi>=0.110",     # REST API and OpenAPI /docs (SPEC 9)
+    "uvicorn>=0.29",      # local ASGI server for `geoknit [folder]`
+    "websockets>=11",     # WebSocket support in uvicorn (/ws)
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",  # test runner
     "ruff>=0.6",    # lint + format
+    "httpx>=0.27",  # FastAPI TestClient
 ]
 
 [project.scripts]

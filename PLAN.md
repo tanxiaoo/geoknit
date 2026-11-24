@@ -105,8 +105,8 @@ review its plan before it writes code.
 - [x] Wiring with type check feedback; drag from port to empty space → filtered search
 - [x] Out-of-date / running / error / selected visuals, "N components out of date · Run" banner, Run / Stop
 - [x] Drag a file from the folder tree → Text node with its relative path
-- [ ] Save / open, undo / redo, copy / paste, groups, autosave
-- [ ] Hover tooltip with `describe()` summary
+- [x] Save / open, undo / redo, copy / paste, groups, autosave
+- [x] Hover tooltip with `describe()` summary
 
 **Done when** (Playwright on the synthetic example):
 - build the workflow from scratch with drag and drop, run it, and the metrics Panel fills in

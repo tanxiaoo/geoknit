@@ -24,6 +24,7 @@ from geoknit.core.graph import (
     Graph,
     GraphError,
     Node,
+    Wire,
 )
 from geoknit.core.settings_edit import set_settings
 
@@ -90,14 +91,14 @@ def graph_to_dict(graph: Graph, base_dir: Path | None = None) -> dict[str, Any]:
     return {
         "format": FORMAT,
         "geoknit_version": __version__,
-        "nodes": [_node_to_dict(n, base_dir) for n in graph.nodes.values()],
+        "nodes": [node_to_dict(n, base_dir) for n in graph.nodes.values()],
         "wires": [{"from": [w.src, w.src_port], "to": [w.dst, w.dst_port]} for w in graph.wires],
         "groups": graph.groups,
         "view": graph.view,
     }
 
 
-def _node_to_dict(node: Node, base_dir: Path | None) -> dict[str, Any]:
+def node_to_dict(node: Node, base_dir: Path | None = None) -> dict[str, Any]:
     d: dict[str, Any] = dict(node.extra)
     d.update(id=node.id, component=node.component, position=node.position)
     if node.component == PARAM_TEXT:
@@ -151,7 +152,7 @@ def graph_from_dict(data: dict[str, Any], library: ComponentLibrary | None = Non
     graph = Graph()
     for raw in data.get("nodes", []):
         try:
-            graph.add_node(_node_from_dict(raw, library))
+            graph.add_node(node_from_dict(raw, library))
         except GraphError as exc:
             raise WorkflowError(str(exc)) from None
     for raw in data.get("wires", []):
@@ -165,7 +166,7 @@ def graph_from_dict(data: dict[str, Any], library: ComponentLibrary | None = Non
     return graph
 
 
-def _node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None) -> Node:
+def node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None = None) -> Node:
     try:
         node = Node(id=str(raw["id"]), component=str(raw["component"]))
     except KeyError as exc:
@@ -209,6 +210,86 @@ def _node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None) -> No
     if wanted:
         node.set_source(set_settings(entry.source, wanted))
     return node
+
+
+# ── change a live graph to match a document ──
+
+LAYOUT_KEYS = ("position", "display", "size")
+"""Node keys that never change results."""
+
+
+def _content(d: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in d.items() if k not in LAYOUT_KEYS}
+
+
+def apply_dict(
+    graph: Graph,
+    data: dict[str, Any],
+    library: ComponentLibrary | None = None,
+    *,
+    view: bool = False,
+) -> None:
+    """Change ``graph`` in place to match the workflow document ``data``.
+
+    Undo, redo and autosave recovery use this instead of building a new
+    graph, so only the nodes that really differ (and their downstream nodes)
+    go out of date. Layout-only differences never invalidate anything.
+    ``view`` also copies the canvas view.
+    """
+    data = migrate(dict(data))
+    target: dict[str, dict[str, Any]] = {}
+    for raw in data.get("nodes", []):
+        target[str(raw["id"])] = raw
+    try:
+        wanted = [
+            Wire(str(w["from"][0]), str(w["from"][1]), str(w["to"][0]), str(w["to"][1]))
+            for w in data.get("wires", [])
+        ]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise WorkflowError(f"bad wire in workflow: {exc}") from None
+    try:
+        for w in [w for w in graph.wires if w not in wanted]:
+            graph.remove_wire(w.src, w.src_port, w.dst, w.dst_port)
+        for nid in [n for n in graph.nodes if n not in target]:
+            graph.remove_node(nid)
+        for nid, raw in target.items():
+            new = node_from_dict(raw, library)
+            old = graph.nodes.get(nid)
+            if old is None:
+                graph.add_node(new)
+            elif _content(node_to_dict(old)) != _content(node_to_dict(new)):
+                _update_node(graph, old, new)
+            old = graph.nodes[nid]
+            old.position, old.display, old.extra = list(new.position), new.display, new.extra
+        for w in wanted:
+            if w not in graph.wires:
+                graph.add_wire(w.src, w.src_port, w.dst, w.dst_port)
+    except GraphError as exc:
+        raise WorkflowError(str(exc)) from None
+    # same order as the document, so saving gives the same bytes
+    ordered = {nid: graph.nodes[nid] for nid in target}
+    graph.nodes.clear()
+    graph.nodes.update(ordered)
+    graph.wires[:] = wanted
+    graph.groups = json.loads(json.dumps(data.get("groups", [])))
+    if view:
+        graph.view = dict(data.get("view", {}))
+
+
+def _update_node(graph: Graph, old: Node, new: Node) -> None:
+    """Change ``old`` to ``new``'s content with the graph's own edits."""
+    if old.component == new.component == PARAM_TEXT:
+        graph.set_value(old.id, new.value)
+    elif old.component == new.component == PARAM_SLIDER:
+        graph.set_slider(old.id, min=new.min, max=new.max, step=new.step, value=new.value)
+    elif old.component == new.component == PARAM_PANEL:
+        pass  # a Panel has no content beyond its layout
+    elif old.component == new.component and not old.is_param:
+        old.version, old.based_on = new.version, new.based_on
+        graph.set_source(old.id, new.source or "")
+    else:  # a different kind of node under the same id
+        graph.remove_node(old.id)
+        graph.add_node(new)
 
 
 def _normalize(value: Any) -> Any:

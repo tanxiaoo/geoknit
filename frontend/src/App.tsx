@@ -10,6 +10,16 @@ import { TopBar } from "./components/TopBar";
 import { store, useStore } from "./store";
 import { connectEvents } from "./ws";
 
+function Tip() {
+  const tip = useStore((s) => s.tip);
+  if (!tip) return null;
+  return (
+    <div className="gk-tip" style={{ left: tip.x + 14, top: tip.y + 14 }} data-testid="tip">
+      {tip.text}
+    </div>
+  );
+}
+
 function Toast() {
   const toast = useStore((s) => s.toast);
   if (!toast) return null;
@@ -43,6 +53,7 @@ export function App() {
           </section>
           <Assistant />
         </div>
+        <Tip />
         <Toast />
       </div>
     </ReactFlowProvider>

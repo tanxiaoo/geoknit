@@ -32,6 +32,8 @@ EventFn = Callable[[Event], None]
 @dataclass
 class RunReport:
     ran: list[str] = field(default_factory=list)
+    cached: list[str] = field(default_factory=list)
+    """Nodes whose results came from the worker's memory or the disk cache."""
     failed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
 

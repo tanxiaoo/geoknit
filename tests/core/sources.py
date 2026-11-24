@@ -72,3 +72,33 @@ def divide(a):
 
 y = divide(1)
 """
+
+JOIN = """\
+# geoknit: component
+# name: Join
+# category: Text
+# inputs:
+#   items: {type: Text, access: list}
+# outputs:
+#   joined: Text
+
+# --- code ---
+joined = ",".join(items)
+"""
+
+READ_FILE = """\
+# geoknit: component
+# name: Read File
+# category: Text
+# inputs:
+#   path: Text
+# outputs:
+#   text: Text
+
+# --- settings ---
+path = "input.txt"
+
+# --- code ---
+from pathlib import Path
+text = Path(path).read_text()
+"""

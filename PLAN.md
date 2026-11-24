@@ -30,13 +30,13 @@ review its plan before it writes code.
 
 ## Phase 1: Headless engine (`geoknit/core`)
 
-- [ ] `types.py`: the six types, `ModelBundle`, `describe()` for each (metadata only), connection rules
-- [ ] `component.py`: parse header (YAML in comments), settings block (literals only, `options` / `range` / `multiline` hints), code block; run one component following SPEC 4 "Running one component", capturing print/warnings/tracebacks with correct line numbers
-- [ ] `settings_edit.py`: change one setting in the source text without touching comments or formatting
-- [ ] `graph.py`: nodes, ports, wires; type check, `item`/`list` access, cycle refusal
-- [ ] `solver.py`: topological order, out-of-date propagation, plans for Run / Run to here / Test
-- [ ] `workflow.py`: `.geoknit` save/load (SPEC 5), relative paths, `format` field
-- [ ] In-process executor (no worker yet) used by tests
+- [x] `types.py`: the six types, `ModelBundle`, `describe()` for each (metadata only), connection rules
+- [x] `component.py`: parse header (YAML in comments), settings block (literals only, `options` / `range` / `multiline` hints), code block; run one component following SPEC 4 "Running one component", capturing print/warnings/tracebacks with correct line numbers
+- [x] `settings_edit.py`: change one setting in the source text without touching comments or formatting
+- [x] `graph.py`: nodes, ports, wires; type check, `item`/`list` access, cycle refusal
+- [x] `solver.py`: topological order, out-of-date propagation, plans for Run / Run to here / Test
+- [x] `workflow.py`: `.geoknit` save/load (SPEC 5), relative paths, `format` field
+- [x] In-process executor (no worker yet) used by tests
 
 **Done when** (pytest):
 - a 3-node graph (Text → component → component) loaded from JSON runs and gives the expected output

@@ -22,6 +22,7 @@ geoknit/                  Python package
     settings_edit.py      ast-based in-place editing of settings literals
     graph.py              nodes, ports, wires, type + cycle checks
     solver.py             topological order, out-of-date propagation, run plans
+    executor.py           in-process executor (tests; the worker replaces it in Phase 2)
     cache.py              cache keys, disk cache read/write, eviction
     workflow.py           .geoknit load/save, migrations
     export.py             export workflow to a .py script

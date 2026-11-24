@@ -87,12 +87,18 @@ Connection rules:
 
 - An output connects to an input of the same type, or to an `Any` input.
 - One exception for convenience: Number → Text (converted with `str`).
+- An `Any` output (Panel's pass-through) connects to any input; the value's
+  type is checked when the receiving node runs (`input "x": expected
+  Number, got Text`).
 - Everything else is refused when the user drops the wire, with a tooltip
   such as "Raster can't connect to Number".
 - An input has `access: item` (default, one wire) or `access: list`
   (several wires, collected into a Python list in wire order). Only Map
-  Viewer uses `list` in v0.1.
+  Viewer uses `list` in v0.1. A second wire into an `item` input is refused
+  ("input "x" of Reclassify is already connected"); remove the old wire first.
 - Cycles are refused when the wire is created.
+- Changing a component's code removes wires whose port disappeared or whose
+  type no longer matches.
 
 `describe()` must never read pixel data; it uses metadata only, so hovering
 or a Panel on a 1 GB raster is instant.
@@ -151,7 +157,9 @@ print(f"{len(rules)} classes")
   shown in the component's Output.
 - An optional trailing comment shapes the Settings form:
   `# options: a | b | c` → dropdown, `# range: 0..1000` → number field with
-  limits, `# multiline` → text area. No comment → text field.
+  limits, `# multiline` → text area. No comment → text field. Options that
+  read as numbers, `True`/`False` or `None` are those values; others are text.
+- Each name may be set only once.
 - A setting whose name equals an input name is that input's default value.
   An input with no same-named setting is required.
 
@@ -164,11 +172,14 @@ outputs are read back by name when the code ends.
 
 1. Create a fresh namespace.
 2. Execute the settings block.
-3. For each wired input, assign its value, overriding the setting.
+3. For each wired input, assign its value, overriding the setting. A wired
+   value of the wrong type → error naming expected and actual type.
 4. A required input that is neither wired nor set → error
    `input "raster" is not connected`.
-5. Execute the code block, capturing `print`, warnings and logging into the
-   component's Output.
+5. Execute the code block with the project folder as working directory (so
+   relative paths in Text components work), capturing `print`, stderr,
+   warnings and logging (INFO and above) into the component's Output, one
+   entry per line.
 6. Read each declared output from the namespace. Missing → error. Wrong
    type → error naming expected and actual type.
 7. Exceptions show the traceback in Output, with line numbers relative to the
@@ -248,8 +259,17 @@ JSON, UTF-8, sorted keys, 2-space indent, so it diffs well in git.
 ```
 
 - File paths in Text components are relative to the folder holding the
-  `.geoknit` file when they point inside it.
-- `format` is bumped on breaking changes, with a migration function.
+  `.geoknit` file when they point inside it (written with `/` on every OS).
+- A library component whose code outside the settings block is unchanged is
+  stored by reference with all its current settings values; otherwise it is
+  stored `inline` with `based_on` (section 4).
+- Params nodes: `param/text` (`value`), `param/slider` (`min`, `max`, `step`,
+  `value`), `param/panel`. Component nodes always have `display`.
+- Keys GeoKnit does not know are kept and written back unchanged.
+- Saving a workflow that was just loaded produces the same bytes.
+- `format` is bumped on breaking changes, with a migration function. A file
+  with a newer `format` than GeoKnit supports is refused with a message
+  asking to update GeoKnit.
 
 ---
 
@@ -268,7 +288,8 @@ also check the file's size and modification time.
 
 ### Run commands
 
-- **Run**: every out-of-date node, in topological order.
+- **Run**: every node that is not `done` (out of date, never run, error,
+  skipped), in topological order. A node whose upstream failed is `skipped`.
 - **Run to here**: this node and the upstream nodes it needs.
 - **Test** (component window): this node only, using cached inputs; errors
   if an input has no cached result yet.

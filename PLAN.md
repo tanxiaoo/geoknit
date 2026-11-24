@@ -16,12 +16,12 @@ review its plan before it writes code.
 
 ## Phase 0: Repository setup
 
-- [ ] GitHub repo `tanxiaoo/geoknit`, Apache-2.0 `LICENSE`, short `README.md`
-- [ ] `pyproject.toml` (hatchling), package skeleton as in CLAUDE.md, extras `[dev]`
-- [ ] `geoknit --version` CLI entry point
-- [ ] `frontend/` with Vite + React + TypeScript (strict), empty app
-- [ ] ruff config, pytest config, `.gitignore` (`data/`, `.geoknit/`, `geoknit/server/static/`, `node_modules/`)
-- [ ] GitHub Actions: lint + tests on `ubuntu-latest` and `windows-latest`, Python 3.11 and 3.12; frontend build + `npm test`
+- [x] GitHub repo `tanxiaoo/geoknit`, Apache-2.0 `LICENSE`, short `README.md`
+- [x] `pyproject.toml` (hatchling), package skeleton as in CLAUDE.md, extras `[dev]`
+- [x] `geoknit --version` CLI entry point
+- [x] `frontend/` with Vite + React + TypeScript (strict), empty app
+- [x] ruff config, pytest config, `.gitignore` (`data/`, `.geoknit/`, `geoknit/server/static/`, `node_modules/`)
+- [x] GitHub Actions: lint + tests on `ubuntu-latest` and `windows-latest`, Python 3.11 and 3.12; frontend build + `npm test`
 
 **Done when:** on your Windows machine `pip install -e ".[dev]"` and
 `geoknit --version` work, and CI is green on both platforms.

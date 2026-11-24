@@ -43,7 +43,7 @@ artifacts = ["geoknit/server/static/**"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = ["frontend"]
+extend-exclude = ["frontend", "*.md"]  # docs keep hand-aligned code examples
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ANN"]

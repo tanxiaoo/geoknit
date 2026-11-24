@@ -59,6 +59,7 @@ class WorkerExecutor:
         self.graph = graph
         self.solver = solver or Solver(graph)
         self.base_dir = base_dir
+        self._auto_cache_dir = cache_dir is None
         if cache_dir is None and base_dir is not None and use_disk_cache:
             cache_dir = base_dir / ".geoknit" / "cache"
         self.cache_dir = cache_dir if use_disk_cache else None
@@ -134,6 +135,29 @@ class WorkerExecutor:
         self._done_ports.clear()
         self.solver.invalidate(set(self.graph.nodes))
         return complete
+
+    def attach(self, graph: Graph, solver: Solver | None = None, *, base_dir: Path | None) -> None:
+        """Switch to another workflow, keeping the worker when its folder is the same.
+
+        The worker's working directory is fixed for its life (SPEC 6), so a
+        new ``base_dir`` restarts it; with an automatic cache folder the cache
+        moves along to ``<base_dir>/.geoknit/cache``.
+        """
+        with self._lock:
+            if self._running:
+                raise RuntimeError("stop the run before opening another workflow")
+        if graph is not self.graph:
+            graph.subscribe(self._on_change)
+        self.graph = graph
+        self.solver = solver or Solver(graph)
+        for store in (self.summaries, self.logs, self.errors, self._done_ports):
+            store.clear()
+        self.solver.invalidate(set(graph.nodes))  # results here belong to the old setup
+        if base_dir != self.base_dir:
+            self.base_dir = base_dir
+            if self._auto_cache_dir and self.cache_dir is not None and base_dir is not None:
+                self.cache_dir = base_dir / ".geoknit" / "cache"
+            self.restart()
 
     def restart(self) -> None:
         """Replace the worker with a fresh one (in-memory results are lost)."""

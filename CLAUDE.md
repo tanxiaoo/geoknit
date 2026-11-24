@@ -26,6 +26,7 @@ geoknit/                  Python package
     cache.py              cache keys, disk cache read/write, eviction
     workflow.py           .geoknit load/save, migrations
     export.py             export workflow to a .py script
+    trust.py              trusted workflow hashes (~/.geoknit/trusted.json)
   runtime/
     worker.py             worker process: runs components, holds results
     protocol.py           message types between server and worker
@@ -41,6 +42,8 @@ geoknit/                  Python package
     model.py              feature columns and training data for models
   server/
     app.py                FastAPI app, routes, WebSocket
+    session.py            server state: open workflow, worker, trust, background runs
+    events.py             thread-safe fan-out of events to WebSocket clients
     files.py              project folder tree
     tiles.py              rio-tiler endpoints for Map Viewer
     static/               built frontend (generated, git-ignored)
@@ -63,6 +66,7 @@ pytest tests/core -q               # engine only
 ruff check . && ruff format .      # lint + format
 python examples/synthetic/make_data.py   # create small test rasters/vectors
 geoknit run examples/synthetic/imd.geoknit   # headless run
+geoknit examples/synthetic          # start the server, open the browser
 
 cd frontend && npm install
 npm run dev                        # Vite dev server, proxies /api to the backend

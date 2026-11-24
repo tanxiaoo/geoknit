@@ -85,10 +85,10 @@ review its plan before it writes code.
 
 ## Phase 4: Server API
 
-- [ ] FastAPI app with all endpoints in SPEC 9, WebSocket events from the worker
-- [ ] Project folder tree endpoint (hides `.geoknit/`)
-- [ ] `geoknit [folder]`: start on a free port on 127.0.0.1, open the browser
-- [ ] Trust check when opening a workflow (SPEC 11)
+- [x] FastAPI app with all endpoints in SPEC 9, WebSocket events from the worker
+- [x] Project folder tree endpoint (hides `.geoknit/`)
+- [x] `geoknit [folder]`: start on a free port on 127.0.0.1, open the browser
+- [x] Trust check when opening a workflow (SPEC 11)
 
 **Done when** (pytest with FastAPI TestClient):
 - the synthetic workflow can be built entirely through the API (add nodes, wire, set values), run, and its Panel output read back

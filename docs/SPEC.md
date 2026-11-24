@@ -551,15 +551,45 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | POST | `/api/wires` / DELETE `/api/wires` | connect / disconnect (type and cycle checks) |
 | POST | `/api/run` | `{mode: all | to_node | test, node_id?}` |
 | POST | `/api/stop` | stop the worker |
+| POST | `/api/cache/clear` | "Clear cache" (section 6) |
 | GET | `/api/nodes/{id}/output` | Output log and per-port summaries |
 | GET | `/api/files` | project folder tree |
 | POST | `/api/workflow/save`, `/api/workflow/open` | file operations |
+| POST | `/api/workflow/trust` | trust the open workflow (section 11) |
 | POST | `/api/export/py` | returns the exported script |
 | GET | `/tiles/{key}/{z}/{x}/{y}.png` | raster tiles for Map Viewer (rio-tiler) |
 | GET | `/api/vector/{key}.geojson` | vector layer in EPSG:4326, max 50 000 features |
 | WS | `/ws` | events: node state changes, log lines, run finished |
 
 The server binds to `127.0.0.1` only.
+
+Details:
+
+- One server holds one project folder and one open workflow. Relative paths
+  resolve against the workflow's folder (the project folder while it is
+  unsaved), as in `geoknit run`. Save and open take a `.geoknit` path
+  relative to the project folder; paths outside it are refused.
+- `GET /api/graph` returns `{workflow, nodes, out_of_date, path, trusted,
+  running}`: `workflow` is the `.geoknit` document, `nodes` maps each id to
+  its title, state, ports, and (components) settings with their form hints,
+  source, `modified` and `parse_error`.
+- `PATCH /api/nodes/{id}` changes only the fields sent: `settings`
+  (`{name: value}`), `source`, `value`, `min`/`max`/`step`, `position`,
+  `display`.
+- `POST /api/run` starts the run in the background and answers `202
+  {plan}` at once; progress arrives on `/ws`. While a run is active, a second
+  run and every edit that changes results answer `409` ("stop the run
+  first"); position and display changes are still allowed.
+- Errors answer `{"detail": message}`: `400` for refused edits (the
+  messages of section 3), `403` for a read-only workflow (section 11), `404`
+  for an unknown node.
+- `/ws` sends JSON events: `states {states, out_of_date}` on connect, after
+  every edit and after each run; `started`, `log {line}`, `done {outputs,
+  cached}`, `error {traceback}`, `skipped {traceback}` per node, each with
+  `node`; `run_finished {report: {ran, cached, failed, skipped, ok}}`;
+  `workflow_opened {path}`.
+- Until export (section 10) and the Map Viewer (section 8) are built,
+  `/api/export/py` answers `501` and the tile and vector routes are absent.
 
 ---
 
@@ -586,14 +616,25 @@ created or saved on this machine (its content hash is not in
 `~/.geoknit/trusted.json`), GeoKnit opens it read-only and asks
 "This workflow contains Python code. Trust and allow running?".
 
+- The content hash is the sha256 of the file's bytes. Every file GeoKnit
+  saves is added; answering yes (`POST /api/workflow/trust`) adds the opened
+  file. A file changed elsewhere afterwards is untrusted again.
+- Read-only: the workflow can be viewed, but edits and runs answer `403`
+  with the question above. A new, unsaved workflow is trusted.
+- `geoknit run file.geoknit` does not check trust: naming the file on the
+  command line is the decision to run it.
+
 ---
 
 ## 12. Packaging and platform
 
 - Python ≥ 3.11. Install with `pip install geoknit`. Windows is a
   first-class platform.
-- `geoknit [folder]` starts the server on a free local port and opens the
-  browser. `geoknit run file.geoknit` runs headless and prints each Panel's
+- `geoknit [folder]` starts the server on a free port on `127.0.0.1`
+  (folder defaults to the current one) and opens the browser once it is
+  up. A `.geoknit` file instead of a folder opens that workflow, with its
+  folder as the project. Options: `--port N`, `--no-browser`. A missing
+  folder exits with code 2. `geoknit run file.geoknit` runs headless and prints each Panel's
   contents to stdout under `--- Panel <id> ---`. Component output and errors
   go to stderr. The exit code is 0 when every node succeeded, 1 otherwise,
   and 130 on Ctrl+C. Options: `-q/--quiet` (hide component output),

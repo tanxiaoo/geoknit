@@ -62,7 +62,8 @@ Worker process                    imports geo libraries, runs components,
   Stop kill a stuck run without killing the app.
 - `geoknit/core` (graph, types, component format, solver, serialization,
   export) has no dependency on the server or frontend and can run headless.
-  `geoknit run file.geoknit` uses it directly.
+  `geoknit run file.geoknit` uses it with a worker process but no server, so
+  it shares the disk cache and Stop behaviour with the app.
 
 ---
 
@@ -304,23 +305,78 @@ Runs are manual only in v0.1. A toolbar banner shows
 Messages over a `multiprocessing` Pipe (spawn start method, also on Linux,
 so behaviour matches Windows):
 
-- server → worker: `run_node {node_id, source, settings, inputs: {port: cache_key}, cache_key}`
-- worker → server: `started`, `log {line}`, `done {outputs: {port: {cache_key, summary}}}`,
-  `error {traceback}`.
+- server → worker:
+  - `run_node {node_id, source, inputs: {port: cache_key | [cache_key, …]}, cache_key}`.
+    Settings are part of `source`. A `list` input gets its keys in wire order.
+  - `put_value {cache_key, value}`: a Text or Slider value (or an empty
+    Panel's `None`), sent before each run so the worker can look it up.
+  - `clear_cache` (answered by `cleared {complete}`), `shutdown`.
+- worker → server: `ready {pid}`, `started`, `log {line}`,
+  `done {outputs: {port: {cache_key, summary}}, cached}`, `error {traceback}`,
+  `cleared {complete}`. `cached` is true when the result came from worker
+  memory or the disk cache without running the code.
+- The worker's working directory is the project folder for its whole life,
+  so a raster opened with a relative path still finds its file when it is
+  read again later.
+- Before anything imports rasterio, the worker removes `PROJ_LIB`,
+  `PROJ_DATA` and `GDAL_DATA` from its environment when the rasterio wheel
+  bundles its own PROJ/GDAL data. A system install (PostGIS, QGIS, OSGeo4W)
+  often sets them to an older `proj.db`, which breaks every CRS operation.
+  A non-wheel install (e.g. conda) is left alone.
+- **Windows file locks**: an open raster file cannot be replaced or deleted
+  on Windows, and lazy rasters keep their file open. After every node the
+  worker closes the raster files xarray keeps open; lazy rasters reopen them
+  on their next read. So users can overwrite a source raster between runs
+  (the next Run sees the new size/mtime and recomputes), and the cache can
+  delete its own files.
+- Text, Slider and Panel nodes are handled by the server; only components go
+  to the worker.
+- If the worker dies on its own (e.g. a component calls `os._exit`), the
+  running node gets `error` "the worker process stopped unexpectedly" and a
+  fresh worker is started.
 
 The server forwards these as WebSocket events to the browser.
 
 ### Cache
 
-- `cache_key = sha256(component source with settings + sorted input cache
-  keys + for file-reading components: absolute path, size, mtime)`.
-- Lookup order: worker memory → disk → run.
-- Disk cache: `<project>/.geoknit/cache/<key>/`. Raster → COG, Vector →
-  GeoParquet, Table → Parquet, Model → joblib, Number/Text → JSON.
-  Read Raster results are not copied (they are lazy views of the source
-  file).
-- Default limit 10 GB, least-recently-used eviction, "Clear cache" in the
-  menu.
+- Keys depend only on the graph and the files it names, so the server keys
+  every node in topological order before running anything:
+  - component: `sha256(cache format + component source with settings +
+    upstream port keys of each input, ports sorted by name, wires in wire
+    order + file fingerprints)`;
+  - Text: `sha256(value + file fingerprint)`; Slider: `sha256(value)`;
+  - Panel: no key; its output reuses the key of the wire feeding it.
+- A port key is `<node key>.<port>`.
+- **File fingerprint**: a Text value, or a text setting of a component, that
+  names an existing file (relative to the project folder) adds its absolute
+  path, size and modification time. That is how "components that read files"
+  are detected; no header key is needed. On every Run all keys are
+  recomputed, and a `done` node whose key changed becomes `out_of_date`
+  together with everything downstream.
+- Lookup order: worker memory → disk → run. Worker memory is lost on Stop or
+  restart.
+- Disk cache: `<project>/.geoknit/cache/<node key>/`, holding one file per
+  output port plus `meta.json` (format, port types, summaries, size). Raster
+  → COG (written as a tiled GeoTIFF window by window, then copied to a COG
+  with overviews; band names kept as band descriptions). Vector →
+  GeoParquet, Table → Parquet (pickle if Parquet refuses the dtypes), Model →
+  joblib, Number/Text → JSON. A Raster that is still an unchanged lazy view
+  of a file (straight from `rioxarray.open_rasterio`) is not copied: the
+  cache writes `<port>.ref.json` (path, size, mtime, band names), and a
+  changed source file makes it a miss.
+- Entries are written to a temporary folder and renamed, so a crash never
+  leaves a half-written entry. A bump of the cache format makes old entries
+  miss.
+- Default limit 10 GB. Least-recently-used eviction (the modification time
+  of `meta.json` is the last use) after each write. It never evicts the entry
+  just written or any entry whose results are in worker memory, because
+  those may be lazy views of its files. So the cache can stay above the limit
+  while they are in use.
+- Removing an entry deletes `meta.json` first, so it is invalid at once even
+  if a file inside is still locked. Folders without `meta.json` (leftovers,
+  temporary folders of crashed writes) are deleted on the next eviction.
+- "Clear cache" in the menu: the worker drops its memory, then deletes the
+  disk cache; every node becomes `out_of_date`.
 
 ### Large rasters (city scale, ~2 Sentinel-2 tiles, 64 bands)
 
@@ -500,12 +556,16 @@ created or saved on this machine (its content hash is not in
 - Python ≥ 3.11. Install with `pip install geoknit`. Windows is a
   first-class platform.
 - `geoknit [folder]` starts the server on a free local port and opens the
-  browser. `geoknit run file.geoknit` runs headless and prints Panel
-  contents.
+  browser. `geoknit run file.geoknit` runs headless and prints each Panel's
+  contents to stdout under `--- Panel <id> ---`. Component output and errors
+  go to stderr. The exit code is 0 when every node succeeded, 1 otherwise,
+  and 130 on Ctrl+C. Options: `-q/--quiet` (hide component output),
+  `--clear-cache`, `--no-cache`, `--cache-limit GB`.
 - The wheel contains the built frontend in `geoknit/server/static/`; users
   never need Node.
 - Geo stack from wheels only: rasterio, pyogrio, shapely, pyproj, geopandas,
-  rioxarray. Never import `osgeo`.
+  rioxarray. Never import `osgeo`. The worker ignores a system
+  `PROJ_LIB` / `PROJ_DATA` / `GDAL_DATA` (section 6, "Worker protocol").
 - A component can declare `requires`; if a package is missing, GeoKnit offers
   to `pip install` it into its own environment.
 - License: Apache-2.0.

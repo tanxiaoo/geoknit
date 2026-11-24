@@ -50,11 +50,11 @@ review its plan before it writes code.
 
 ## Phase 2: Worker and cache (`geoknit/runtime`, `core/cache.py`)
 
-- [ ] Worker process (spawn) holding results in memory; message protocol from SPEC 6
-- [ ] Cache keys (source + settings + input keys + file size/mtime for file readers)
-- [ ] Disk cache in `<project>/.geoknit/cache/` with the formats from SPEC 6, LRU limit, clear
-- [ ] Stop: terminate worker, mark node `error: stopped`, restart worker
-- [ ] `geoknit run file.geoknit` headless command, printing Panel contents
+- [x] Worker process (spawn) holding results in memory; message protocol from SPEC 6
+- [x] Cache keys (source + settings + input keys + file size/mtime for file readers)
+- [x] Disk cache in `<project>/.geoknit/cache/` with the formats from SPEC 6, LRU limit, clear
+- [x] Stop: terminate worker, mark node `error: stopped`, restart worker
+- [x] `geoknit run file.geoknit` headless command, printing Panel contents
 
 **Done when** (pytest):
 - running the same graph twice: second run executes nothing (all cache hits)

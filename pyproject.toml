@@ -27,6 +27,9 @@ dependencies = [
     "pyogrio>=0.7",       # vector I/O for geopandas
     "shapely>=2.0",       # geometries
     "pyproj>=3.6",        # CRS handling
+    "dask[array]>=2024.1",  # lazy, chunked rasters (SPEC 3)
+    "pyarrow>=14",        # Parquet / GeoParquet disk cache (SPEC 6)
+    "joblib>=1.3",        # Model disk cache (SPEC 6)
 ]
 
 [project.optional-dependencies]

@@ -2,4 +2,6 @@
 
 from geoknit.cli import main
 
-raise SystemExit(main())
+# The guard matters: spawned worker processes re-import the main module.
+if __name__ == "__main__":
+    raise SystemExit(main())

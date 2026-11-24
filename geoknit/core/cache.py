@@ -23,6 +23,7 @@ import hashlib
 import json
 import os
 import shutil
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -223,11 +224,19 @@ class DiskCache:
         node_key: str,
         outputs: dict[str, Any],
         summaries: dict[str, str] | None = None,
+        *,
+        protect: Iterable[str] = (),
     ) -> None:
-        """Store ``outputs`` for ``node_key`` atomically, then evict old entries."""
+        """Store ``outputs`` for ``node_key`` atomically, then evict old entries.
+
+        ``protect`` names entries that must not be evicted (the worker still
+        holds lazy views of their files).
+        """
         if self.has(node_key):
             self._touch(node_key)
             return
+        if self._entry(node_key).exists():  # leftover of a removal that hit a locked file
+            self.remove(node_key)
         self.root.mkdir(parents=True, exist_ok=True)
         tmp = self.root / f"{node_key}.tmp-{os.getpid()}"
         shutil.rmtree(tmp, ignore_errors=True)
@@ -248,7 +257,7 @@ class DiskCache:
                     raise
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
-        self.evict(keep=node_key)
+        self.evict(protect={node_key, *protect})
 
     # ── housekeeping ──
     def entries(self) -> list[tuple[str, int, float]]:
@@ -269,15 +278,21 @@ class DiskCache:
     def size(self) -> int:
         return sum(size for _, size, _ in self.entries())
 
-    def evict(self, keep: str | None = None) -> list[str]:
-        """Remove least-recently-used entries until under the limit; return their keys."""
+    def evict(self, protect: Iterable[str] = ()) -> list[str]:
+        """Remove least-recently-used entries until under the limit; return their keys.
+
+        Entries in ``protect`` are never removed, so the cache may stay above
+        the limit while the worker holds them.
+        """
+        self.sweep()
+        keep = set(protect)
         entries = sorted(self.entries(), key=lambda e: e[2])
         total = sum(size for _, size, _ in entries)
         removed: list[str] = []
         for key, size, _ in entries:
             if total <= self.limit_bytes:
                 break
-            if key == keep:
+            if key in keep:
                 continue
             self.remove(key)
             total -= size
@@ -285,11 +300,39 @@ class DiskCache:
         return removed
 
     def remove(self, node_key: str) -> None:
-        shutil.rmtree(self._entry(node_key), ignore_errors=True)
+        """Delete one entry.
 
-    def clear(self) -> None:
-        """Delete every entry ("Clear cache")."""
+        ``meta.json`` goes first, so even if a file is still open (Windows
+        refuses to delete open files) the entry is no longer valid; what is left
+        is deleted by a later ``sweep``.
+        """
+        entry = self._entry(node_key)
+        try:
+            (entry / META).unlink(missing_ok=True)
+        except OSError:
+            pass
+        shutil.rmtree(entry, ignore_errors=True)
+
+    def sweep(self) -> None:
+        """Delete folders without ``meta.json``: removals that hit a locked file and
+        temporary folders of crashed writes (not this process's own)."""
+        if not self.root.is_dir():
+            return
+        own_tmp = f".tmp-{os.getpid()}"
+        for d in self.root.iterdir():
+            if d.is_dir() and not d.name.endswith(own_tmp) and not (d / META).is_file():
+                shutil.rmtree(d, ignore_errors=True)
+
+    def clear(self) -> bool:
+        """Delete every entry ("Clear cache"); ``False`` if some files were locked."""
+        release_file_handles()
         shutil.rmtree(self.root, ignore_errors=True)
+        if not self.root.exists():
+            return True
+        for d in self.root.iterdir():  # what could not be deleted is at least invalid
+            if d.is_dir():
+                self.remove(d.name)
+        return not self.entries() and not any(self.root.iterdir())
 
 
 # ── per-type formats ──
@@ -347,6 +390,32 @@ def _read_value(entry: Path, info: dict[str, Any]) -> Any:
 
         return joblib.load(path)
     raise CacheMiss(f"unknown cache format {fmt}")
+
+
+def release_file_handles() -> int:
+    """Close the raster files xarray keeps open; return how many were closed.
+
+    Lazy rasters reopen their file on the next read, so this is safe at any
+    point between computations. On Windows an open file cannot be replaced or
+    deleted, so the worker calls this after every node: users can overwrite a
+    source raster between runs and the cache can delete its own files.
+    """
+    import sys
+
+    file_manager = sys.modules.get("xarray.backends.file_manager")
+    if file_manager is None:  # xarray never opened a file here; don't pay for importing it
+        return 0
+    file_cache = getattr(file_manager, "FILE_CACHE", None)
+    if file_cache is None:  # pragma: no cover  (xarray moved it)
+        return 0
+    closed = 0
+    for key in list(file_cache.keys()):
+        try:
+            file_cache.pop(key).close()
+            closed += 1
+        except Exception:  # noqa: BLE001, S112  (best effort)
+            continue
+    return closed
 
 
 def file_view_source(da: Any) -> Path | None:

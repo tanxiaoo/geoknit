@@ -268,3 +268,121 @@ def test_changed_input_file_is_rerun(make_executor: MakeExecutor, tmp_path: Path
     report = ex.run()
     assert report.ran == [reader]
     assert ex.summaries[reader]["text"] == "three"
+
+
+# ── Windows file locks (rasters held lazily by the worker) ──
+
+READ_RASTER = """\
+# geoknit: component
+# name: Read Raster
+# category: Raster
+# outputs:
+#   raster: Raster
+
+# --- settings ---
+path = "src.tif"
+
+# --- code ---
+import rioxarray
+raster = rioxarray.open_rasterio(path, chunks=True)
+"""
+
+PLUS_ONE = """\
+# geoknit: component
+# name: Plus One
+# category: Raster
+# inputs:
+#   raster: Raster
+# outputs:
+#   out: Raster
+
+# --- code ---
+out = raster + 1
+"""
+
+MEAN = """\
+# geoknit: component
+# name: Mean
+# category: Raster
+# inputs:
+#   raster: Raster
+# outputs:
+#   mean: Number
+
+# --- code ---
+mean = float(raster.mean().values)
+"""
+
+
+def _constant_tif(path: Path, value: int) -> None:
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    with rasterio.open(
+        path, "w", driver="GTiff", width=8, height=8, count=1, dtype="uint8",
+        crs="EPSG:32632", transform=from_origin(500000, 5000000, 10, 10),
+    ) as ds:  # fmt: skip
+        ds.write(np.full((1, 8, 8), value, dtype="uint8"))
+
+
+def _raster_graph() -> tuple[Graph, dict[str, str]]:
+    """Read Raster → Plus One → Mean."""
+    g = Graph()
+    ids = {
+        "read": g.add_component(INLINE, source=READ_RASTER).id,
+        "plus": g.add_component(INLINE, source=PLUS_ONE).id,
+        "mean": g.add_component(INLINE, source=MEAN).id,
+    }
+    g.add_wire(ids["read"], "raster", ids["plus"], "raster")
+    g.add_wire(ids["plus"], "out", ids["mean"], "raster")
+    return g, ids
+
+
+def test_source_raster_can_be_replaced_between_runs(
+    make_executor: MakeExecutor, tmp_path: Path
+) -> None:
+    src = tmp_path / "src.tif"
+    _constant_tif(src, 1)
+    g, ids = _raster_graph()
+    ex = make_executor(g)
+    assert ex.run().ok, ex.errors
+    assert ex.summaries[ids["mean"]]["mean"] == "2.0"
+
+    # The worker still holds the lazy raster; on Windows this used to fail
+    # with "Permission denied" until the worker was stopped.
+    _constant_tif(src, 5)
+    import os
+
+    st = src.stat()
+    os.utime(src, ns=(st.st_atime_ns, st.st_mtime_ns + 10_000_000))
+    report = ex.run()
+    assert report.ok, ex.errors
+    assert report.ran == [ids["read"], ids["plus"], ids["mean"]]
+    assert ex.summaries[ids["mean"]]["mean"] == "6.0"
+
+
+def test_clear_cache_while_the_worker_holds_cached_rasters(
+    make_executor: MakeExecutor, tmp_path: Path
+) -> None:
+    _constant_tif(tmp_path / "src.tif", 1)
+    g, ids = _raster_graph()
+    ex = make_executor(g)
+    ex.run()
+    cache_dir = tmp_path / ".geoknit" / "cache"
+    # The relative "src.tif" is still found after the component ends: the read
+    # raster is referenced, not copied; only the computed one becomes a COG.
+    assert len(list(cache_dir.glob("*/raster.ref.json"))) == 1
+    assert len(list(cache_dir.glob("*/out.tif"))) == 1
+    assert not ex.logs[ids["plus"]], ex.logs[ids["plus"]]  # no "could not save"
+    ex.restart()  # results now come back from disk: lazy views of cached COGs
+    g2, ids2 = _raster_graph()
+    ex2 = make_executor(g2)
+    assert ex2.run().cached == [ids2["read"], ids2["plus"], ids2["mean"]]
+
+    assert ex2.clear_cache() is True
+    assert not cache_dir.exists() or not any(cache_dir.iterdir())
+    assert all(ex2.solver.states[n] == OUT_OF_DATE for n in g2.nodes)
+    report = ex2.run()
+    assert report.ran == [ids2["read"], ids2["plus"], ids2["mean"]]
+    assert ex2.summaries[ids2["mean"]]["mean"] == "2.0"

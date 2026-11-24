@@ -110,6 +110,31 @@ class WorkerExecutor:
             conn.close()
         self._proc, self._conn, self._ready = None, None, False
 
+    def clear_cache(self) -> bool:
+        """ "Clear cache": empty worker memory and the disk cache; every node becomes
+        out of date. ``False`` if some cache files could not be deleted yet."""
+        with self._lock:
+            if self._running:
+                raise RuntimeError("stop the run before clearing the cache")
+            self._running = True
+        try:
+            self._ensure_ready()
+            self._send(p.ClearCache())
+            while True:
+                msg = self._recv()
+                if isinstance(msg, p.Cleared):
+                    complete = msg.complete
+                    break
+        except (_Stopped, _Crashed):
+            self._recover()
+            complete = False
+        finally:
+            with self._lock:
+                self._running = False
+        self._done_ports.clear()
+        self.solver.invalidate(set(self.graph.nodes))
+        return complete
+
     def restart(self) -> None:
         """Replace the worker with a fresh one (in-memory results are lost)."""
         with self._lock:

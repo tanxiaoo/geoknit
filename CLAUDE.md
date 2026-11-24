@@ -30,6 +30,7 @@ geoknit/                  Python package
     worker.py             worker process: runs components, holds results
     protocol.py           message types between server and worker
     client.py             WorkerExecutor: spawns the worker, runs plans, Stop
+    geoenv.py             ignore a system PROJ_LIB/GDAL_DATA (wheels bring their own)
   components/
     registry.py           loads built-ins, user folder, entry-point packs
     builtin/<category>/*.py   one component file each

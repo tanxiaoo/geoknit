@@ -13,7 +13,13 @@ from rasterio.transform import from_origin
 from shapely.geometry import Point
 
 from geoknit.core import types
-from geoknit.core.cache import CacheMiss, DiskCache, file_view_source, split_port_key
+from geoknit.core.cache import (
+    CacheMiss,
+    DiskCache,
+    file_view_source,
+    release_file_handles,
+    split_port_key,
+)
 
 KEY = "a" * 64
 
@@ -174,3 +180,77 @@ def test_failed_write_leaves_no_entry(tmp_path: Path) -> None:
 
 def test_split_port_key() -> None:
     assert split_port_key(f"{KEY}.raster") == (KEY, "raster")
+
+
+# ── Windows file locks ──
+
+WINDOWS = os.name == "nt"
+
+
+def _can_replace(path: Path) -> bool:
+    try:
+        _tif(path, nodata=0)
+        return True
+    except Exception:  # noqa: BLE001  (GDAL raises CPLE_AppDefinedError on a locked file)
+        return False
+
+
+def test_released_handles_unlock_files_and_lazy_rasters_reopen(tmp_path: Path) -> None:
+    path = _tif(tmp_path / "a.tif")
+    da = rioxarray.open_rasterio(path, chunks=True)
+    doubled = da * 2
+    if WINDOWS:
+        assert not _can_replace(path), "expected Windows to lock an open raster"
+    assert release_file_handles() >= 1
+    assert _can_replace(path)  # rewritten with the same pixel values
+    np.testing.assert_array_equal(doubled.values, rioxarray.open_rasterio(path).values * 2)
+    release_file_handles()
+
+
+def test_removing_an_entry_with_an_open_file_invalidates_it_at_once(tmp_path: Path) -> None:
+    src = rioxarray.open_rasterio(_tif(tmp_path / "a.tif"), chunks=True)
+    cache = DiskCache(tmp_path / "cache")
+    cache.write(KEY, {"raster": src + 1})
+    held = cache.read(KEY)[0]["raster"]
+    _ = held.values  # the COG is now open (and locked on Windows)
+    cache.remove(KEY)
+    assert not cache.has(KEY)  # meta.json went first
+    with pytest.raises(CacheMiss):
+        cache.read(KEY)
+    release_file_handles()
+    cache.sweep()  # leftovers go once the file is closed
+    assert not (tmp_path / "cache" / KEY).exists()
+    cache.write(KEY, {"raster": src + 1})
+    assert cache.has(KEY)
+    release_file_handles()
+
+
+def test_eviction_spares_protected_entries(tmp_path: Path) -> None:
+    cache = DiskCache(tmp_path / "cache", limit_bytes=1)
+    held, other = "b" * 64, "c" * 64
+    cache.write(held, {"t": "x" * 100})
+    cache.write(other, {"t": "y" * 100}, protect={held})
+    assert cache.has(held) and cache.has(other)  # above the limit, but both in use
+    cache.evict(protect={other})
+    assert not cache.has(held) and cache.has(other)
+
+
+def test_clear_succeeds_while_lazy_rasters_from_the_cache_exist(tmp_path: Path) -> None:
+    src = rioxarray.open_rasterio(_tif(tmp_path / "a.tif"), chunks=True)
+    cache = DiskCache(tmp_path / "cache")
+    cache.write(KEY, {"raster": src + 1})
+    held = cache.read(KEY)[0]["raster"]
+    _ = held.values
+    assert cache.clear() is True
+    assert not (tmp_path / "cache").exists()
+
+
+def test_sweep_removes_crashed_writes_but_not_complete_entries(tmp_path: Path) -> None:
+    cache = DiskCache(tmp_path / "cache")
+    cache.write(KEY, {"n": 1})
+    crashed = tmp_path / "cache" / f"{'d' * 64}.tmp-999999"
+    crashed.mkdir()
+    (crashed / "n.json").write_text("{}")
+    cache.sweep()
+    assert not crashed.exists()
+    assert cache.has(KEY)

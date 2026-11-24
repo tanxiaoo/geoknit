@@ -310,11 +310,25 @@ so behaviour matches Windows):
     Settings are part of `source`. A `list` input gets its keys in wire order.
   - `put_value {cache_key, value}`: a Text or Slider value (or an empty
     Panel's `None`), sent before each run so the worker can look it up.
-  - `clear_cache`, `shutdown`.
+  - `clear_cache` (answered by `cleared {complete}`), `shutdown`.
 - worker → server: `ready {pid}`, `started`, `log {line}`,
-  `done {outputs: {port: {cache_key, summary}}, cached}`, `error {traceback}`.
-  `cached` is true when the result came from worker memory or the disk cache
-  without running the code.
+  `done {outputs: {port: {cache_key, summary}}, cached}`, `error {traceback}`,
+  `cleared {complete}`. `cached` is true when the result came from worker
+  memory or the disk cache without running the code.
+- The worker's working directory is the project folder for its whole life,
+  so a raster opened with a relative path still finds its file when it is
+  read again later.
+- Before anything imports rasterio, the worker removes `PROJ_LIB`,
+  `PROJ_DATA` and `GDAL_DATA` from its environment when the rasterio wheel
+  bundles its own PROJ/GDAL data. A system install (PostGIS, QGIS, OSGeo4W)
+  often sets them to an older `proj.db`, which breaks every CRS operation.
+  A non-wheel install (e.g. conda) is left alone.
+- **Windows file locks**: an open raster file cannot be replaced or deleted
+  on Windows, and lazy rasters keep their file open. After every node the
+  worker closes the raster files xarray keeps open; lazy rasters reopen them
+  on their next read. So users can overwrite a source raster between runs
+  (the next Run sees the new size/mtime and recomputes), and the cache can
+  delete its own files.
 - Text, Slider and Panel nodes are handled by the server; only components go
   to the worker.
 - If the worker dies on its own (e.g. a component calls `os._exit`), the
@@ -354,8 +368,15 @@ The server forwards these as WebSocket events to the browser.
   leaves a half-written entry. A bump of the cache format makes old entries
   miss.
 - Default limit 10 GB. Least-recently-used eviction (the modification time
-  of `meta.json` is the last use) after each write, never evicting the entry
-  just written. "Clear cache" in the menu.
+  of `meta.json` is the last use) after each write. It never evicts the entry
+  just written or any entry whose results are in worker memory, because
+  those may be lazy views of its files. So the cache can stay above the limit
+  while they are in use.
+- Removing an entry deletes `meta.json` first, so it is invalid at once even
+  if a file inside is still locked. Folders without `meta.json` (leftovers,
+  temporary folders of crashed writes) are deleted on the next eviction.
+- "Clear cache" in the menu: the worker drops its memory, then deletes the
+  disk cache; every node becomes `out_of_date`.
 
 ### Large rasters (city scale, ~2 Sentinel-2 tiles, 64 bands)
 
@@ -543,7 +564,8 @@ created or saved on this machine (its content hash is not in
 - The wheel contains the built frontend in `geoknit/server/static/`; users
   never need Node.
 - Geo stack from wheels only: rasterio, pyogrio, shapely, pyproj, geopandas,
-  rioxarray. Never import `osgeo`.
+  rioxarray. Never import `osgeo`. The worker ignores a system
+  `PROJ_LIB` / `PROJ_DATA` / `GDAL_DATA` (section 6, "Worker protocol").
 - A component can declare `requires`; if a package is missing, GeoKnit offers
   to `pip install` it into its own environment.
 - License: Apache-2.0.

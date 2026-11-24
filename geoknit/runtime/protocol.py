@@ -78,5 +78,12 @@ class Error:
     traceback: str
 
 
+@dataclass(frozen=True)
+class Cleared:
+    """Reply to ``ClearCache``; ``complete`` is false if some files were locked."""
+
+    complete: bool
+
+
 ToWorker = RunNode | PutValue | ClearCache | Shutdown
-FromWorker = Ready | Started | Log | Done | Error
+FromWorker = Ready | Started | Log | Done | Error | Cleared

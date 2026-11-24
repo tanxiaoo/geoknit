@@ -13,9 +13,17 @@ from pathlib import Path
 from typing import Any
 
 from geoknit.core import types
-from geoknit.core.cache import DEFAULT_LIMIT, CacheMiss, DiskCache, port_key, split_port_key
+from geoknit.core.cache import (
+    DEFAULT_LIMIT,
+    CacheMiss,
+    DiskCache,
+    port_key,
+    release_file_handles,
+    split_port_key,
+)
 from geoknit.core.component import ComponentParseError, parse_component, run_component
 from geoknit.runtime import protocol as p
+from geoknit.runtime.geoenv import use_bundled_geo_data
 
 
 class _MissingInput(Exception):
@@ -45,8 +53,11 @@ class Worker:
             self.memory[msg.cache_key] = msg.value
             self.summaries[msg.cache_key] = types.describe(msg.value)
         elif isinstance(msg, p.ClearCache):
-            if self.disk is not None:
-                self.disk.clear()
+            # Results in memory may be lazy views of cache files: drop them first.
+            self.memory.clear()
+            self.summaries.clear()
+            complete = self.disk.clear() if self.disk is not None else True
+            self.send(p.Cleared(complete))
 
     # ── lookups ──
     def _from_disk(self, node_key: str) -> bool:
@@ -73,8 +84,25 @@ class Worker:
                 raise _MissingInput(f'input "{input_name}": no result yet; run it first')
         return self.memory[key]
 
+    def held_node_keys(self) -> set[str]:
+        """Node keys whose results are in memory (their cache entries must stay)."""
+        held: set[str] = set()
+        for key in self.memory:
+            node_key, sep, _ = key.rpartition(".")
+            if sep:
+                held.add(node_key)
+        return held
+
     # ── run_node ──
     def run_node(self, msg: p.RunNode) -> None:
+        try:
+            self._run_node(msg)
+        finally:
+            # Lazy rasters reopen on their next read. Closing now means Windows does
+            # not keep source files (or cache files) locked between nodes and runs.
+            release_file_handles()
+
+    def _run_node(self, msg: p.RunNode) -> None:
         nid = msg.node_id
         try:
             spec = parse_component(msg.source)
@@ -123,7 +151,9 @@ class Worker:
             summaries[port] = self.summaries[keys[port]] = types.describe(value)
         if self.disk is not None:
             try:
-                self.disk.write(msg.cache_key, result.outputs, summaries)
+                self.disk.write(
+                    msg.cache_key, result.outputs, summaries, protect=self.held_node_keys()
+                )
             except Exception as exc:  # noqa: BLE001  (a failed cache write must not fail the run)
                 self.send(p.Log(nid, f"cache: could not save the result ({exc})"))
         self.send(p.Done(nid, self._described(keys), cached=False))
@@ -142,6 +172,14 @@ def worker_main(
     limit_bytes: int = DEFAULT_LIMIT,
 ) -> None:
     """Entry point of the worker process."""
+    # First, before any component can import rasterio: ignore a system PROJ/GDAL.
+    use_bundled_geo_data()
+    # Stay in the project folder for the worker's whole life, not only while a
+    # component's code runs: lazy rasters opened with a relative path ("data/x.tif")
+    # reopen their file later (cache writes, the next node, after their handle was
+    # released), and must find it again.
+    if project_dir:
+        os.chdir(project_dir)
     worker = Worker(
         conn.send,
         Path(project_dir) if project_dir else None,

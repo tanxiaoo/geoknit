@@ -386,3 +386,53 @@ def test_clear_cache_while_the_worker_holds_cached_rasters(
     report = ex2.run()
     assert report.ran == [ids2["read"], ids2["plus"], ids2["mean"]]
     assert ex2.summaries[ids2["mean"]]["mean"] == "2.0"
+
+
+LAZY_RASTER = """\
+# geoknit: component
+# name: Lazy Raster
+# category: Raster
+# outputs:
+#   raster: Raster
+
+# --- code ---
+import dask.array as da
+import xarray as xr
+import rioxarray  # noqa: F401
+raster = xr.DataArray(
+    da.ones((1, 8, 8), dtype="float32", chunks=(1, 4, 4)),
+    dims=("band", "y", "x"),
+    coords={"band": [1], "y": [5000000 - 10 * i - 5 for i in range(8)],
+            "x": [500000 + 10 * i + 5 for i in range(8)]},
+).rio.write_crs("EPSG:32632")
+"""
+
+
+def test_a_computed_raster_is_swapped_for_its_cached_cog(tmp_path: Path) -> None:
+    """Downstream nodes read the COG instead of computing the raster again (SPEC 6)."""
+    from geoknit.runtime import protocol as p
+    from geoknit.runtime.worker import Worker
+
+    sent: list[object] = []
+    cache_dir = tmp_path / "cache"
+    w = Worker(sent.append, tmp_path, cache_dir)
+    w.handle(p.RunNode("n1", LAZY_RASTER, {}, "k1"))
+    assert isinstance(sent[-1], p.Done), sent
+    value = w.memory["k1.raster"]
+    assert Path(value.encoding["source"]).resolve() == (cache_dir / "k1" / "raster.tif").resolve()
+    assert float(value.sum()) == 64.0
+
+
+def test_out_receives_printed_text_in_the_worker(tmp_path: Path) -> None:
+    from geoknit.runtime import protocol as p
+    from geoknit.runtime.worker import Worker
+
+    src = (
+        "# geoknit: component\n# name: Python\n# category: Script\n# outputs:\n#   out: Text\n"
+        "\n# --- code ---\nprint('hello')\n"
+    )
+    sent: list[object] = []
+    w = Worker(sent.append, tmp_path, None)
+    w.handle(p.RunNode("n1", src, {}, "k1"))
+    assert isinstance(sent[-1], p.Done), sent
+    assert w.memory["k1.out"] == "hello\n"

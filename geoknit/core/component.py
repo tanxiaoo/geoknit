@@ -36,6 +36,9 @@ HEADER_MARK = "geoknit: component"
 SETTINGS_MARK = "# --- settings ---"
 CODE_MARK = "# --- code ---"
 
+PRINT_PORT = "out"
+"""A Text output with this name that the code does not set receives everything printed."""
+
 LogFn = Callable[[str], None]
 
 
@@ -58,6 +61,11 @@ class Port:
     name: str
     type: str
     access: str = "item"
+    file: str | None = None
+    """``"write"`` for a Text input naming a file the component writes (not fingerprinted)."""
+
+
+FILE_ROLES = ("write",)
 
 
 @dataclass(frozen=True)
@@ -227,10 +235,12 @@ def _parse_ports(raw: object, key: str, *, allow_list: bool) -> dict[str, Port]:
         name = str(name)
         if not name.isidentifier():
             raise ComponentParseError(f'port name "{name}" is not a valid Python name')
+        file_role: object = None
         if isinstance(spec, str):
             type_name, access = spec, "item"
         elif isinstance(spec, dict):
             type_name, access = spec.get("type"), spec.get("access", "item")
+            file_role = spec.get("file")
         else:
             raise ComponentParseError(f'{key}: "{name}" needs a type such as Raster')
         if type_name not in types.PORT_TYPES:
@@ -240,7 +250,17 @@ def _parse_ports(raw: object, key: str, *, allow_list: bool) -> dict[str, Port]:
             )
         if access not in ("item", "list") or (access == "list" and not allow_list):
             raise ComponentParseError(f'{key}: "{name}" has invalid access "{access}"')
-        ports[name] = Port(name=name, type=str(type_name), access=str(access))
+        if file_role is not None:
+            if not allow_list or file_role not in FILE_ROLES or type_name != types.TEXT:
+                raise ComponentParseError(
+                    f'{key}: "{name}": "file: write" is only allowed on a Text input'
+                )
+        ports[name] = Port(
+            name=name,
+            type=str(type_name),
+            access=str(access),
+            file=None if file_role is None else str(file_role),
+        )
     return ports
 
 

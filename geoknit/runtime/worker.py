@@ -21,7 +21,12 @@ from geoknit.core.cache import (
     release_file_handles,
     split_port_key,
 )
-from geoknit.core.component import ComponentParseError, parse_component, run_component
+from geoknit.core.component import (
+    PRINT_PORT,
+    ComponentParseError,
+    parse_component,
+    run_component,
+)
 from geoknit.runtime import protocol as p
 from geoknit.runtime.geoenv import use_bundled_geo_data
 
@@ -139,6 +144,7 @@ class Worker:
             filename=f"<{nid} {spec.name}>",
             log=lambda line: self.send(p.Log(nid, line)),
             cwd=self.project_dir,
+            print_port=PRINT_PORT,
         )
         if not result.ok:
             assert result.error is not None
@@ -156,6 +162,14 @@ class Worker:
                 )
             except Exception as exc:  # noqa: BLE001  (a failed cache write must not fail the run)
                 self.send(p.Log(nid, f"cache: could not save the result ({exc})"))
+            else:
+                # A computed raster is now a COG on disk: read that from now on
+                # instead of computing it again for every downstream node.
+                try:
+                    for port, value in self.disk.written_rasters(msg.cache_key).items():
+                        self.memory[keys[port]] = value
+                except Exception as exc:  # noqa: BLE001  (keep the computed value)
+                    self.send(p.Log(nid, f"cache: could not reopen the result ({exc})"))
         self.send(p.Done(nid, self._described(keys), cached=False))
 
     def _described(self, keys: dict[str, str]) -> dict[str, dict[str, str]]:

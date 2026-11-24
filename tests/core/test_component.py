@@ -26,6 +26,14 @@ def test_parse_header_ports_and_settings() -> None:
     assert (sep.widget, sep.options) == ("dropdown", ("-", "_", "+"))
 
 
+def test_file_write_input() -> None:
+    from tests.core.sources import WRITE_FILE
+
+    spec = parse_component(WRITE_FILE)
+    assert spec.inputs["path"].file == "write"
+    assert spec.inputs["text"].file is None
+
+
 def test_list_access_and_multiline_hint() -> None:
     src = (
         "# geoknit: component\n# name: Viewer\n# inputs:\n"
@@ -54,6 +62,18 @@ def test_list_access_and_multiline_hint() -> None:
             None,
         ),
         ("# geoknit: component\n# outputs: [\n\n# --- code ---\n", "not valid YAML", None),
+        (
+            "# geoknit: component\n# name: T\n# inputs:\n#   x: {type: Raster, file: write}\n"
+            "\n# --- code ---\n",
+            "only allowed on a Text input",
+            None,
+        ),
+        (
+            "# geoknit: component\n# name: T\n# inputs:\n#   x: {type: Text, file: read}\n"
+            "\n# --- code ---\n",
+            "only allowed on a Text input",
+            None,
+        ),
     ],
 )
 def test_parse_errors(source: str, message: str, line: int | None) -> None:

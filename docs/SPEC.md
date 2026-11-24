@@ -149,6 +149,10 @@ print(f"{len(rules)} classes")
   relative `.svg` path), `description`, `inputs`, `outputs`,
   `requires` (pip package names), optional `access` per input:
   `layers: {type: Any, access: list}`.
+- Optional `file: write` on a Text input that names a file the component
+  writes, e.g. `path: {type: Text, file: write}`. Such paths are not
+  fingerprinted for the cache (section 6), so writing the file does not make
+  the node out of date again.
 
 ### Settings block
 
@@ -187,7 +191,9 @@ outputs are read back by name when the code ends.
    component file.
 
 The Python component on the canvas additionally has an `out` Text output
-holding everything printed, as in GHPython.
+holding everything printed, as in GHPython. The rule is general: any
+component with an output `out: Text` that its code does not set gets the
+printed text there.
 
 ### Settings ↔ Code sync
 
@@ -353,6 +359,11 @@ The server forwards these as WebSocket events to the browser.
   are detected; no header key is needed. On every Run all keys are
   recomputed, and a `done` node whose key changed becomes `out_of_date`
   together with everything downstream.
+- Files a component writes are not fingerprinted: a setting of a
+  `file: write` input (section 4), and a Text whose wires all go to
+  `file: write` inputs. A Text that also feeds a reader keeps its
+  fingerprint. So a deleted output file is written again only after the
+  node changes or the cache is cleared.
 - Lookup order: worker memory → disk → run. Worker memory is lost on Stop or
   restart.
 - Disk cache: `<project>/.geoknit/cache/<node key>/`, holding one file per
@@ -383,7 +394,11 @@ The server forwards these as WebSocket events to the browser.
 - Built-ins never call `.load()` on a whole raster unless they must.
 - Extract Values samples at point locations without loading the raster.
 - Predict Raster works in windows (default 512 px), writes a COG into the
-  cache and returns it opened lazily.
+  cache and returns it opened lazily. It returns a lazy (dask) prediction;
+  the cache writes it window by window, and the worker then replaces any
+  computed raster output with the COG it just wrote, so downstream nodes
+  read the file instead of computing it again. With the disk cache off
+  (`--no-cache`) each downstream node computes the lazy raster itself.
 - `describe()` uses metadata only.
 
 ---

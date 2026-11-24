@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from geoknit.core import types
-from geoknit.core.component import run_component
+from geoknit.core.component import PRINT_PORT, run_component
 from geoknit.core.graph import PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 
@@ -119,6 +119,7 @@ class InProcessExecutor:
                 filename=f"<{nid} {node.spec.name}>",
                 log=lambda line: self._log(nid, line),
                 cwd=self.base_dir,
+                print_port=PRINT_PORT,
             )
             if not result.ok:
                 assert result.error is not None

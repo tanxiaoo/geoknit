@@ -102,3 +102,22 @@ path = "input.txt"
 from pathlib import Path
 text = Path(path).read_text()
 """
+
+WRITE_FILE = """\
+# geoknit: component
+# name: Write File
+# category: Text
+# inputs:
+#   text: Text
+#   path: {type: Text, file: write}
+# outputs:
+#   file: Text
+
+# --- settings ---
+path = "output.txt"
+
+# --- code ---
+from pathlib import Path
+Path(path).write_text(text)
+file = path
+"""

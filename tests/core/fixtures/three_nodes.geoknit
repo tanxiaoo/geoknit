@@ -1,0 +1,59 @@
+{
+  "format": 1,
+  "geoknit_version": "0.1.0.dev0",
+  "groups": [],
+  "nodes": [
+    {
+      "component": "param/text",
+      "id": "n1",
+      "position": [
+        0,
+        0
+      ],
+      "value": "ab"
+    },
+    {
+      "component": "inline",
+      "display": "default",
+      "id": "n2",
+      "position": [
+        200,
+        0
+      ],
+      "source": "# geoknit: component\n# name: Repeat\n# category: Text\n# description: Repeat a text several times.\n# inputs:\n#   text: Text\n#   times: Number\n# outputs:\n#   repeated: Text\n\n# --- settings ---\ntimes = 2  # range: 1..10\nsep = \"-\"  # options: - | _ | +\n\n# --- code ---\nrepeated = sep.join([text] * int(times))\nprint(f\"repeated {int(times)} times\")\n"
+    },
+    {
+      "component": "inline",
+      "display": "default",
+      "id": "n3",
+      "position": [
+        400,
+        0
+      ],
+      "source": "# geoknit: component\n# name: Length\n# category: Text\n# inputs:\n#   text: Text\n# outputs:\n#   n: Number\n\n# --- code ---\nn = len(text)\n"
+    }
+  ],
+  "view": {},
+  "wires": [
+    {
+      "from": [
+        "n1",
+        "value"
+      ],
+      "to": [
+        "n2",
+        "text"
+      ]
+    },
+    {
+      "from": [
+        "n2",
+        "repeated"
+      ],
+      "to": [
+        "n3",
+        "text"
+      ]
+    }
+  ]
+}

@@ -18,7 +18,7 @@ from geoknit.core.workflow import (
 )
 from tests.core.sources import LENGTH, REPEAT
 
-DATA = Path(__file__).parent / "data"
+DATA = Path(__file__).parent / "fixtures"
 
 
 def _library() -> DictLibrary:

@@ -54,12 +54,20 @@ export interface ViewJson {
   offset?: [number, number];
 }
 
+export interface GroupJson {
+  title: string;
+  nodes: string[];
+}
+
 export interface WorkflowJson {
-  nodes: Record<string, unknown>[];
+  nodes: NodeJson[];
   wires: WireJson[];
-  groups: { title: string; nodes: string[] }[];
+  groups: GroupJson[];
   view: ViewJson;
 }
+
+/** One node as the .geoknit file stores it (SPEC 5). */
+export type NodeJson = { id: string; position: [number, number] } & Record<string, unknown>;
 
 export interface GraphView {
   workflow: WorkflowJson;
@@ -68,6 +76,12 @@ export interface GraphView {
   path: string | null;
   trusted: boolean;
   running: boolean;
+  /** Differs from its file (any content, for a new workflow). */
+  dirty: boolean;
+  can_undo: boolean;
+  can_redo: boolean;
+  /** An autosave from an earlier session can be restored. */
+  recovery: boolean;
 }
 
 export interface ComponentEntry {
@@ -116,7 +130,12 @@ export type ServerEvent =
   | { type: "states"; states: Record<string, NodeState>; out_of_date: number }
   | { type: "started"; node: string }
   | { type: "log"; node: string; line: string }
-  | { type: "done"; node: string; outputs: Record<string, string>; cached: boolean }
+  | {
+      type: "done";
+      node: string;
+      outputs: Record<string, string>;
+      cached: boolean;
+    }
   | { type: "error" | "skipped"; node: string; traceback: string }
   | { type: "run_finished"; report: RunReport | null; error?: string }
   | { type: "workflow_opened"; path: string }

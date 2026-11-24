@@ -205,6 +205,7 @@ class Graph:
         for g in self.groups:
             if node_id in g.get("nodes", []):
                 g["nodes"] = [n for n in g["nodes"] if n != node_id]
+        self.groups = [g for g in self.groups if g.get("nodes")]  # an empty group is gone
         self._changed(changed=children - {node_id}, removed=[node_id])
 
     # ── edits that change results ──

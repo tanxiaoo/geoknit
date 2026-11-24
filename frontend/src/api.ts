@@ -4,11 +4,13 @@ import type {
   ComponentEntry,
   FileNode,
   GraphView,
+  NodeJson,
   NodeOutput,
   NodePatch,
   NodeView,
   Status,
   ViewJson,
+  WireJson,
 } from "./apiTypes";
 
 export class ApiError extends Error {
@@ -63,6 +65,22 @@ export const api = {
   output: (id: string) =>
     request<NodeOutput>("GET", `/api/nodes/${encodeURIComponent(id)}/output`),
   trust: () => request<unknown>("POST", "/api/workflow/trust"),
+  save: (path?: string) => request<{ path: string }>("POST", "/api/workflow/save", { path }),
+  open: (path: string) => request<GraphView>("POST", "/api/workflow/open", { path }),
+  recover: (restore: boolean) => request<GraphView>("POST", "/api/workflow/recover", { restore }),
+  undo: () => request<GraphView>("POST", "/api/undo"),
+  redo: () => request<GraphView>("POST", "/api/redo"),
+  remove: (nodes: string[], wires: WireJson[]) =>
+    request<void>("POST", "/api/delete", { nodes, wires }),
+  move: (positions: Record<string, [number, number]>) =>
+    request<unknown>("PATCH", "/api/positions", { positions }),
+  paste: (nodes: NodeJson[], wires: WireJson[], offset: [number, number]) =>
+    request<{ ids: string[] }>("POST", "/api/paste", { nodes, wires, offset }),
+  addGroup: (title: string, nodes: string[]) =>
+    request<{ index: number }>("POST", "/api/groups", { title, nodes }),
+  patchGroup: (index: number, patch: { title?: string; nodes?: string[] }) =>
+    request<unknown>("PATCH", `/api/groups/${index}`, patch),
+  removeGroup: (index: number) => request<void>("DELETE", `/api/groups/${index}`),
 };
 
 export type Api = typeof api;

@@ -4,7 +4,7 @@
 
 The project lives in a new temporary folder; ``--workflow`` also copies
 ``examples/synthetic/imd.geoknit`` into it and opens it (trusted). The trust
-file is private to the run.
+file and autosaves are private to the run.
 """
 
 from __future__ import annotations
@@ -28,7 +28,9 @@ def main() -> int:
 
     use_bundled_geo_data()  # a system PROJ_LIB must not break make_data.py
     project = Path(tempfile.mkdtemp(prefix="geoknit-e2e-"))
-    os.environ["GEOKNIT_TRUST_FILE"] = str(project.parent / f"{project.name}-trusted.json")
+    # trust file and autosaves in a folder of their own, like ~/.geoknit
+    home = project.parent / f"{project.name}-home"
+    os.environ["GEOKNIT_TRUST_FILE"] = str(home / "trusted.json")
 
     make_data = runpy.run_path(str(ROOT / "examples" / "synthetic" / "make_data.py"))["make_data"]
     make_data(project / "data")

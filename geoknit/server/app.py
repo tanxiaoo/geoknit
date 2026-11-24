@@ -90,6 +90,37 @@ class OpenBody(BaseModel):
     path: str = Field(description="relative to the project folder")
 
 
+class DeleteBody(BaseModel):
+    nodes: list[str] = Field(default_factory=list)
+    wires: list[WireBody] = Field(default_factory=list)
+
+
+class MoveBody(BaseModel):
+    positions: dict[str, list[float]] = Field(description="node id → [x, y]")
+
+
+class PasteBody(BaseModel):
+    nodes: list[dict[str, Any]] = Field(description="nodes in workflow format (SPEC 5)")
+    wires: list[dict[str, Any]] = Field(
+        default_factory=list, description="wires among the pasted nodes, by their old ids"
+    )
+    offset: list[float] = Field(default_factory=lambda: [20.0, 20.0])
+
+
+class GroupCreate(BaseModel):
+    title: str = "Group"
+    nodes: list[str]
+
+
+class GroupPatch(BaseModel):
+    title: str | None = None
+    nodes: list[str] | None = None
+
+
+class RecoverBody(BaseModel):
+    restore: bool = Field(description="true restores the autosave, false discards it")
+
+
 # ── app ──
 
 
@@ -179,6 +210,49 @@ def create_app(
     def remove_wire(body: WireBody) -> None:
         session.remove_wire(*body.src, *body.dst)
 
+    @app.post("/api/delete", status_code=204, tags=["graph"])
+    def delete(body: DeleteBody) -> None:
+        """Remove several nodes and wires as one undo step."""
+        session.delete(body.nodes, [(*w.src, *w.dst) for w in body.wires])
+
+    @app.patch("/api/positions", tags=["graph"])
+    def move(body: MoveBody) -> dict[str, Any]:
+        """Move several nodes as one undo step (allowed during a run)."""
+        session.move(body.positions)
+        return {"moved": len(body.positions)}
+
+    @app.post("/api/paste", status_code=201, tags=["graph"])
+    def paste(body: PasteBody) -> dict[str, Any]:
+        """Add copies of nodes (from `GET /api/graph`) under new ids, with their wires."""
+        return {"ids": session.paste(body.nodes, body.wires, body.offset)}
+
+    @app.post("/api/undo", tags=["graph"])
+    def undo() -> dict[str, Any]:
+        """Undo the last workflow edit (Ctrl+Z)."""
+        session.undo()
+        return session.graph_view()
+
+    @app.post("/api/redo", tags=["graph"])
+    def redo() -> dict[str, Any]:
+        """Redo the last undone edit (Ctrl+Y)."""
+        session.redo()
+        return session.graph_view()
+
+    @app.post("/api/groups", status_code=201, tags=["graph"])
+    def add_group(body: GroupCreate) -> dict[str, Any]:
+        """Put nodes in a labelled box (Ctrl+G)."""
+        return {"index": session.add_group(body.title, body.nodes)}
+
+    @app.patch("/api/groups/{index}", tags=["graph"])
+    def patch_group(index: int, body: GroupPatch) -> dict[str, Any]:
+        """Rename a group or change its nodes."""
+        return session.patch_group(index, body.title, body.nodes)
+
+    @app.delete("/api/groups/{index}", status_code=204, tags=["graph"])
+    def remove_group(index: int) -> None:
+        """Ungroup; the nodes stay."""
+        session.remove_group(index)
+
     # ── running ──
     @app.post("/api/run", status_code=202, tags=["run"])
     def run(body: RunBody) -> dict[str, Any]:
@@ -220,6 +294,12 @@ def create_app(
         """Answer "Trust and allow running?" with yes for the open workflow."""
         session.trust_current()
         return {"trusted": True}
+
+    @app.post("/api/workflow/recover", tags=["files"])
+    def recover(body: RecoverBody) -> dict[str, Any]:
+        """Restore (one undo step) or discard the autosave offered after opening."""
+        session.recover(body.restore)
+        return session.graph_view()
 
     @app.post("/api/export/py", status_code=501, tags=["files"])
     def export_py() -> dict[str, Any]:

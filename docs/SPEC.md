@@ -545,6 +545,35 @@ Ctrl+C / Ctrl+V; Ctrl+G group; Ctrl+S save; wheel zoom; middle-drag or
 space-drag pan; Fit. Hovering a port or wire shows its `describe()` summary
 after a run.
 
+Editing details:
+
+- **Undo / redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, toolbar arrows): every
+  request that changes the workflow is one step, kept by the server (200
+  steps), so edits made through the API undo the same way. Deleting or moving
+  several things, a paste and a restored autosave are one step each. Undo
+  changes only what differs, so only those nodes and their downstream nodes
+  go out of date; moves never do. The canvas view (Show as, zoom) is not
+  undone. Opening a workflow clears the history; saving does not.
+- **Copy / paste**: Ctrl+C copies the selected nodes and the wires among them;
+  Ctrl+V pastes them with new ids, their top-left corner at the pointer (or
+  offset when the pointer is off the canvas), and selects them.
+- **Groups**: Ctrl+G puts the selected nodes in a box titled "Group".
+  Clicking the title selects its nodes (to drag them together),
+  double-clicking renames it, right-clicking offers Ungroup. A group whose
+  last node is deleted is removed.
+- **Save / open**: the file name in the top bar shows "saved", "unsaved
+  changes" or "not saved" (new workflow) and opens a menu: Save (Ctrl+S),
+  Save as…, and the `.geoknit` files of the project folder to open.
+  Double-clicking a `.geoknit` file in the folder tree also opens it.
+  Opening asks before discarding unsaved changes. Ctrl+S on a new workflow
+  asks for a name.
+- **Autosave**: after every edit the server writes the unsaved workflow to
+  `~/.geoknit/autosave/<name>-<hash>.geoknit` (next to `trusted.json`, never
+  in the project folder, so a shared folder cannot plant one), and removes it
+  when the workflow is saved or back to its saved state. When a workflow is
+  opened (or the server starts) and its autosave differs, a banner offers
+  Restore (one undo step) or Discard; the first edit replaces the autosave.
+
 ---
 
 ## 9. Server API
@@ -562,6 +591,11 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/api/status` | Python version, worker `idle` \| `running`, worker pid |
 | DELETE | `/api/nodes/{id}` | remove |
 | POST | `/api/wires` / DELETE `/api/wires` | connect / disconnect (type and cycle checks) |
+| POST | `/api/delete` | remove `{nodes, wires}` as one undo step |
+| PATCH | `/api/positions` | move `{positions: {id: [x, y]}}` as one undo step |
+| POST | `/api/paste` | add copies of `{nodes, wires, offset}` (workflow format) under new ids |
+| POST | `/api/undo`, `/api/redo` | step through the edit history (section 8) |
+| POST | `/api/groups` / PATCH, DELETE `/api/groups/{index}` | add, rename / change, ungroup |
 | POST | `/api/run` | `{mode: all | to_node | test, node_id?}` |
 | POST | `/api/stop` | stop the worker |
 | POST | `/api/cache/clear` | "Clear cache" (section 6) |
@@ -569,6 +603,7 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/api/files` | project folder tree |
 | POST | `/api/workflow/save`, `/api/workflow/open` | file operations |
 | POST | `/api/workflow/trust` | trust the open workflow (section 11) |
+| POST | `/api/workflow/recover` | `{restore}`: restore or discard the autosave (section 8) |
 | POST | `/api/export/py` | returns the exported script |
 | GET | `/tiles/{key}/{z}/{x}/{y}.png` | raster tiles for Map Viewer (rio-tiler) |
 | GET | `/api/vector/{key}.geojson` | vector layer in EPSG:4326, max 50 000 features |
@@ -583,7 +618,7 @@ Details:
   unsaved), as in `geoknit run`. Save and open take a `.geoknit` path
   relative to the project folder; paths outside it are refused.
 - `GET /api/graph` returns `{workflow, nodes, out_of_date, path, trusted,
-  running}`: `workflow` is the `.geoknit` document, `nodes` maps each id to
+  running, dirty, can_undo, can_redo, recovery}`: `workflow` is the `.geoknit` document, `nodes` maps each id to
   its title, state, ports, and (components) settings with their form hints,
   source, `modified` and `parse_error`.
 - `PATCH /api/nodes/{id}` changes only the fields sent: `settings`
@@ -592,7 +627,8 @@ Details:
 - `POST /api/run` starts the run in the background and answers `202
   {plan}` at once; progress arrives on `/ws`. While a run is active, a second
   run and every edit that changes results answer `409` ("stop the run
-  first"); position and display changes are still allowed.
+  first"); position, display and group changes are still allowed, undo and
+  redo are not.
 - Errors answer `{"detail": message}`: `400` for refused edits (the
   messages of section 3), `403` for a read-only workflow (section 11), `404`
   for an unknown node.

@@ -66,14 +66,14 @@ review its plan before it writes code.
 
 ## Phase 3: Built-in components and synthetic example
 
-- [ ] `examples/synthetic/make_data.py`: small (e.g. 200 × 200) "IMD" raster 0–100, 8-band predictor raster with band names, AOI polygon, reference points with a field — all in EPSG:32632, generated with a fixed seed
-- [ ] `geoknit/helpers/parse_breaks` and tests for the breaks syntax (exact values first, `a-b` = a < x ≤ b)
-- [ ] All built-ins from SPEC 7 except Map Viewer (frontend phase), each as a component file with a test
-- [ ] Python component template (empty component with editable ports, `out` output)
-- [ ] Registry: built-ins, `~/.geoknit/components/`, entry-point packs (test with a tiny fake pack)
-- [ ] `examples/synthetic/imd.geoknit`: the Milan-shaped workflow on synthetic data
-- [ ] `examples/milan_imd/prepare_reference.py`: EarthLabel CSV → `earthlabel_2018.gpkg` (SPEC 7)
-- [ ] `examples/milan_imd/milan_imd.geoknit` + README (which four files to copy into `data/`, expected CRS and band names)
+- [x] `examples/synthetic/make_data.py`: small (e.g. 200 × 200) "IMD" raster 0–100, 8-band predictor raster with band names, AOI polygon, reference points with a field — all in EPSG:32632, generated with a fixed seed
+- [x] `geoknit/helpers/parse_breaks` and tests for the breaks syntax (exact values first, `a-b` = a < x ≤ b)
+- [x] All built-ins from SPEC 7 except Map Viewer (frontend phase), each as a component file with a test
+- [x] Python component template (empty component with editable ports, `out` output)
+- [x] Registry: built-ins, `~/.geoknit/components/`, entry-point packs (test with a tiny fake pack)
+- [x] `examples/synthetic/imd.geoknit`: the Milan-shaped workflow on synthetic data
+- [x] Validation on held-out sample points (Split Points) instead of separate reference data (SPEC 7)
+- [x] `examples/milan_imd/milan_imd.geoknit` + README (which four files to copy into `data/`, expected CRS and band names)
 
 **Done when:**
 - `geoknit run examples/synthetic/imd.geoknit` prints the metrics table

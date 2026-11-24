@@ -149,6 +149,10 @@ print(f"{len(rules)} classes")
   relative `.svg` path), `description`, `inputs`, `outputs`,
   `requires` (pip package names), optional `access` per input:
   `layers: {type: Any, access: list}`.
+- Optional `file: write` on a Text input that names a file the component
+  writes, e.g. `path: {type: Text, file: write}`. Such paths are not
+  fingerprinted for the cache (section 6), so writing the file does not make
+  the node out of date again.
 
 ### Settings block
 
@@ -187,7 +191,9 @@ outputs are read back by name when the code ends.
    component file.
 
 The Python component on the canvas additionally has an `out` Text output
-holding everything printed, as in GHPython.
+holding everything printed, as in GHPython. The rule is general: any
+component with an output `out: Text` that its code does not set gets the
+printed text there.
 
 ### Settings ↔ Code sync
 
@@ -214,8 +220,22 @@ holding everything printed, as in GHPython.
 ### Community packs
 
 A pip package declares an entry point in group `geoknit.components` that
-returns a folder path. Every component file in that folder is loaded at
-startup. New categories become new ribbon tabs.
+returns a folder path (the entry point is a path string or a function
+returning one). Every component file in that folder is loaded at startup.
+New categories become new ribbon tabs.
+
+Component references, by source (each folder holds `<category>/<name>.py`;
+files starting with `_` are ignored):
+
+| Source | Reference |
+|--------|-----------|
+| built-in | `builtin/<category>/<name>` |
+| `~/.geoknit/components/` | `user/<category>/<name>` |
+| pack (entry point `fake = …`) | `fake/<category>/<name>`, version = the package version |
+
+The names `builtin`, `user`, `inline` and `param` are reserved for packs. A
+file that does not parse, or a pack that fails to load, is skipped with a
+warning and never stops GeoKnit from starting.
 
 ### Display
 
@@ -353,6 +373,11 @@ The server forwards these as WebSocket events to the browser.
   are detected; no header key is needed. On every Run all keys are
   recomputed, and a `done` node whose key changed becomes `out_of_date`
   together with everything downstream.
+- Files a component writes are not fingerprinted: a setting of a
+  `file: write` input (section 4), and a Text whose wires all go to
+  `file: write` inputs. A Text that also feeds a reader keeps its
+  fingerprint. So a deleted output file is written again only after the
+  node changes or the cache is cleared.
 - Lookup order: worker memory → disk → run. Worker memory is lost on Stop or
   restart.
 - Disk cache: `<project>/.geoknit/cache/<node key>/`, holding one file per
@@ -383,7 +408,11 @@ The server forwards these as WebSocket events to the browser.
 - Built-ins never call `.load()` on a whole raster unless they must.
 - Extract Values samples at point locations without loading the raster.
 - Predict Raster works in windows (default 512 px), writes a COG into the
-  cache and returns it opened lazily.
+  cache and returns it opened lazily. It returns a lazy (dask) prediction;
+  the cache writes it window by window, and the worker then replaces any
+  computed raster output with the COG it just wrote, so downstream nodes
+  read the file instead of computing it again. With the disk cache off
+  (`--no-cache`) each downstream node computes the lazy raster itself.
 - `describe()` uses metadata only.
 
 ---
@@ -392,9 +421,15 @@ The server forwards these as WebSocket events to the browser.
 
 Breaks syntax used by Reclassify: rules separated by `|`. A single number is
 an exact match; `a-b` means a < x ≤ b. Exact rules are checked first.
-Classes are numbered 1…N in rule order; 0 means no rule matched.
-Example: `0 | 0-20 | 20-40 | 40-60 | 60-80 | 80-100 | 100` gives one raster
-with 7 classes.
+Classes are numbered 1…N in rule order; 0 means no rule matched (nodata
+pixels also get 0). With `no_match="nodata"` the output marks 0 as nodata;
+with `keep`, 0 is an ordinary value. Example:
+`0 | 0-20 | 20-40 | 40-60 | 60-80 | 80-100 | 100` gives one raster with 7
+classes. The parser is `geoknit.helpers.parse_breaks`.
+
+An output cannot share its name with an input (section 4), so components
+that return a changed copy name their output after the result (`clipped`,
+`selected`, `reprojected`).
 
 | Tab | Component | Inputs | Outputs | Settings / notes |
 |-----|-----------|--------|---------|------------------|
@@ -402,25 +437,26 @@ with 7 classes.
 | Params | Text | – | Text | value; edit inline on double-click |
 | Params | Panel | data: Any | data: Any (pass-through) | shows `describe()`; yellow, resizable |
 | Params | Map Viewer | layers: Any (list) | – | double-click opens map window (section 8) |
-| Raster | Read Raster | path: Text | raster | bands="all", masked=True |
-| Raster | Write Raster | map: Raster, path: Text | file: Text | COG, compress="deflate" |
+| Raster | Read Raster | path: Text | raster | bands="all", masked=True; lazy, 512 px chunks with all bands |
+| Raster | Write Raster | map: Raster, path: Text (`file: write`) | file: Text | COG, compress="deflate" |
 | Raster | Reclassify | raster, breaks: Text | classes: Raster | no_match, dtype |
-| Raster | Clip | raster, aoi: Vector | raster | all_touched=False |
-| Raster | Align Raster | source, reference: Raster | raster | resampling="nearest" |
-| Raster | Band Select | raster, bands: Text | raster | bands as "1,2,3" or names |
+| Raster | Clip | raster, aoi: Vector | clipped: Raster | all_touched=False; AOI reprojected to the raster CRS |
+| Raster | Align Raster | source, reference: Raster | raster | resampling="nearest"; reads the whole source (the one built-in that is not lazy) |
+| Raster | Band Select | raster, bands: Text | selected: Raster | bands as "1,2,3" or names |
 | Vector | Read Vector | path: Text | vector | layer=None |
-| Vector | Write Vector | vector, path: Text | file: Text | format from extension |
-| Vector | Reproject | vector, crs: Text | vector | |
-| Sampling | Stratified Sample | classes: Raster, value: Raster, aoi: Vector, n: Number, seed: Number | points: Vector | equal n per class (warn if a class has fewer pixels); points at pixel centres; value_field="value", class_field="cls" |
-| Sampling | Random Sample | raster, aoi: Vector, n, seed | points: Vector | only valid (non-nodata) pixels |
+| Vector | Write Vector | vector, path: Text (`file: write`) | file: Text | format from extension: .gpkg, .shp, .geojson, .parquet |
+| Vector | Reproject | vector, crs: Text | reprojected: Vector | |
+| Sampling | Stratified Sample | classes: Raster, value: Raster, aoi: Vector, n: Number, seed: Number | points: Vector | equal n per class (warn if a class has fewer pixels); points at pixel centres; value_field="value", class_field="cls"; classes and value on one grid; reads band 1 of both inside the AOI's bounding box |
+| Sampling | Random Sample | raster, aoi: Vector, n, seed | points: Vector | only valid (non-nodata) pixels of band 1; an `id` column |
+| Sampling | Split Points | points: Vector | train: Vector, test: Vector | test_fraction=0.3, seed=42, stratify_by=None; holds out points for validation |
 | Sampling | Extract Values | points: Vector, raster: Raster | table: Table | columns from band descriptions, else b01…; keeps point attributes; drops nodata rows with a warning; sets `table.attrs["feature_columns"]` |
 | Sampling | Train/Test Split | table | train: Table, test: Table | test_fraction=0.3, seed=42, stratify_by=None |
-| Model | Random Forest | table, target: Text, n_trees, max_depth, min_leaf, seed | model: Model | task="regression", max_features="sqrt", features="auto" (feature_columns attr, else numeric columns except target) |
+| Model | Random Forest | table, target: Text, n_trees, max_depth, min_leaf, seed | model: Model | task="regression", max_features="sqrt", features="auto" (feature_columns attr, else numeric columns except target); trains on all cores, predicts on one thread so maps are repeatable |
 | Model | SVM | table, target: Text | model: Model | task, kernel="rbf", C=1.0, gamma="scale", standardize=True |
 | Model | Predict Raster | model, raster | map: Raster | window=512; band names must equal `model.feature_names`, else error listing the missing ones; float32 for regression, smallest int type for classes |
-| Validation | Accuracy | map: Raster, reference: Vector, field: Text | metrics: Table | n, RMSE, MAE, R², bias (observed − predicted); nearest pixel; points outside or on nodata dropped and counted |
-| Validation | Confusion Matrix | map, reference: Vector, field: Text | matrix: Table, metrics: Table | overall accuracy, kappa, producer's/user's accuracy and F1 per class |
-| Script | Python | user-defined | user-defined + out: Text | ports added/removed in the component window |
+| Validation | Accuracy | map: Raster, reference: Vector, field: Text | metrics: Table | one row: n, dropped, RMSE, MAE, R², bias (observed − predicted); nearest pixel; points outside, on nodata or without a value dropped and counted |
+| Validation | Confusion Matrix | map, reference: Vector, field: Text | matrix: Table, metrics: Table | matrix: reference classes as rows, map classes as columns; metrics: columns metric, class, value; overall accuracy and kappa first, then producer's/user's accuracy and F1 per class |
+| Script | Python | user-defined | user-defined + out: Text | ports added/removed in the component window; the template has no inputs |
 
 Random Forest and SVM inputs that also appear as settings (n_trees, max_depth,
 min_leaf, seed) can be left unwired; the setting is then used.
@@ -431,12 +467,18 @@ min_leaf, seed) can be left unwired; the setting is then used.
 Text data/CLMS_2018_Milan_UTM32N.tif ─ Read Raster ─┬─ Reclassify ← Text breaks ─┐
                                                     └──────────── value ─────────┤
 Text data/aoi_milan.gpkg ── Read Vector ─────────────────────── aoi ─────────────┤
-Slider n, Slider seed ───────────────────────────────────────────────────────────┴─ Stratified Sample
-Text data/AlphaEarth_2018_Milan_UTM32N.tif ─ Read Raster ──┬─ Extract Values ← points
-                                                           │        └─ Random Forest ← Text "IMD", Slider n_trees
+Slider n, Slider seed ───────────────────────────────────────────────────────────┴─ Stratified Sample ─ Split Points ─┬─ train
+Text data/AlphaEarth_2018_Milan_UTM32N.tif ─ Read Raster ──┬─ Extract Values ← train points                           │
+                                                           │        └─ Random Forest ← Text "IMD", Slider n_trees     │
                                                            └─ Predict Raster ← model ─┬─ Write Raster ← Text outputs/imd_rf.tif
-Text data/earthlabel_2018.gpkg ─ Read Vector ─────────────────────── reference ───────┴─ Accuracy ← Text "imd_ref" ─ Panel
+                                                                                      └─ Accuracy ← test points, Text "IMD" ─ Panel
 ```
+
+Validation uses held-out sample points, not separate reference data:
+Stratified Sample stores the CLMS IMD of each point in the field `IMD`;
+Split Points (stratified by class, 30 % test) sends the training points to
+Extract Values and the test points to Accuracy, which compares the predicted
+map at each test point with its `IMD`.
 
 The data files are copied into `examples/milan_imd/data/` by the user and are
 git-ignored:
@@ -446,14 +488,9 @@ git-ignored:
 | `CLMS_2018_Milan_UTM32N.tif` | 1 band, CLMS IMD 2018 in %, float32, nodata 255 |
 | `aoi_milan.gpkg` | one polygon (layer `milano_city_rect_UTM32N`) |
 | `AlphaEarth_2018_Milan_UTM32N.tif` | 64 bands named A00…A63, float32, nodata NaN |
-| `milan_imd_2018_results_cells.csv` | 450 EarthLabel plots (`LAT`/`LON` in WGS84, `ref_label`, `cells_json`) |
 
 All rasters are EPSG:32632, 10 m. The AlphaEarth GeoTIFF is exported from
-Earth Engine once, outside GeoKnit. The EarthLabel CSV is turned into
-`earthlabel_2018.gpkg` once, also outside GeoKnit, by
-`examples/milan_imd/prepare_reference.py`: points in EPSG:32632 with fields
-`PLOTID`, `stratum` (from `ref_label`) and `imd_ref`, the impervious share in %
-of the plot's resolvable sub-cells in `cells_json`.
+Earth Engine once, outside GeoKnit.
 
 ---
 

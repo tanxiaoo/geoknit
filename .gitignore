@@ -1,6 +1,8 @@
 # data never committed
 data/
 .geoknit/
+# results the example workflows write
+examples/*/outputs/
 
 # build output
 geoknit/server/static/

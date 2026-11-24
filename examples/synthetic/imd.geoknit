@@ -1,0 +1,533 @@
+{
+  "format": 1,
+  "geoknit_version": "0.1.0.dev0",
+  "groups": [
+    {
+      "nodes": [
+        "n4",
+        "n9",
+        "n10"
+      ],
+      "title": "Sample"
+    },
+    {
+      "nodes": [
+        "n13",
+        "n16",
+        "n17",
+        "n21"
+      ],
+      "title": "Train · predict · validate"
+    }
+  ],
+  "nodes": [
+    {
+      "component": "param/text",
+      "id": "n1",
+      "position": [
+        0,
+        0
+      ],
+      "value": "data/imd.tif"
+    },
+    {
+      "component": "builtin/raster/read_raster",
+      "display": "default",
+      "id": "n2",
+      "position": [
+        320,
+        0
+      ],
+      "settings": {
+        "bands": "all",
+        "masked": true
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/text",
+      "id": "n3",
+      "position": [
+        320,
+        120
+      ],
+      "value": "0 | 0-20 | 20-40 | 40-60 | 60-80 | 80-100 | 100"
+    },
+    {
+      "component": "builtin/raster/reclassify",
+      "display": "default",
+      "id": "n4",
+      "position": [
+        620,
+        60
+      ],
+      "settings": {
+        "dtype": "uint8",
+        "no_match": "nodata"
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/text",
+      "id": "n5",
+      "position": [
+        0,
+        240
+      ],
+      "value": "data/aoi.gpkg"
+    },
+    {
+      "component": "builtin/vector/read_vector",
+      "display": "default",
+      "id": "n6",
+      "position": [
+        320,
+        240
+      ],
+      "settings": {
+        "layer": null
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/slider",
+      "id": "n7",
+      "max": 500,
+      "min": 5,
+      "position": [
+        320,
+        360
+      ],
+      "step": 5,
+      "value": 20
+    },
+    {
+      "component": "param/slider",
+      "id": "n8",
+      "max": 1000,
+      "min": 0,
+      "position": [
+        320,
+        440
+      ],
+      "step": 1,
+      "value": 42
+    },
+    {
+      "component": "builtin/sampling/stratified_sample",
+      "display": "default",
+      "id": "n9",
+      "position": [
+        920,
+        160
+      ],
+      "settings": {
+        "class_field": "cls",
+        "value_field": "IMD"
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "builtin/sampling/split_points",
+      "display": "default",
+      "id": "n10",
+      "position": [
+        1220,
+        160
+      ],
+      "settings": {
+        "seed": 42,
+        "stratify_by": "cls",
+        "test_fraction": 0.3
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/text",
+      "id": "n11",
+      "position": [
+        0,
+        560
+      ],
+      "value": "data/predictors.tif"
+    },
+    {
+      "component": "builtin/raster/read_raster",
+      "display": "default",
+      "id": "n12",
+      "position": [
+        320,
+        560
+      ],
+      "settings": {
+        "bands": "all",
+        "masked": true
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "builtin/sampling/extract_values",
+      "display": "default",
+      "id": "n13",
+      "position": [
+        1220,
+        400
+      ],
+      "settings": {},
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/text",
+      "id": "n14",
+      "position": [
+        1220,
+        520
+      ],
+      "value": "IMD"
+    },
+    {
+      "component": "param/slider",
+      "id": "n15",
+      "max": 1000,
+      "min": 50,
+      "position": [
+        1220,
+        600
+      ],
+      "step": 50,
+      "value": 100
+    },
+    {
+      "component": "builtin/model/random_forest",
+      "display": "default",
+      "id": "n16",
+      "position": [
+        1520,
+        480
+      ],
+      "settings": {
+        "features": "auto",
+        "max_depth": null,
+        "max_features": "sqrt",
+        "min_leaf": 1,
+        "n_trees": 300,
+        "seed": 42,
+        "task": "regression"
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "builtin/model/predict_raster",
+      "display": "default",
+      "id": "n17",
+      "position": [
+        1820,
+        560
+      ],
+      "settings": {
+        "window": 512
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/text",
+      "id": "n18",
+      "position": [
+        1820,
+        720
+      ],
+      "value": "outputs/imd_rf.tif"
+    },
+    {
+      "component": "builtin/raster/write_raster",
+      "display": "default",
+      "id": "n19",
+      "position": [
+        2120,
+        640
+      ],
+      "settings": {
+        "compress": "deflate"
+      },
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/text",
+      "id": "n20",
+      "position": [
+        1820,
+        960
+      ],
+      "value": "IMD"
+    },
+    {
+      "component": "builtin/validation/accuracy",
+      "display": "default",
+      "id": "n21",
+      "position": [
+        2120,
+        860
+      ],
+      "settings": {},
+      "version": "0.1.0.dev0"
+    },
+    {
+      "component": "param/panel",
+      "id": "n22",
+      "position": [
+        2420,
+        860
+      ]
+    }
+  ],
+  "view": {
+    "display": "text",
+    "offset": [
+      0,
+      0
+    ],
+    "zoom": 1.0
+  },
+  "wires": [
+    {
+      "from": [
+        "n1",
+        "value"
+      ],
+      "to": [
+        "n2",
+        "path"
+      ]
+    },
+    {
+      "from": [
+        "n2",
+        "raster"
+      ],
+      "to": [
+        "n4",
+        "raster"
+      ]
+    },
+    {
+      "from": [
+        "n3",
+        "value"
+      ],
+      "to": [
+        "n4",
+        "breaks"
+      ]
+    },
+    {
+      "from": [
+        "n5",
+        "value"
+      ],
+      "to": [
+        "n6",
+        "path"
+      ]
+    },
+    {
+      "from": [
+        "n4",
+        "classes"
+      ],
+      "to": [
+        "n9",
+        "classes"
+      ]
+    },
+    {
+      "from": [
+        "n2",
+        "raster"
+      ],
+      "to": [
+        "n9",
+        "value"
+      ]
+    },
+    {
+      "from": [
+        "n6",
+        "vector"
+      ],
+      "to": [
+        "n9",
+        "aoi"
+      ]
+    },
+    {
+      "from": [
+        "n7",
+        "value"
+      ],
+      "to": [
+        "n9",
+        "n"
+      ]
+    },
+    {
+      "from": [
+        "n8",
+        "value"
+      ],
+      "to": [
+        "n9",
+        "seed"
+      ]
+    },
+    {
+      "from": [
+        "n11",
+        "value"
+      ],
+      "to": [
+        "n12",
+        "path"
+      ]
+    },
+    {
+      "from": [
+        "n9",
+        "points"
+      ],
+      "to": [
+        "n10",
+        "points"
+      ]
+    },
+    {
+      "from": [
+        "n10",
+        "train"
+      ],
+      "to": [
+        "n13",
+        "points"
+      ]
+    },
+    {
+      "from": [
+        "n12",
+        "raster"
+      ],
+      "to": [
+        "n13",
+        "raster"
+      ]
+    },
+    {
+      "from": [
+        "n13",
+        "table"
+      ],
+      "to": [
+        "n16",
+        "table"
+      ]
+    },
+    {
+      "from": [
+        "n14",
+        "value"
+      ],
+      "to": [
+        "n16",
+        "target"
+      ]
+    },
+    {
+      "from": [
+        "n15",
+        "value"
+      ],
+      "to": [
+        "n16",
+        "n_trees"
+      ]
+    },
+    {
+      "from": [
+        "n16",
+        "model"
+      ],
+      "to": [
+        "n17",
+        "model"
+      ]
+    },
+    {
+      "from": [
+        "n12",
+        "raster"
+      ],
+      "to": [
+        "n17",
+        "raster"
+      ]
+    },
+    {
+      "from": [
+        "n17",
+        "map"
+      ],
+      "to": [
+        "n19",
+        "map"
+      ]
+    },
+    {
+      "from": [
+        "n18",
+        "value"
+      ],
+      "to": [
+        "n19",
+        "path"
+      ]
+    },
+    {
+      "from": [
+        "n17",
+        "map"
+      ],
+      "to": [
+        "n21",
+        "map"
+      ]
+    },
+    {
+      "from": [
+        "n10",
+        "test"
+      ],
+      "to": [
+        "n21",
+        "reference"
+      ]
+    },
+    {
+      "from": [
+        "n20",
+        "value"
+      ],
+      "to": [
+        "n21",
+        "field"
+      ]
+    },
+    {
+      "from": [
+        "n21",
+        "metrics"
+      ],
+      "to": [
+        "n22",
+        "data"
+      ]
+    }
+  ]
+}

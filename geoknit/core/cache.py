@@ -34,6 +34,9 @@ from geoknit.core.graph import PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Nod
 CACHE_FORMAT = 1
 """Bump when the key recipe or the disk layout changes; old entries then miss."""
 
+RASTER_CHUNKS: dict[str, int] = {"band": -1, "y": 512, "x": 512}
+"""Dask chunks for rasters opened lazily: all bands together, 512 × 512 px windows."""
+
 EMPTY_KEY = hashlib.sha256(b"geoknit:empty").hexdigest()
 """Port key of an unconnected Panel's output (value ``None``)."""
 
@@ -73,13 +76,29 @@ def _strings(value: Any) -> list[str]:
     return []
 
 
-def node_files(node: Node, base_dir: Path | None) -> list[list[Any]]:
-    """Fingerprints of the files named by a node's text value or text settings."""
+def _feeds_only_written_files(graph: Graph, node_id: str) -> bool:
+    """True when every wire out of ``node_id`` goes to a ``file: write`` input."""
+    out = [w for w in graph.wires if w.src == node_id]
+    return bool(out) and all(
+        getattr(graph.nodes[w.dst].inputs.get(w.dst_port), "file", None) == "write" for w in out
+    )
+
+
+def node_files(node: Node, base_dir: Path | None, graph: Graph | None = None) -> list[list[Any]]:
+    """Fingerprints of the files named by a node's text value or text settings.
+
+    Paths of files a component writes (``file: write`` inputs) are left out:
+    the write itself would otherwise change the key on every Run.
+    """
     texts: list[str] = []
     if node.component == PARAM_TEXT:
-        texts = _strings(node.value)
+        if graph is None or not _feeds_only_written_files(graph, node.id):
+            texts = _strings(node.value)
     elif node.spec is not None and not node.is_param:
         for s in node.spec.settings.values():
+            port = node.spec.inputs.get(s.name)
+            if port is not None and port.file == "write":
+                continue
             texts.extend(_strings(s.value))
     found = (file_fingerprint(t, base_dir) for t in texts)
     return [f for f in found if f is not None]
@@ -125,7 +144,7 @@ def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
                 {
                     "format": CACHE_FORMAT,
                     kind: node.value,
-                    "files": node_files(node, base_dir),
+                    "files": node_files(node, base_dir, graph),
                 }
             )
             pkey = port_key(nkey, "value")
@@ -136,7 +155,7 @@ def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
                     "format": CACHE_FORMAT,
                     "source": node.source,
                     "inputs": inputs,
-                    "files": node_files(node, base_dir),
+                    "files": node_files(node, base_dir, graph),
                 }
             )
         keys.nodes[nid] = nkey
@@ -211,6 +230,20 @@ class DiskCache:
             raise CacheMiss(node_key) from None
         self._touch(node_key)
         return outputs, dict(meta.get("summaries", {}))
+
+    def written_rasters(self, node_key: str) -> dict[str, Any]:
+        """Rasters of ``node_key`` stored as COGs, opened lazily from the cache.
+
+        After writing a computed raster (e.g. a lazy prediction), the worker
+        swaps its in-memory value for this file view, so downstream nodes read
+        the COG instead of computing the raster again.
+        """
+        entry = self._entry(node_key)
+        out: dict[str, Any] = {}
+        for port, info in self.meta(node_key).get("ports", {}).items():
+            if info.get("type") == types.RASTER and info.get("format") == "cog":
+                out[port] = _read_value(entry, info)
+        return out
 
     def _touch(self, node_key: str) -> None:
         try:
@@ -506,8 +539,8 @@ def _read_raster(path: Path, info: dict[str, Any]) -> Any:
             raise CacheMiss(f"{src} is gone") from None
         if (st.st_size, st.st_mtime_ns) != (ref["size"], ref["mtime_ns"]):
             raise CacheMiss(f"{src} has changed")
-        chunks: Any = True if info.get("chunked", True) else None
+        chunks: Any = dict(RASTER_CHUNKS) if info.get("chunked", True) else None
         da = rioxarray.open_rasterio(src, chunks=chunks, masked=masked)
         da.attrs["long_name"] = tuple(ref["long_name"])
         return da
-    return rioxarray.open_rasterio(path, chunks=True, masked=masked)
+    return rioxarray.open_rasterio(path, chunks=dict(RASTER_CHUNKS), masked=masked)

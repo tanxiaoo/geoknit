@@ -113,3 +113,37 @@ def test_missing_files_and_plain_text_are_not_fingerprinted(tmp_path: Path) -> N
     g.set_value(text, "no such file.tif")
     k1 = compute_keys(g, tmp_path).nodes[text]
     assert compute_keys(g, None).nodes[text] == k1
+
+
+def test_files_a_component_writes_are_not_fingerprinted(tmp_path: Path) -> None:
+    from tests.core.sources import WRITE_FILE
+
+    g = Graph()
+    text = g.add_component(PARAM_TEXT).id
+    g.set_value(text, "hello")
+    out_path = g.add_component(PARAM_TEXT).id
+    g.set_value(out_path, "output.txt")
+    writer = g.add_component(INLINE, source=WRITE_FILE).id
+    by_setting = g.add_component(INLINE, source=WRITE_FILE).id  # path from its setting
+    g.add_wire(text, "value", writer, "text")
+    g.add_wire(text, "value", by_setting, "text")
+    g.add_wire(out_path, "value", writer, "path")
+    before = compute_keys(g, tmp_path).nodes
+
+    (tmp_path / "output.txt").write_text("hello")  # what the writers produce
+    assert compute_keys(g, tmp_path).nodes == before
+
+
+def test_a_text_that_is_also_read_keeps_its_fingerprint(tmp_path: Path) -> None:
+    from tests.core.sources import WRITE_FILE
+
+    g = Graph()
+    path = g.add_component(PARAM_TEXT).id
+    g.set_value(path, "input.txt")
+    writer = g.add_component(INLINE, source=WRITE_FILE).id
+    reader = g.add_component(INLINE, source=READ_FILE).id
+    g.add_wire(path, "value", writer, "path")
+    g.add_wire(path, "value", reader, "path")
+    before = compute_keys(g, tmp_path).nodes
+    (tmp_path / "input.txt").write_text("x")
+    assert _changed(before, compute_keys(g, tmp_path).nodes) == {path, writer, reader}

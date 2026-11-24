@@ -34,7 +34,11 @@ geoknit/                  Python package
   components/
     registry.py           loads built-ins, user folder, entry-point packs
     builtin/<category>/*.py   one component file each
-  helpers/                small utilities components may import (parse_breaks, ...)
+  helpers/                small utilities components may import
+    breaks.py             parse_breaks / classify (Reclassify rules)
+    raster.py             band selection, nodata masks, write_cog
+    sampling.py           values_at_points (nearest pixel, lazy)
+    model.py              feature columns and training data for models
   server/
     app.py                FastAPI app, routes, WebSocket
     files.py              project folder tree
@@ -45,7 +49,7 @@ frontend/                 React + TypeScript + Vite
   src/strings.ts          ALL user-facing text lives here
 examples/
   synthetic/              make_data.py + imd.geoknit (used by tests and CI)
-  milan_imd/              milan_imd.geoknit + README; data/ is git-ignored
+  milan_imd/              milan_imd.geoknit + README; data/ and outputs/ are git-ignored
 tests/
 docs/SPEC.md
 ```

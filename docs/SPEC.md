@@ -220,8 +220,22 @@ printed text there.
 ### Community packs
 
 A pip package declares an entry point in group `geoknit.components` that
-returns a folder path. Every component file in that folder is loaded at
-startup. New categories become new ribbon tabs.
+returns a folder path (the entry point is a path string or a function
+returning one). Every component file in that folder is loaded at startup.
+New categories become new ribbon tabs.
+
+Component references, by source (each folder holds `<category>/<name>.py`;
+files starting with `_` are ignored):
+
+| Source | Reference |
+|--------|-----------|
+| built-in | `builtin/<category>/<name>` |
+| `~/.geoknit/components/` | `user/<category>/<name>` |
+| pack (entry point `fake = …`) | `fake/<category>/<name>`, version = the package version |
+
+The names `builtin`, `user`, `inline` and `param` are reserved for packs. A
+file that does not parse, or a pack that fails to load, is skipped with a
+warning and never stops GeoKnit from starting.
 
 ### Display
 

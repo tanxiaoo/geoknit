@@ -50,6 +50,8 @@ function toNodes(graph: GraphView, previous: GkNode[]): GkNode[] {
       data: { view },
       selected: old?.selected ?? false,
       dragging: old?.dragging,
+      // keep the measured size, or React Flow hides the node's wires until it re-measures
+      measured: old?.measured,
     };
     if (kind === "panel") {
       const [w, h] = view.size ?? PANEL_SIZE;

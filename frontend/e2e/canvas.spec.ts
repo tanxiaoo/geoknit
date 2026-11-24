@@ -80,9 +80,14 @@ async function dropAt(page: Page, source: Locator, position: [number, number]): 
   return added;
 }
 
+async function wireCount(page: Page): Promise<number> {
+  const graph = await (await page.request.get("/api/graph")).json();
+  return graph.workflow.wires.length;
+}
+
 async function wire(page: Page, from: [string, string], to: [string, string]) {
   const edges = page.locator(".react-flow__edge");
-  const count = await edges.count();
+  const count = await wireCount(page);
   const a = await centre(page.getByTestId(`port-${ids[from[0]]}-out-${from[1]}`));
   const b = await centre(page.getByTestId(`port-${ids[to[0]]}-in-${to[1]}`));
   await page.mouse.move(a.x, a.y);
@@ -90,6 +95,7 @@ async function wire(page: Page, from: [string, string], to: [string, string]) {
   await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 5 });
   await page.mouse.move(b.x, b.y, { steps: 5 });
   await page.mouse.up();
+  await expect.poll(() => wireCount(page)).toBe(count + 1);
   await expect(edges).toHaveCount(count + 1);
 }
 

@@ -1,0 +1,24 @@
+# data never committed
+data/
+.geoknit/
+
+# build output
+geoknit/server/static/
+dist/
+build/
+*.egg-info/
+frontend/dist/
+
+# tooling
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.vscode/
+.idea/
+*.tsbuildinfo

@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "geoknit"
+dynamic = ["version"]
+description = "Local, open-source visual programming for geospatial analysis."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "tanxiaoo" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",  # test runner
+    "ruff>=0.6",    # lint + format
+]
+
+[project.scripts]
+geoknit = "geoknit.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/tanxiaoo/geoknit"
+
+[tool.hatch.version]
+path = "geoknit/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/frontend/node_modules", "/examples/**/data", "/.github"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["geoknit"]
+artifacts = ["geoknit/server/static/**"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN201"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

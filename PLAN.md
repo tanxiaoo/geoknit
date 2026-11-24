@@ -99,12 +99,12 @@ review its plan before it writes code.
 
 ## Phase 5: Canvas
 
-- [ ] Layout from SPEC 8: top bar, ribbon with tabs and search, project folder tree, canvas, status bar, Assistant placeholder
-- [ ] Grasshopper-style node renderer (inputs left, centre strip with name or icon, outputs right), port and wire colours by type, Show as Text | Icon switch
-- [ ] Number Slider, Text (inline edit), Panel (yellow, resizable) nodes
-- [ ] Wiring with type check feedback; drag from port to empty space → filtered search
-- [ ] Out-of-date / running / error / selected visuals, "N components out of date · Run" banner, Run / Stop
-- [ ] Drag a file from the folder tree → Text node with its relative path
+- [x] Layout from SPEC 8: top bar, ribbon with tabs and search, project folder tree, canvas, status bar, Assistant placeholder
+- [x] Grasshopper-style node renderer (inputs left, centre strip with name or icon, outputs right), port and wire colours by type, Show as Text | Icon switch
+- [x] Number Slider, Text (inline edit), Panel (yellow, resizable) nodes
+- [x] Wiring with type check feedback; drag from port to empty space → filtered search
+- [x] Out-of-date / running / error / selected visuals, "N components out of date · Run" banner, Run / Stop
+- [x] Drag a file from the folder tree → Text node with its relative path
 - [ ] Save / open, undo / redo, copy / paste, groups, autosave
 - [ ] Hover tooltip with `describe()` summary
 

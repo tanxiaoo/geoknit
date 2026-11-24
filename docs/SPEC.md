@@ -285,7 +285,8 @@ JSON, UTF-8, sorted keys, 2-space indent, so it diffs well in git.
   stored by reference with all its current settings values; otherwise it is
   stored `inline` with `based_on` (section 4).
 - Params nodes: `param/text` (`value`), `param/slider` (`min`, `max`, `step`,
-  `value`), `param/panel`. Component nodes always have `display`.
+  `value`), `param/panel` (optional `size: [width, height]` once resized).
+  Component nodes always have `display`.
 - Keys GeoKnit does not know are kept and written back unchanged.
 - Saving a workflow that was just loaded produces the same bytes.
 - `format` is bumped on breaking changes, with a migration function. A file
@@ -496,7 +497,9 @@ Earth Engine once, outside GeoKnit.
 
 ## 8. User interface
 
-Layout, top to bottom and left to right (see the design mockup):
+Layout, top to bottom and left to right. The design mockups are in
+`docs/ui/`: `01-main.png` (canvas, names), `02-icon-mode.png` (canvas,
+icons), `03`–`06` (component window), `07` (Map Viewer).
 
 - **Top bar**: GeoKnit logo, workflow file name and save state, worker
   status, Export .py, Stop, Run.
@@ -513,6 +516,14 @@ Layout, top to bottom and left to right (see the design mockup):
   icon, output names on the right. Port dots and wires coloured by type.
   Out-of-date nodes and their incoming wires are faded with an orange dot.
   Errors red. Selected nodes outlined green. Groups are labelled boxes.
+  The centre strip is coloured by category: Raster `#0B7A7C`, Vector
+  `#C2410C`, Sampling `#7C3AED`, Model `#BE185D`, Validation `#15803D`,
+  Params, Script and pack categories `#475569`. A Text node is a pill with a
+  "T" badge; a Number Slider is a track with its value; a Panel is a yellow
+  box with its input on the left and its pass-through output on the right.
+- **Canvas toolbar**: zoom − / % / +, Fit, "Show as Text | Icon" (saved in
+  the workflow's `view`), a hint, and the banner "<what changed> · N
+  components out of date · Run". Right-clicking a node offers Run to here.
 - **Status bar (bottom)**: data-type colour legend, state legend.
 - **Assistant (right)**: collapsible placeholder marked "Next version".
 
@@ -546,7 +557,9 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/api/components` | library for the ribbon (header metadata) |
 | GET | `/api/graph` | current workflow |
 | POST | `/api/nodes` | add a node `{component, position}` |
-| PATCH | `/api/nodes/{id}` | change settings, source, position, display, value |
+| PATCH | `/api/nodes/{id}` | change settings, source, position, display, value, Panel size |
+| PATCH | `/api/view` | canvas view: `display` (text \| icon), `zoom`, `offset` |
+| GET | `/api/status` | Python version, worker `idle` \| `running`, worker pid |
 | DELETE | `/api/nodes/{id}` | remove |
 | POST | `/api/wires` / DELETE `/api/wires` | connect / disconnect (type and cycle checks) |
 | POST | `/api/run` | `{mode: all | to_node | test, node_id?}` |
@@ -587,7 +600,8 @@ Details:
   every edit and after each run; `started`, `log {line}`, `done {outputs,
   cached}`, `error {traceback}`, `skipped {traceback}` per node, each with
   `node`; `run_finished {report: {ran, cached, failed, skipped, ok}}`;
-  `workflow_opened {path}`.
+  `workflow_opened {path}`; `worker {python, worker, pid}` when a run starts
+  and ends.
 - Until export (section 10) and the Map Viewer (section 8) are built,
   `/api/export/py` answers `501` and the tile and vector routes are absent.
 

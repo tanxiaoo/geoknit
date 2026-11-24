@@ -59,6 +59,15 @@ class NodePatch(BaseModel):
     min: float | None = None
     max: float | None = None
     step: float | None = None
+    size: list[float] | None = Field(default=None, description="Panel [width, height]")
+
+
+class ViewBody(BaseModel):
+    """Only the fields that are sent are changed."""
+
+    display: Literal["text", "icon"] | None = None
+    zoom: float | None = None
+    offset: list[float] | None = None
 
 
 class WireBody(BaseModel):
@@ -136,6 +145,16 @@ def create_app(
         """The current workflow, with per-node state, ports and settings."""
         return session.graph_view()
 
+    @app.get("/api/status", tags=["run"])
+    def status() -> dict[str, Any]:
+        """Python version and worker state (idle | running)."""
+        return session.status()
+
+    @app.patch("/api/view", tags=["graph"])
+    def view(body: ViewBody) -> dict[str, Any]:
+        """Canvas view saved with the workflow: Show as Text | Icon, zoom, offset."""
+        return session.set_view({k: getattr(body, k) for k in body.model_fields_set})
+
     @app.post("/api/nodes", status_code=201, tags=["graph"])
     def add_node(body: NodeCreate) -> dict[str, Any]:
         return session.add_node(body.component, body.position, body.source)
@@ -211,7 +230,7 @@ def create_app(
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
         """Events: ``states``, ``started``, ``log``, ``done``, ``error``, ``skipped``,
-        ``run_finished``, ``workflow_opened``."""
+        ``run_finished``, ``workflow_opened``, ``worker``."""
         await websocket.accept()
         sub = session.events.subscribe()
         await websocket.send_json(session.states_message())

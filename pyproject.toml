@@ -75,6 +75,7 @@ exclude = [
     "/examples/**/data",
     "/examples/**/outputs",
     "/docs/ui",  # design mockups, 5 MB
+    "/docs/img",  # screenshots; the README links them on GitHub
     "__pycache__",
 ]
 artifacts = ["geoknit/server/static/**"]

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "test": "vitest",
     "typecheck": "tsc -b",
-    "e2e": "npm run build && playwright test"
+    "e2e": "npm run build && playwright test",
+    "screenshots": "playwright test -c docs-shots/screenshots.config.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.1",

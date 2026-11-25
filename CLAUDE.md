@@ -59,6 +59,8 @@ frontend/                 React + TypeScript + Vite
                           map/ (Map Viewer window)
   e2e/                    Playwright tests; serve.py starts a server on synthetic data
 docs/ui/                  design mockups (SPEC 8)
+docs/writing-components.md, docs/milan-walkthrough.md   user docs (examples tested in tests/test_docs.py)
+docs/img/milan/           walkthrough screenshots, made by frontend/docs-shots/ (`npm run screenshots`)
 examples/
   synthetic/              make_data.py + imd.geoknit (used by tests and CI)
   milan_imd/              milan_imd.geoknit + README; data/ and outputs/ are git-ignored

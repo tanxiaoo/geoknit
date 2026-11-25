@@ -1,6 +1,7 @@
 import type { NodeProps } from "@xyflow/react";
 import { iconFor } from "../../icons";
 import { useStore } from "../../store";
+import { strings } from "../../strings";
 import { categoryColour, needsRun } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
@@ -47,7 +48,11 @@ export function ComponentNode({ id, data, selected }: NodeProps<GkNode>) {
           </div>
         ))}
       </div>
-      {view.modified && <span className="gk-modified">*</span>}
+      {view.modified && (
+        <span className="gk-modified" title={strings.modifiedHint} data-testid={`modified-${id}`}>
+          {strings.modified}
+        </span>
+      )}
     </div>
   );
 }

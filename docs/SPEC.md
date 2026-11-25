@@ -204,6 +204,16 @@ printed text there.
   re-parsed; the Settings tab and the node's ports update from the header.
 - If the header or settings block fails to parse, the Settings tab shows the
   error and is disabled until the code is fixed.
+- The Code tab applies its text when the user leaves the tab, leaves the
+  editor, presses Test or OK, or saves the workflow (Ctrl+S). Closing the
+  window with × drops code that was not applied yet.
+- Ports of a Script component (the Python component, or one saved from it)
+  are edited in its Settings tab: add, remove, rename, set type. This
+  rewrites only the header's `inputs:` and `outputs:` lines (other header
+  lines, the settings block and the code stay byte-for-byte the same). Wires
+  on a renamed port follow it; wires on a removed port, or a port whose new
+  type no longer fits, are removed. A new port gets a free name (`x1`, `y1`)
+  and type Number.
 
 ### Where component code is stored
 
@@ -212,10 +222,23 @@ printed text there.
 - Modified code (anything outside the settings block differs from the
   library source): the workflow stores the full source and
   `based_on: builtin/raster/reclassify@<version>`. The node shows a small
-  "modified" mark.
+  "modified" mark, also after the workflow is saved and reopened (an inline
+  node whose `based_on` the library no longer has still counts as modified).
 - "Save as component…" writes the file to
-  `~/.geoknit/components/<category>/<name>.py`. It appears in the ribbon
-  under its category, marked as a user component.
+  `~/.geoknit/components/<category>/<name>.py`, both names taken from the
+  header in lower case with `_` for anything but letters and digits
+  (`My NDVI!` → `my_ndvi`), giving the reference `user/<category>/<name>`.
+  An existing file is replaced only after the user confirms. It appears in
+  the ribbon under its category, marked as a user component. The node on the
+  canvas is unchanged. The environment variable `GEOKNIT_USER_COMPONENTS`
+  moves the folder (used by the end-to-end tests).
+- "Open in VS Code" writes the component file to a temporary folder and
+  starts VS Code (its `code` command) on it. While the server runs, the file
+  is watched: saving it in VS Code applies the text to the node (one undo
+  step, as from the Code tab; held back while a run is active), and changes
+  made in GeoKnit (Settings tab, undo) are written back to the file.
+  Opening another workflow stops the watching. Without `code` on the PATH the
+  request is refused with a message saying so.
 
 ### Community packs
 
@@ -528,10 +551,16 @@ icons), `03`–`06` (component window), `07` (Map Viewer).
 - **Assistant (right)**: collapsible placeholder marked "Next version".
 
 Component window (double-click a node): floating and draggable, header with
-category and name; tabs **Settings** (inputs with their wired source or an
-editable default, the component's settings, "show on canvas as") and
-**Code** (Monaco editor with the full component file, Open in VS Code);
-**Output** always visible below both tabs; buttons Test and OK.
+category and name (and the "modified" mark); tabs **Settings** (inputs with
+their wired source or an editable default, the component's settings, "show
+on canvas as"; ports too for Script components) and **Code** (Monaco editor
+with the full component file, Open in VS Code); **Output** always visible
+below both tabs (state, log lines of the last run, the traceback of an
+error); buttons Save as component…, Test and OK. Settings fields apply on
+change (dropdowns) or on Enter / leaving the field; each change is one undo
+step. Test runs this component only, using cached inputs (`POST /api/run`
+`mode: test`). OK applies the code and closes. Monaco is bundled with the
+frontend (no CDN) and loaded the first time a Code tab opens.
 Number Slider opens a small window with min/max/step/value. Text is edited
 inline.
 
@@ -586,7 +615,9 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/api/components` | library for the ribbon (header metadata) |
 | GET | `/api/graph` | current workflow |
 | POST | `/api/nodes` | add a node `{component, position}` |
-| PATCH | `/api/nodes/{id}` | change settings, source, position, display, value, Panel size |
+| PATCH | `/api/nodes/{id}` | change settings, source, ports, position, display, value, Panel size |
+| POST | `/api/nodes/{id}/save_component` | "Save as component…" `{overwrite}`; `409` if it exists (section 4) |
+| POST | `/api/nodes/{id}/vscode` | Open in VS Code: write a temp file, start `code`, watch it (section 4) |
 | PATCH | `/api/view` | canvas view: `display` (text \| icon), `zoom`, `offset` |
 | GET | `/api/status` | Python version, worker `idle` \| `running`, worker pid |
 | DELETE | `/api/nodes/{id}` | remove |
@@ -622,8 +653,9 @@ Details:
   its title, state, ports, and (components) settings with their form hints,
   source, `modified` and `parse_error`.
 - `PATCH /api/nodes/{id}` changes only the fields sent: `settings`
-  (`{name: value}`), `source`, `value`, `min`/`max`/`step`, `position`,
-  `display`.
+  (`{name: value}`), `source`, `ports` (`{inputs, outputs}`, each a list of
+  `{name, type, access?, file?, was?}` where `was` is the old name of a
+  renamed port), `value`, `min`/`max`/`step`, `position`, `display`.
 - `POST /api/run` starts the run in the background and answers `202
   {plan}` at once; progress arrives on `/ws`. While a run is active, a second
   run and every edit that changes results answer `409` ("stop the run
@@ -637,7 +669,8 @@ Details:
   cached}`, `error {traceback}`, `skipped {traceback}` per node, each with
   `node`; `run_finished {report: {ran, cached, failed, skipped, ok}}`;
   `workflow_opened {path}`; `worker {python, worker, pid}` when a run starts
-  and ends.
+  and ends; `node_changed {node}` when a file open in VS Code was applied to
+  its node.
 - Until export (section 10) and the Map Viewer (section 8) are built,
   `/api/export/py` answers `501` and the tile and vector routes are absent.
 

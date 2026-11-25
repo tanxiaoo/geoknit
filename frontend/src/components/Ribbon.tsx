@@ -89,6 +89,11 @@ export function Ribbon() {
                 <Icon size={16} />
               </span>
               {e.name}
+              {e.origin === "user" && (
+                <span className="gk-badge" title={strings.userComponent}>
+                  {strings.userComponent}
+                </span>
+              )}
             </button>
           );
         })}

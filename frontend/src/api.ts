@@ -81,6 +81,14 @@ export const api = {
   patchGroup: (index: number, patch: { title?: string; nodes?: string[] }) =>
     request<unknown>("PATCH", `/api/groups/${index}`, patch),
   removeGroup: (index: number) => request<void>("DELETE", `/api/groups/${index}`),
+  saveComponent: (id: string, overwrite = false) =>
+    request<{ ref: string; path: string }>(
+      "POST",
+      `/api/nodes/${encodeURIComponent(id)}/save_component`,
+      { overwrite },
+    ),
+  openInVsCode: (id: string) =>
+    request<{ path: string }>("POST", `/api/nodes/${encodeURIComponent(id)}/vscode`),
 };
 
 export type Api = typeof api;

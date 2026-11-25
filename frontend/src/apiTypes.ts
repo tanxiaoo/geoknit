@@ -139,11 +139,22 @@ export type ServerEvent =
   | { type: "error" | "skipped"; node: string; traceback: string }
   | { type: "run_finished"; report: RunReport | null; error?: string }
   | { type: "workflow_opened"; path: string }
+  | { type: "node_changed"; node: string }
   | ({ type: "worker" } & Status);
+
+/** A port as PATCH /api/nodes/{id} `ports` takes it; `was` renames (wires follow). */
+export interface PortEdit {
+  name: string;
+  type: PortType;
+  access?: "item" | "list";
+  file?: string | null;
+  was?: string;
+}
 
 export interface NodePatch {
   settings?: Record<string, unknown>;
   source?: string;
+  ports?: { inputs: PortEdit[]; outputs: PortEdit[] };
   position?: [number, number];
   display?: Display;
   value?: unknown;

@@ -317,6 +317,12 @@ export function Canvas() {
           onConnect={onConnect}
           onConnectEnd={onConnectEnd}
           onBeforeDelete={onBeforeDelete}
+          onNodeDoubleClick={(e, n) => {
+            // Text edits inline and the Slider opens its own window (SPEC 8)
+            if (n.type !== "component") return;
+            e.stopPropagation();
+            store.openWindow(n.id);
+          }}
           onNodeContextMenu={(e, n) => {
             e.preventDefault();
             setMenu({ ...local(e.clientX, e.clientY), nodeId: n.id });

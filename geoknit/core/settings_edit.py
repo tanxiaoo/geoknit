@@ -131,3 +131,113 @@ def _check(source: str, values: Mapping[str, Any]) -> None:
         got = spec.settings[key].value
         if got != value or type(got) is not type(value):
             raise RuntimeError(f'settings edit of "{key}" did not round-trip')  # pragma: no cover
+
+
+# ── ports in the header (Python component, SPEC 4) ──
+
+PortList = list[Mapping[str, Any]]
+"""Ports as ``[{"name": "raster", "type": "Raster", "access": "item", "file": None}, ...]``."""
+
+
+def set_ports(source: str, inputs: PortList, outputs: PortList) -> str:
+    """Return ``source`` with the header's ``inputs`` and ``outputs`` replaced.
+
+    Every other header line, the settings block and the code stay byte-for-byte
+    the same. Raises ``ValueError`` with a message for the user when a port is
+    invalid (bad name, unknown type, duplicate).
+    """
+    blocks = find_blocks(source)
+    newline = "\r\n" if "\r\n" in source else "\n"
+    lines = source.splitlines(keepends=True)
+    head = lines[: blocks.header_end]
+
+    keys = _header_keys(head)
+    spans = {k: _key_span(head, keys, k) for k in ("inputs", "outputs") if k in keys}
+    if spans:
+        insert_at = min(start for start, _ in spans.values())
+    elif "requires" in keys:
+        insert_at = keys["requires"]
+    else:
+        insert_at = _last_content_line(head) + 1
+    removed = {i for start, end in spans.values() for i in range(start, end)}
+
+    new_block: list[str] = []
+    for key, ports in (("inputs", inputs), ("outputs", outputs)):
+        if ports:
+            new_block.append(f"# {key}:{newline}")
+            new_block.extend(f"#   {_port_line(p, key)}{newline}" for p in ports)
+
+    out: list[str] = []
+    for i, line in enumerate(head):
+        if i == insert_at:
+            out.extend(new_block)
+        if i not in removed:
+            out.append(line)
+    if insert_at >= len(head):
+        out.extend(new_block)
+    result = "".join(out + lines[blocks.header_end :])
+
+    try:
+        spec = parse_component(result)
+    except ComponentParseError as exc:
+        raise ValueError(exc.message) from None
+    names = [str(p.get("name")) for p in [*inputs, *outputs]]
+    if len(set(names)) != len(names):
+        dup = next(n for n in names if names.count(n) > 1)
+        raise ValueError(f'the port name "{dup}" is used twice')
+    if list(spec.inputs) != [p["name"] for p in inputs] or list(spec.outputs) != [
+        p["name"] for p in outputs
+    ]:
+        raise ValueError("port names must be distinct")  # pragma: no cover  (defensive)
+    return result
+
+
+def _header_keys(head: list[str]) -> dict[str, int]:
+    """Top-level header keys and the line each starts on."""
+    keys: dict[str, int] = {}
+    for i, line in enumerate(head):
+        text = line.rstrip("\r\n").lstrip()
+        if not text.startswith("#"):
+            continue
+        body = text[2:] if text.startswith("# ") else text[1:]
+        if body and not body[0].isspace() and ":" in body:
+            key = body.split(":", 1)[0]
+            if key.isidentifier():
+                keys.setdefault(key, i)
+    return keys
+
+
+def _key_span(head: list[str], keys: dict[str, int], key: str) -> tuple[int, int]:
+    """Lines ``[start, end)`` holding ``key`` and its indented children."""
+    start = keys[key]
+    later = [i for i in keys.values() if i > start]
+    end = min(later) if later else _last_content_line(head) + 1
+    while end - 1 > start and head[end - 1].strip() in ("", "#"):
+        end -= 1  # a blank comment line before the next key stays
+    return start, end
+
+
+def _last_content_line(head: list[str]) -> int:
+    for i in range(len(head) - 1, -1, -1):
+        if head[i].strip() not in ("", "#"):
+            return i
+    return 0
+
+
+def _port_line(port: Mapping[str, Any], key: str) -> str:
+    name = str(port.get("name", "")).strip()
+    if not name.isidentifier():
+        raise ValueError(f'"{name}" is not a valid port name (letters, digits and _)')
+    type_name = str(port.get("type", ""))
+    access = port.get("access") or "item"
+    file_role = port.get("file")
+    extra: list[str] = []
+    if access != "item":
+        if key != "inputs":
+            raise ValueError(f'output "{name}" cannot take a list')
+        extra.append(f"access: {access}")
+    if file_role:
+        extra.append(f"file: {file_role}")
+    if not extra:
+        return f"{name}: {type_name}"
+    return f"{name}: {{type: {type_name}, {', '.join(extra)}}}"

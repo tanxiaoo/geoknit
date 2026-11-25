@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "geoknit_version": "0.1.0.dev0",
+  "geoknit_version": "0.1.0",
   "groups": [
     {
       "nodes": [
@@ -42,7 +42,7 @@
         "bands": "all",
         "masked": true
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/text",
@@ -65,7 +65,7 @@
         "dtype": "uint8",
         "no_match": "nodata"
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/text",
@@ -87,7 +87,7 @@
       "settings": {
         "layer": null
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/slider",
@@ -125,7 +125,7 @@
         "class_field": "cls",
         "value_field": "IMD"
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "builtin/sampling/split_points",
@@ -140,7 +140,7 @@
         "stratify_by": "cls",
         "test_fraction": 0.3
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/text",
@@ -163,7 +163,7 @@
         "bands": "all",
         "masked": true
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "builtin/sampling/extract_values",
@@ -174,7 +174,7 @@
         400
       ],
       "settings": {},
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/text",
@@ -214,7 +214,7 @@
         "seed": 42,
         "task": "regression"
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "builtin/model/predict_raster",
@@ -227,7 +227,7 @@
       "settings": {
         "window": 512
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/text",
@@ -249,7 +249,7 @@
       "settings": {
         "compress": "deflate"
       },
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/text",
@@ -269,7 +269,7 @@
         860
       ],
       "settings": {},
-      "version": "0.1.0.dev0"
+      "version": "0.1.0"
     },
     {
       "component": "param/panel",

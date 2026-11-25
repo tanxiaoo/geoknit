@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from geoknit import __version__
 from geoknit.core.component import DictLibrary
 from geoknit.core.graph import PARAM_SLIDER, PARAM_TEXT
 from geoknit.core.solver import DONE, NEVER_RUN, OUT_OF_DATE, Solver
@@ -30,6 +31,7 @@ def _library() -> DictLibrary:
 
 def _loaded() -> tuple[dict, object, Solver]:
     doc = json.loads((DATA / "three_nodes.geoknit").read_text(encoding="utf-8"))
+    doc["geoknit_version"] = __version__  # saving stamps the running version
     graph = graph_from_dict(doc)
     solver = Solver(graph)
     for nid in graph.nodes:

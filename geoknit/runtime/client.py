@@ -19,7 +19,7 @@ from typing import Any
 from geoknit.core import types
 from geoknit.core.cache import DEFAULT_LIMIT, GraphKeys, compute_keys
 from geoknit.core.executor import Event, EventFn, RunReport
-from geoknit.core.graph import PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 from geoknit.runtime import protocol as p
 from geoknit.runtime.worker import worker_main
@@ -247,6 +247,10 @@ class WorkerExecutor:
             for store in (self.summaries, self.logs, self.errors, self._done_ports):
                 store.pop(n, None)
 
+    def done_port_key(self, node_id: str, port: str) -> str | None:
+        """Cache key of an output as of the node's last successful run, if any."""
+        return self._done_ports.get(node_id, {}).get(port)
+
     def _emit(self, kind: str, node_id: str, **data: Any) -> None:
         if self.on_event is not None:
             self.on_event(Event(kind, node_id, data))
@@ -363,6 +367,8 @@ class WorkerExecutor:
         if node.component in (PARAM_TEXT, PARAM_SLIDER):
             summary = types.describe(node.value)
             self.summaries[nid] = {"value": summary}
+        elif node.component == PARAM_MAP:
+            self.summaries[nid] = {}
         else:
             assert node.component == PARAM_PANEL
             wires = self.graph.wires_into(nid, "data")

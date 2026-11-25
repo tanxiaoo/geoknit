@@ -50,3 +50,4 @@ export function needsRun(state: NodeState | null | undefined): boolean {
 export const PARAM_TEXT = "param/text";
 export const PARAM_SLIDER = "param/slider";
 export const PARAM_PANEL = "param/panel";
+export const PARAM_MAP = "param/map";

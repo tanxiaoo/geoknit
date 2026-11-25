@@ -59,7 +59,9 @@ Worker process                    imports geo libraries, runs components,
 
 - The server never imports rasterio/geopandas/sklearn on the request path;
   heavy work happens in the worker. This keeps the UI responsive and lets
-  Stop kill a stuck run without killing the app.
+  Stop kill a stuck run without killing the app. The one exception is the
+  Map Viewer (section 8): `server/tiles.py` imports rasterio, rio-tiler and
+  geopandas the first time a map is opened, to read cached results.
 - `geoknit/core` (graph, types, component format, solver, serialization,
   export) has no dependency on the server or frontend and can run headless.
   `geoknit run file.geoknit` uses it with a worker process but no server, so
@@ -308,7 +310,8 @@ JSON, UTF-8, sorted keys, 2-space indent, so it diffs well in git.
   stored by reference with all its current settings values; otherwise it is
   stored `inline` with `based_on` (section 4).
 - Params nodes: `param/text` (`value`), `param/slider` (`min`, `max`, `step`,
-  `value`), `param/panel` (optional `size: [width, height]` once resized).
+  `value`), `param/panel` (optional `size: [width, height]` once resized),
+  `param/map` (optional `map: {basemap, styles}`, section 8).
   Component nodes always have `display`.
 - Keys GeoKnit does not know are kept and written back unchanged.
 - Saving a workflow that was just loaded produces the same bytes.
@@ -389,7 +392,8 @@ The server forwards these as WebSocket events to the browser.
     upstream port keys of each input, ports sorted by name, wires in wire
     order + file fingerprints)`;
   - Text: `sha256(value + file fingerprint)`; Slider: `sha256(value)`;
-  - Panel: no key; its output reuses the key of the wire feeding it.
+  - Panel: no key; its output reuses the key of the wire feeding it;
+  - Map Viewer: no key and no outputs; it is `done` once its inputs are.
 - A port key is `<node key>.<port>`.
 - **File fingerprint**: a Text value, or a text setting of a component, that
   names an existing file (relative to the project folder) adds its absolute
@@ -413,6 +417,8 @@ The server forwards these as WebSocket events to the browser.
   of a file (straight from `rioxarray.open_rasterio`) is not copied: the
   cache writes `<port>.ref.json` (path, size, mtime, band names), and a
   changed source file makes it a miss.
+- COG overviews use nearest resampling for integer rasters (class values stay
+  intact) and average for floats; the Map Viewer draws its tiles from them.
 - Entries are written to a temporary folder and renamed, so a crash never
   leaves a half-written entry. A bump of the cache format makes old entries
   miss.
@@ -460,7 +466,7 @@ that return a changed copy name their output after the result (`clipped`,
 | Params | Number Slider | – | Number | min, max, step, value |
 | Params | Text | – | Text | value; edit inline on double-click |
 | Params | Panel | data: Any | data: Any (pass-through) | shows `describe()`; yellow, resizable |
-| Params | Map Viewer | layers: Any (list) | – | double-click opens map window (section 8) |
+| Params | Map Viewer | layers: Any (list) | – | double-click opens the map window (section 8); no code; styles saved with the node |
 | Raster | Read Raster | path: Text | raster | bands="all", masked=True; lazy, 512 px chunks with all bands |
 | Raster | Write Raster | map: Raster, path: Text (`file: write`) | file: Text | COG, compress="deflate" |
 | Raster | Reclassify | raster, breaks: Text | classes: Raster | no_match, dtype |
@@ -568,6 +574,57 @@ Map Viewer window: MapLibre map with a light basemap, a layer list from the
 wired inputs, per-layer colormap / min / max / band(s) / opacity, a legend,
 and click-to-inspect pixel values of every layer.
 
+Map Viewer details:
+
+- **Node and window**: the canvas node shows its `layers` input and how many
+  layers are wired; double-click opens the map window (no Settings/Code
+  tabs). The window is a floating, draggable panel: on the left the basemap,
+  the layer list (show/hide, style, legend, reset to defaults) and Inspect;
+  on the right the map, framed on all layers when it opens and whenever the
+  set of drawable layers changes. It reloads its layers after every run and
+  when wires change. MapLibre is bundled with the frontend (no CDN) and
+  loaded the first time a map opens.
+- **Layers**: one per wire, in wire order, with the id `<node id>.<port>` of
+  its source. A layer is read from the disk cache by the port key of its
+  source's last successful run, so it shows only after a Run, and not at all
+  with the disk cache off. Rasters and Vectors are shown; other types are
+  listed as "cannot be shown on a map". Vectors are drawn above rasters;
+  otherwise the first wire is drawn on top.
+- **Rasters**: 256 px Web Mercator PNG tiles rendered by rio-tiler from
+  overviews, transparent outside the raster and on nodata. Defaults:
+  exactly 3 bands → RGB; an integer band with at most 32 distinct values →
+  classes in a fixed palette (class `v` gets colour `v mod 20`); otherwise
+  band 1 with `viridis`. Min/max default to the 2–98 % percentiles of the
+  shown bands, read from an overview. Colormaps: viridis, magma, plasma,
+  cividis, turbo, greys_r, terrain, rdylgn, spectral, blues.
+- **Overviews**: cached COGs carry them. A raster that is still a reference
+  to a source file larger than 1024 px without overviews gets a VRT with
+  external overviews (`<port>.view.vrt` + `.ovr`) inside its cache entry the
+  first time it is shown; the user's file is never touched. The window says
+  it is reading the layers meanwhile (about 20 s for a 64-band city raster).
+- **Many bands**: GDAL reprojects every band of the file it reads, so a
+  raster with more than 3 bands is drawn through a small VRT of just the
+  shown bands (`<file>.bands-<b>.vrt` in the cache entry), which keeps the
+  overviews. Changing bands resets min/max to the 2–98 % stretch of the new
+  bands.
+- **Open files**: the server keeps the rasters it reads tiles from open for
+  20 s after the last tile (GDAL caches decoded blocks per open file), and
+  closes them all when a run starts, the cache is cleared or the server
+  stops, so on Windows a run can replace or evict them.
+- **Vectors**: GeoJSON in EPSG:4326, at most 50 000 features (the window
+  says when a layer is cut). A raster or vector without a CRS is an error
+  on its layer.
+- **Inspect**: a click returns every band of every raster layer at that
+  point: the pixel the point falls in, as Extract Values reads it. Vector
+  attributes come from the GeoJSON the window already has.
+- **Styles** (basemap `light` | `none`, per-layer `colormap`, `bands`, `min`,
+  `max`, `opacity`, `visible`, and `color` for vectors) are saved in the
+  workflow under the node's `map` key. Each change is one undo step and never
+  makes anything out of date. The `light` basemap is OpenStreetMap's own
+  raster tiles (`tile.openstreetmap.org`, no API key, attribution shown),
+  greyed in the map so the layers stand out; it needs the internet. `none`
+  works offline and never contacts the tile server.
+
 Interactions: drag port to port to wire; drag from a port into empty space
 opens search filtered to compatible types; Delete; Ctrl+Z / Ctrl+Y;
 Ctrl+C / Ctrl+V; Ctrl+G group; Ctrl+S save; wheel zoom; middle-drag or
@@ -615,7 +672,7 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/api/components` | library for the ribbon (header metadata) |
 | GET | `/api/graph` | current workflow |
 | POST | `/api/nodes` | add a node `{component, position}` |
-| PATCH | `/api/nodes/{id}` | change settings, source, ports, position, display, value, Panel size |
+| PATCH | `/api/nodes/{id}` | change settings, source, ports, position, display, value, Panel size, Map Viewer `map` |
 | POST | `/api/nodes/{id}/save_component` | "Save as component…" `{overwrite}`; `409` if it exists (section 4) |
 | POST | `/api/nodes/{id}/vscode` | Open in VS Code: write a temp file, start `code`, watch it (section 4) |
 | PATCH | `/api/view` | canvas view: `display` (text \| icon), `zoom`, `offset` |
@@ -636,8 +693,11 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | POST | `/api/workflow/trust` | trust the open workflow (section 11) |
 | POST | `/api/workflow/recover` | `{restore}`: restore or discard the autosave (section 8) |
 | POST | `/api/export/py` | returns the exported script |
-| GET | `/tiles/{key}/{z}/{x}/{y}.png` | raster tiles for Map Viewer (rio-tiler) |
-| GET | `/api/vector/{key}.geojson` | vector layer in EPSG:4326, max 50 000 features |
+| GET | `/api/map/{id}` | Map Viewer layers: status, bounds, bands, statistics, style (section 8) |
+| GET | `/api/map/{id}/inspect?lon&lat` | band values of every raster layer at a point |
+| GET | `/api/raster/{key}/stats?bands` | 2–98 % stretch of bands, classes of a small-integer band |
+| GET | `/tiles/{key}/{z}/{x}/{y}.png?bands&colormap&min&max` | raster tiles for Map Viewer (rio-tiler) |
+| GET | `/api/vector/{key}.geojson` | vector layer in EPSG:4326, max 50 000 features; total in `X-GeoKnit-Features` |
 | WS | `/ws` | events: node state changes, log lines, run finished |
 
 The server binds to `127.0.0.1` only.
@@ -655,7 +715,11 @@ Details:
 - `PATCH /api/nodes/{id}` changes only the fields sent: `settings`
   (`{name: value}`), `source`, `ports` (`{inputs, outputs}`, each a list of
   `{name, type, access?, file?, was?}` where `was` is the old name of a
-  renamed port), `value`, `min`/`max`/`step`, `position`, `display`.
+  renamed port), `value`, `min`/`max`/`step`, `position`, `display`, and for
+  a Map Viewer `map` (`{basemap?, styles?: {layer id: style | null}}`, merged
+  into the saved settings; `null` resets a layer to its defaults).
+- `{key}` in the map routes is a port key `<node key>.<port>` from
+  `GET /api/map/{id}`; a key that is not in the disk cache answers `404`.
 - `POST /api/run` starts the run in the background and answers `202
   {plan}` at once; progress arrives on `/ws`. While a run is active, a second
   run and every edit that changes results answer `409` ("stop the run
@@ -671,8 +735,7 @@ Details:
   `workflow_opened {path}`; `worker {python, worker, pid}` when a run starts
   and ends; `node_changed {node}` when a file open in VS Code was applied to
   its node.
-- Until export (section 10) and the Map Viewer (section 8) are built,
-  `/api/export/py` answers `501` and the tile and vector routes are absent.
+- Until export (section 10) is built, `/api/export/py` answers `501`.
 
 ---
 

@@ -256,3 +256,45 @@ def test_sweep_removes_crashed_writes_but_not_complete_entries(tmp_path: Path) -
     cache.sweep()
     assert not crashed.exists()
     assert cache.has(KEY)
+
+
+def test_integer_cog_overviews_keep_class_values(tmp_path: Path) -> None:
+    """The Map Viewer shows overviews: classes must not blend into in-between values."""
+    rng = np.random.default_rng(0)
+    classes = rng.choice(np.array([1, 50, 200], dtype="uint8"), size=(1, 1200, 1200))
+    raster = xr_raster(classes)
+    cache = DiskCache(tmp_path / "cache")
+    cache.write(KEY, {"classes": raster})
+    with rasterio.open(tmp_path / "cache" / KEY / "classes.tif") as ds:
+        assert ds.overviews(1)
+        level = ds.overviews(1)[0]
+        small = ds.read(1, out_shape=(1200 // level, 1200 // level))
+    assert set(np.unique(small)) <= {1, 50, 200}  # cubic or average would blend them
+
+
+def test_read_port_and_port_info(tmp_path: Path) -> None:
+    cache = DiskCache(tmp_path / "cache")
+    cache.write(KEY, {"n": 3, "text": "hi"})
+    entry, info = cache.port_info(f"{KEY}.text")
+    assert entry == tmp_path / "cache" / KEY and info["type"] == "Text"
+    assert cache.read_port(f"{KEY}.n") == 3
+    with pytest.raises(CacheMiss):
+        cache.port_info(f"{KEY}.missing")
+    with pytest.raises(CacheMiss):
+        cache.read_port(f"{'b' * 64}.n")
+
+
+def xr_raster(data: np.ndarray) -> object:
+    import xarray as xr
+
+    _, h, w = data.shape
+    da = xr.DataArray(
+        data,
+        dims=("band", "y", "x"),
+        coords={
+            "band": [1],
+            "y": 5_000_000 - 10 * np.arange(h) - 5,
+            "x": 500_000 + 10 * np.arange(w) + 5,
+        },
+    )
+    return da.rio.write_crs("EPSG:32632")

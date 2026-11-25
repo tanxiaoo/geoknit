@@ -46,14 +46,15 @@ geoknit/                  Python package
     events.py             thread-safe fan-out of events to WebSocket clients
     editor.py             Open in VS Code: temp files synced both ways
     files.py              project folder tree
-    tiles.py              rio-tiler endpoints for Map Viewer
+    tiles.py              Map Viewer: layers, rio-tiler tiles, GeoJSON, inspect
     static/               built frontend (generated, git-ignored)
   cli.py                  `geoknit`, `geoknit run`
 frontend/                 React + TypeScript + Vite
   src/strings.ts          ALL user-facing text lives here
   src/api.ts, apiTypes.ts typed client for the SPEC 9 API
   src/store.ts, ws.ts     app state, /ws events
-  src/components/         top bar, ribbon, folder tree, canvas, nodes/, window/ (component window)
+  src/components/         top bar, ribbon, folder tree, canvas, nodes/, window/ (component window),
+                          map/ (Map Viewer window)
   e2e/                    Playwright tests; serve.py starts a server on synthetic data
 docs/ui/                  design mockups (SPEC 8)
 examples/

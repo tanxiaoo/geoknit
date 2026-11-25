@@ -57,6 +57,8 @@ export interface AppState {
   logs: Record<string, string[]>;
   /** The node whose component window is open (SPEC 8). */
   windowNode: string | null;
+  /** The Map Viewer whose map window is open (SPEC 8). */
+  mapNode: string | null;
 }
 
 export const initialState: AppState = {
@@ -76,6 +78,7 @@ export const initialState: AppState = {
   pendingSelect: null,
   logs: {},
   windowNode: null,
+  mapNode: null,
 };
 
 /** What a port carries after a run: its own output, or the output wired into it. */
@@ -208,7 +211,14 @@ export class Store {
       if (this.state.windowNode) void this.loadOutput(this.state.windowNode);
       void this.refreshFiles();
     } else if (ev.type === "workflow_opened") {
-      this.set({ summaries: {}, errors: {}, logs: {}, lastChange: null, windowNode: null });
+      this.set({
+        summaries: {},
+        errors: {},
+        logs: {},
+        lastChange: null,
+        windowNode: null,
+        mapNode: null,
+      });
       void this.refreshGraph();
     } else if (ev.type === "node_changed") {
       void this.refreshGraph(); // edited in VS Code
@@ -235,7 +245,12 @@ export class Store {
     try {
       const graph = await this.api.graph();
       const open = this.state.windowNode;
-      this.set({ graph, windowNode: open && graph.nodes[open] ? open : null });
+      const map = this.state.mapNode;
+      this.set({
+        graph,
+        windowNode: open && graph.nodes[open] ? open : null,
+        mapNode: map && graph.nodes[map] ? map : null,
+      });
       await this.loadResults();
     } catch (e) {
       this.showToast(e instanceof Error ? e.message : String(e));
@@ -303,6 +318,15 @@ export class Store {
 
   closeWindow(): void {
     this.set({ windowNode: null });
+  }
+
+  // ── map window (SPEC 8) ──
+  openMap(id: string): void {
+    this.set({ mapNode: id });
+  }
+
+  closeMap(): void {
+    this.set({ mapNode: null });
   }
 
   /** Test: run this component only, using cached inputs. */

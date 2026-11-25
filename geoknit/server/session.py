@@ -24,10 +24,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from geoknit.components.registry import Registry, default_registry
+from geoknit.core.cache import CacheMiss, DiskCache
 from geoknit.core.component import ComponentParseError, parse_component
 from geoknit.core.executor import Event, RunReport
 from geoknit.core.graph import (
     INLINE,
+    PARAM_MAP,
     PARAM_PANEL,
     PARAM_SLIDER,
     PARAM_TEXT,
@@ -35,7 +37,7 @@ from geoknit.core.graph import (
     GraphError,
     Node,
 )
-from geoknit.core.solver import RUN_ALL, Solver
+from geoknit.core.solver import DONE, RUN_ALL, Solver
 from geoknit.core.trust import TrustStore
 from geoknit.core.workflow import (
     WorkflowError,
@@ -47,6 +49,7 @@ from geoknit.core.workflow import (
     node_from_dict,
 )
 from geoknit.runtime.client import WorkerExecutor
+from geoknit.server import tiles
 from geoknit.server.editor import EditorError, ExternalEditors, slugify
 from geoknit.server.events import Broadcaster
 
@@ -161,6 +164,7 @@ class Session:
 
     def close(self) -> None:
         self.editors.stop()
+        tiles.release_files()
         if self._running:
             self.executor.stop()
         if self._thread is not None:
@@ -355,6 +359,8 @@ class Session:
             view.update(min=node.min, max=node.max, step=node.step, value=node.value)
         elif node.component == PARAM_PANEL:
             view["size"] = node.extra.get("size")
+        elif node.component == PARAM_MAP:
+            view["map"] = copy.deepcopy(node.extra.get("map", {}))
         elif not node.is_param:
             spec = node.spec
             view.update(
@@ -444,7 +450,7 @@ class Session:
         with self.lock:
             self._check_trusted()
             node = self._node(node_id)
-            affects_results = set(changes) - {"position", "display", "size"}
+            affects_results = set(changes) - {"position", "display", "size", "map"}
             if affects_results:
                 self._check_idle()
             with self._edit():
@@ -486,6 +492,15 @@ class Session:
                 raise BadRequest("size must be [width, height] above 0")
             else:
                 node.extra["size"] = list(size)
+        if "map" in changes:
+            if node.component != PARAM_MAP:
+                raise BadRequest(f"{node.title} is not a Map Viewer")
+            try:
+                node.extra["map"] = tiles.merge_settings(node.extra.get("map"), changes["map"])
+            except tiles.MapError as exc:
+                raise BadRequest(exc.message) from None
+            if not node.extra["map"]:
+                del node.extra["map"]
 
     def remove_node(self, node_id: str) -> None:
         with self.lock:
@@ -631,6 +646,7 @@ class Session:
             if node_id is not None:
                 self._node(node_id)
             plan = self.solver.plan(mode, node_id)
+            tiles.release_files()  # Windows: the run may replace or evict files the map has open
             self._running = True
             self._publish_worker()
             self._thread = threading.Thread(
@@ -663,6 +679,7 @@ class Session:
     def clear_cache(self) -> bool:
         with self.lock:
             self._check_idle()
+            tiles.release_files()
             complete = self.executor.clear_cache()
             self._publish_states()
             return complete
@@ -761,6 +778,103 @@ class Session:
             except EditorError as exc:
                 raise BadRequest(str(exc)) from None
             return {"path": str(path)}
+
+    # ── Map Viewer (SPEC 8) ──
+    def map_cache(self) -> DiskCache:
+        """The disk cache the Map Viewer reads layers from."""
+        folder = self.executor.cache_dir
+        if folder is None:
+            raise BadRequest("the disk cache is off, so the Map Viewer has nothing to show")
+        return DiskCache(folder)
+
+    def _map_inputs(self, node_id: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Each wire into the Map Viewer as a layer stub, and its saved settings."""
+        with self.lock:
+            node = self._node(node_id)
+            if node.component != PARAM_MAP:
+                raise BadRequest(f"{node.title} is not a Map Viewer")
+            layers = []
+            for w in self.graph.wires_into(node_id, "layers"):
+                src = self.graph.nodes[w.src]
+                done = self.solver.states.get(w.src) == DONE
+                layers.append(
+                    {
+                        "id": f"{w.src}.{w.src_port}",
+                        "title": f"{src.title} › {w.src_port}",
+                        "source": [w.src, w.src_port],
+                        "key": self.executor.done_port_key(w.src, w.src_port) if done else None,
+                    }
+                )
+            return layers, copy.deepcopy(node.extra.get("map", {}))
+
+    def map_view(self, node_id: str) -> dict[str, Any]:
+        """The layers of a Map Viewer, described from the disk cache.
+
+        ``status`` per layer: ``ready``, ``not_run`` (no result yet, or no longer
+        cached), ``no_cache`` (disk cache off), ``unsupported`` (not a Raster or
+        Vector) or ``error``. A large source raster gets its viewing overviews
+        here, the first time it is shown.
+        """
+        stubs, settings = self._map_inputs(node_id)
+        folder = self.executor.cache_dir
+        cache = DiskCache(folder) if folder is not None else None
+        saved = settings.get("styles", {})
+        layers = []
+        for layer in stubs:
+            layer.update(status="ready", message=None, type=None)
+            key = layer["key"]
+            try:
+                if key is None:
+                    layer.update(status="not_run", message="run to see this layer")
+                elif cache is None:
+                    layer.update(status="no_cache", message="the disk cache is off")
+                else:
+                    _, info = cache.port_info(key)
+                    layer["type"] = info.get("type")
+                    if layer["type"] == "Raster":
+                        layer["raster"] = tiles.describe_raster(cache, key)
+                        default = layer["raster"]["default_style"]
+                    elif layer["type"] == "Vector":
+                        layer["vector"] = tiles.describe_vector(cache, key)
+                        default = layer["vector"]["default_style"]
+                    else:
+                        layer.update(
+                            status="unsupported",
+                            message=f"a {layer['type']} cannot be shown on a map",
+                        )
+                    if layer["status"] == "ready":
+                        layer["style"] = {**default, **saved.get(layer["id"], {})}
+            except CacheMiss:
+                layer.update(status="not_run", message="the result is no longer cached; run again")
+            except tiles.MapError as exc:
+                layer.update(status="error", message=exc.message)
+            layers.append(layer)
+        return {
+            "basemap": settings.get("basemap", "light"),
+            "layers": layers,
+            "basemaps": list(tiles.BASEMAPS),
+            "colormaps": tiles.colormap_stops(),
+            "max_features": tiles.MAX_FEATURES,
+        }
+
+    def map_inspect(self, node_id: str, lon: float, lat: float) -> dict[str, Any]:
+        """Band values of every shown raster layer at ``lon, lat`` (EPSG:4326)."""
+        stubs, _ = self._map_inputs(node_id)
+        folder = self.executor.cache_dir
+        out = []
+        for layer in stubs:
+            if layer["key"] is None or folder is None:
+                continue
+            cache = DiskCache(folder)
+            try:
+                _, info = cache.port_info(layer["key"])
+                if info.get("type") != "Raster":
+                    continue
+                found = tiles.inspect_raster(cache, layer["key"], lon, lat)
+            except (CacheMiss, tiles.MapError):
+                continue
+            out.append({"id": layer["id"], "title": layer["title"], **found})
+        return {"lon": lon, "lat": lat, "layers": out}
 
     def trust_current(self) -> None:
         with self.lock:

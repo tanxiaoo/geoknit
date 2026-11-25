@@ -133,10 +133,10 @@ review its plan before it writes code.
 
 ## Phase 7: Map Viewer
 
-- [ ] Map Viewer component with a `list` input, double-click opens a MapLibre window
-- [ ] Raster tiles via rio-tiler from cached COGs (overviews built when cached), default 2–98 % stretch, categorical palette for small integer rasters, RGB for 3 bands
-- [ ] Vector layers as GeoJSON (EPSG:4326, feature limit)
-- [ ] Layer list, colormap / min / max / band / opacity, legend, click to inspect values
+- [x] Map Viewer component with a `list` input, double-click opens a MapLibre window
+- [x] Raster tiles via rio-tiler from cached COGs (overviews built when cached), default 2–98 % stretch, categorical palette for small integer rasters, RGB for 3 bands
+- [x] Vector layers as GeoJSON (EPSG:4326, feature limit)
+- [x] Layer list, colormap / min / max / band / opacity, legend, click to inspect values
 
 **Done when:**
 - the synthetic predicted raster and the reference points show in the right place over the basemap

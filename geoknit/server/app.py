@@ -2,7 +2,8 @@
 
 Every UI action goes through these routes, so an agent can drive GeoKnit the
 same way the canvas does. The server binds to 127.0.0.1 only (see
-``geoknit.cli``) and never imports the geo stack; components run in the worker.
+``geoknit.cli``). Components run in the worker; the server imports the geo
+stack only to serve the Map Viewer (``tiles.py``).
 """
 
 from __future__ import annotations
@@ -13,16 +14,18 @@ from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from geoknit import __version__
 from geoknit.components.registry import Registry
+from geoknit.core.cache import CacheMiss
 from geoknit.core.graph import GraphError
 from geoknit.core.trust import TrustStore
 from geoknit.core.workflow import WorkflowError
+from geoknit.server import tiles
 from geoknit.server.files import file_tree
 from geoknit.server.session import Session, SessionError
 
@@ -43,7 +46,9 @@ PLACEHOLDER = """<!doctype html>
 
 
 class NodeCreate(BaseModel):
-    component: str = Field(description="library reference, `inline`, or `param/text|slider|panel`")
+    component: str = Field(
+        description="library reference, `inline`, or `param/text|slider|panel|map`"
+    )
     position: list[float] = Field(default_factory=lambda: [0.0, 0.0])
     source: str | None = Field(default=None, description="full component file, for `inline`")
 
@@ -76,6 +81,10 @@ class NodePatch(BaseModel):
     max: float | None = None
     step: float | None = None
     size: list[float] | None = Field(default=None, description="Panel [width, height]")
+    map: dict[str, Any] | None = Field(
+        default=None,
+        description="Map Viewer: `{basemap?, styles?: {layer id: style | null}}`, merged",
+    )
 
 
 class ViewBody(BaseModel):
@@ -184,6 +193,14 @@ def create_app(
     @app.exception_handler(WorkflowError)
     async def _workflow_error(request: Request, exc: WorkflowError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.exception_handler(tiles.MapError)
+    async def _map_error(request: Request, exc: tiles.MapError) -> JSONResponse:
+        return JSONResponse({"detail": exc.message}, status_code=exc.status)
+
+    @app.exception_handler(CacheMiss)
+    async def _cache_miss(request: Request, exc: CacheMiss) -> JSONResponse:
+        return JSONResponse({"detail": "not in the cache; run first"}, status_code=404)
 
     # ── library and graph ──
     @app.get("/api/components", tags=["library"])
@@ -342,6 +359,69 @@ def create_app(
     def export_py() -> dict[str, Any]:
         """Export to a Python script (SPEC 10): arrives in a later version."""
         return {"detail": "export to Python arrives in a later version"}
+
+    # ── Map Viewer (SPEC 8) ──
+    def _bands(text: str | None) -> tuple[int, ...] | None:
+        if text is None or text == "":
+            return None
+        try:
+            return tuple(int(b) for b in text.split(","))
+        except ValueError:
+            raise tiles.MapError("bands is a comma-separated list of band numbers") from None
+
+    @app.get("/api/map/{node_id}", tags=["map"])
+    def map_view(node_id: str) -> dict[str, Any]:
+        """Layers of a Map Viewer (one per wire): status, bounds, bands, stats, style."""
+        return session.map_view(node_id)
+
+    @app.get("/api/map/{node_id}/inspect", tags=["map"])
+    def map_inspect(node_id: str, lon: float, lat: float) -> dict[str, Any]:
+        """Band values of every raster layer at a clicked point (EPSG:4326)."""
+        return session.map_inspect(node_id, lon, lat)
+
+    @app.get("/api/raster/{key}/stats", tags=["map"])
+    def raster_stats(key: str, bands: str = "1") -> dict[str, Any]:
+        """2–98 % stretch of the given bands, and classes for a small-integer band."""
+        return tiles.raster_stats(session.map_cache(), key, _bands(bands) or (1,))
+
+    @app.get("/tiles/{key}/{z}/{x}/{y}.png", tags=["map"])
+    def tile(
+        key: str,
+        z: int,
+        x: int,
+        y: int,
+        bands: str | None = None,
+        colormap: str = "viridis",
+        min: float | None = Query(default=None),  # noqa: A002  (query names of the API)
+        max: float | None = Query(default=None),  # noqa: A002
+    ) -> Response:
+        """A 256 px Web Mercator tile of a cached raster (rio-tiler, from overviews)."""
+        png = tiles.render_tile(
+            session.map_cache(),
+            key,
+            z,
+            x,
+            y,
+            bands=_bands(bands) or (1,),
+            colormap=colormap,
+            vmin=min,
+            vmax=max,
+        )
+        return Response(png, media_type="image/png", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/api/vector/{key}.geojson", tags=["map"])
+    def vector(key: str) -> Response:
+        """A cached vector in EPSG:4326, at most 50 000 features.
+
+        ``X-GeoKnit-Features`` gives the total, so the viewer can say when
+        it shows only part of the layer.
+        """
+        text, total = tiles.vector_geojson(session.map_cache(), key)
+        return Response(
+            text,
+            media_type="application/geo+json",
+            headers={"X-GeoKnit-Features": str(total)},
+        )
 
     # ── events ──
     @app.websocket("/ws")

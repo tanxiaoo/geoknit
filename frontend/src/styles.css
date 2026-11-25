@@ -1173,3 +1173,238 @@ pre.gk-output-error {
 .gk-setting-label {
   font-family: inherit;
 }
+
+/* Map Viewer node and window (SPEC 8) */
+.gk-map-count {
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.gk-map-window {
+  max-height: calc(100vh - 40px);
+}
+.gk-map-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+}
+.gk-map-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px;
+  border-right: 1px solid var(--line);
+  background: var(--panel-bg);
+  overflow-y: auto;
+}
+.gk-map-heading {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.gk-map-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+.gk-map-row > span {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.gk-map-row select,
+.gk-map-row input:not([type="range"]):not([type="checkbox"]) {
+  min-width: 0;
+  flex: 1 1 auto;
+  max-width: 170px;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  font: inherit;
+}
+.gk-map-row input[type="range"] {
+  flex: 1 1 auto;
+  max-width: 170px;
+}
+.gk-map-range label,
+.gk-map-rgb label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.gk-map-range label span,
+.gk-map-rgb label span {
+  color: var(--muted);
+}
+.gk-map-range input {
+  width: 80px;
+}
+.gk-map-rgb select {
+  max-width: 70px;
+}
+.gk-map-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gk-map-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.gk-map-layer[data-status="unsupported"],
+.gk-map-layer[data-status="not_run"],
+.gk-map-layer[data-status="no_cache"] {
+  opacity: 0.7;
+}
+.gk-map-layer-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gk-map-layer-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gk-map-layer-type {
+  font-size: 10px;
+  color: var(--muted);
+}
+.gk-map-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.gk-map-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--red);
+}
+.gk-map-segmented {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.gk-map-segmented button {
+  padding: 2px 8px;
+  border: 0;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.gk-map-segmented button.gk-on {
+  background: var(--navy);
+  color: #fff;
+}
+.gk-map-swatches {
+  display: flex;
+  gap: 4px;
+}
+.gk-map-swatch {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+.gk-map-swatch-on {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.gk-map-legend {
+  font-size: 11px;
+  color: var(--muted);
+}
+.gk-map-ramp {
+  height: 10px;
+  border-radius: 3px;
+}
+.gk-map-ramp-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+}
+.gk-map-classes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gk-map-classes li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.gk-map-swatch-small {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.gk-map-inspect {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.gk-map-inspect-layer table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.gk-map-inspect-layer th {
+  padding-right: 8px;
+  font-weight: 400;
+  color: var(--muted);
+  text-align: left;
+}
+.gk-map-inspect-layer td {
+  text-align: right;
+}
+.gk-map-canvas {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+/* more specific than MapLibre's own .maplibregl-map { position: relative } */
+.gk-map-canvas .gk-map-gl {
+  position: absolute;
+  inset: 0;
+}
+.gk-map-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  pointer-events: none;
+}

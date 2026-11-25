@@ -10,7 +10,8 @@ be keyed in topological order without running anything:
 - ``param/text``: its value plus the fingerprint of the file it names, if any;
 - ``param/slider``: its value;
 - ``param/panel``: no key of its own; its ``data`` output reuses the key of the
-  wire feeding it.
+  wire feeding it;
+- ``param/map``: no key and no outputs (the Map Viewer reads its inputs' entries).
 
 A port key is ``<node key>.<port>``. A file fingerprint is the absolute path
 (``/`` separators), size and modification time of a text value that resolves
@@ -29,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from geoknit.core import types
-from geoknit.core.graph import PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
 
 CACHE_FORMAT = 1
 """Bump when the key recipe or the disk layout changes; old entries then miss."""
@@ -138,6 +139,11 @@ def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
             keys.ports[nid] = {"data": data_key}
             continue
 
+        if node.component == PARAM_MAP:  # shows its inputs; nothing to key or store
+            keys.nodes[nid] = None
+            keys.ports[nid] = {}
+            continue
+
         if node.component in (PARAM_TEXT, PARAM_SLIDER):
             kind = "text" if node.component == PARAM_TEXT else "number"
             nkey = _sha(
@@ -230,6 +236,28 @@ class DiskCache:
             raise CacheMiss(node_key) from None
         self._touch(node_key)
         return outputs, dict(meta.get("summaries", {}))
+
+    def port_info(self, key: str) -> tuple[Path, dict[str, Any]]:
+        """``(entry folder, port info from meta.json)`` for a port key; raises ``CacheMiss``."""
+        node_key, port = split_port_key(key)
+        meta = self.meta(node_key)
+        info = meta.get("ports", {}).get(port)
+        if meta.get("format") != CACHE_FORMAT or info is None:
+            raise CacheMiss(key)
+        return self._entry(node_key), info
+
+    def read_port(self, key: str) -> Any:
+        """One output, read like ``read`` does (rasters lazily); raises ``CacheMiss``.
+
+        Unlike ``read`` it never removes the entry: the Map Viewer only looks.
+        """
+        entry, info = self.port_info(key)
+        try:
+            return _read_value(entry, info)
+        except CacheMiss:
+            raise
+        except Exception:  # noqa: BLE001  (damaged entry: just a miss here)
+            raise CacheMiss(key) from None
 
     def written_rasters(self, node_key: str) -> dict[str, Any]:
         """Rasters of ``node_key`` stored as COGs, opened lazily from the cache.
@@ -505,6 +533,7 @@ def _write_raster(entry: Path, port: str, da: Any) -> dict[str, Any]:
 
     import threading
 
+    import numpy as np
     import rasterio.shutil
 
     name = f"{port}.tif"
@@ -521,7 +550,11 @@ def _write_raster(entry: Path, port: str, da: Any) -> dict[str, Any]:
         compress="DEFLATE",
         lock=threading.Lock() if chunked else None,
     )
-    rasterio.shutil.copy(tmp, entry / name, driver="COG", COMPRESS="DEFLATE")
+    # Overviews serve the Map Viewer's tiles (SPEC 8): nearest keeps class values intact.
+    resampling = "NEAREST" if np.issubdtype(np.dtype(da.dtype), np.integer) else "AVERAGE"
+    rasterio.shutil.copy(
+        tmp, entry / name, driver="COG", COMPRESS="DEFLATE", OVERVIEW_RESAMPLING=resampling
+    )
     tmp.unlink()
     return {"type": types.RASTER, "file": name, "format": "cog", "masked": masked}
 

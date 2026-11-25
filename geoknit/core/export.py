@@ -417,10 +417,9 @@ class _Exporter:
             doc += ["", "Warnings:"] + [f"- {w}" for w in self.warnings]
         out = ['"""' + "\n".join(doc).replace('"""', "'''") + '\n"""\n', "\n"]
         out.append("from __future__ import annotations\n\n")
-        out.append("import os\n")
         if self.needs_capture:
-            out.append("import contextlib\nimport io\nimport sys\n")
-        out.append("from pathlib import Path\n\n")
+            out.append("import contextlib\nimport io\n")
+        out.append("import os\nimport sys\nfrom pathlib import Path\n\n")
         out.append("BASE_DIR = Path(__file__).resolve().parent\n\n")
 
         if constants:
@@ -446,7 +445,7 @@ class _Exporter:
             out.append(f"{INDENT}{line}\n")
         shown = ", ".join(f'"{n}": {v}' for n, v in panel_values.items() if v is not None)
         out.append(f"{INDENT}return {{{shown}}}\n")
-        out.append('\n\nif __name__ == "__main__":\n    main()\n')
+        out.append(_MAIN_BLOCK)
         return re.sub(r"\n{4,}", "\n\n\n", "".join(out))
 
 
@@ -455,6 +454,16 @@ def _num(value: float | None) -> str:
         return "?"
     return f"{value:g}"
 
+
+_MAIN_BLOCK = """
+
+if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        # Never crash on characters the console cannot show (Windows code pages).
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+    main()
+"""
 
 _PANEL_FN = '''def _panel(node_id: str, *value: object) -> None:
     """Print a Panel like ``geoknit run`` does."""

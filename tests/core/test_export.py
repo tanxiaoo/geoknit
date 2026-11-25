@@ -1,6 +1,7 @@
 """Export to Python (SPEC 10): the script runs alone and gives GeoKnit's results."""
 
 import ast
+import os
 import runpy
 import subprocess
 import sys
@@ -145,6 +146,7 @@ def _run_blocked(script: str, folder: Path) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},  # CI consoles are cp1252
         cwd=folder.anchor,
     )
 

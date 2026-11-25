@@ -1,6 +1,7 @@
 """PLAN Phase 8 "Done when": the exported synthetic script, run with plain Python,
 gives exactly the same metrics as GeoKnit."""
 
+import os
 import runpy
 import shutil
 import subprocess
@@ -46,6 +47,7 @@ def test_exported_synthetic_script_matches_geoknit(
         capture_output=True,
         text=True,
         encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},  # CI consoles are cp1252
         cwd=tmp_path.anchor,  # the script finds its data relative to itself
     )
     assert proc.returncode == 0, proc.stderr

@@ -9,8 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from geoknit.core.cache import RASTER_CHUNKS
-from geoknit.core.types import raster_band_names
+from geoknit.core.types import RASTER_CHUNKS, raster_band_names
 
 __all__ = [
     "RASTER_CHUNKS",

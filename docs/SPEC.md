@@ -692,7 +692,7 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | POST | `/api/workflow/save`, `/api/workflow/open` | file operations |
 | POST | `/api/workflow/trust` | trust the open workflow (section 11) |
 | POST | `/api/workflow/recover` | `{restore}`: restore or discard the autosave (section 8) |
-| POST | `/api/export/py` | returns the exported script |
+| POST | `/api/export/py` | Export .py `{path?, overwrite?}`: the script, written into the project if `path` (section 10) |
 | GET | `/api/map/{id}` | Map Viewer layers: status, bounds, bands, statistics, style (section 8) |
 | GET | `/api/map/{id}/inspect?lon&lat` | band values of every raster layer at a point |
 | GET | `/api/raster/{key}/stats?bands` | 2–98 % stretch of bands, classes of a small-integer band |
@@ -735,23 +735,56 @@ Details:
   `workflow_opened {path}`; `worker {python, worker, pid}` when a run starts
   and ends; `node_changed {node}` when a file open in VS Code was applied to
   its node.
-- Until export (section 10) is built, `/api/export/py` answers `501`.
+- `POST /api/export/py` answers `{script, path, warnings}`. Without `path`
+  it only returns the script. With `path` (a `.py` file inside the project)
+  it also writes it; an existing file answers `409` unless `overwrite` is
+  true, and a script not next to the workflow gets a warning (its relative
+  paths would not find the data). Export runs nothing, so it is allowed during
+  a run and on a read-only workflow. A workflow that cannot be exported
+  answers `400` naming the node (section 10).
 
 ---
 
 ## 10. Export to Python
 
-`Export .py` writes one script that runs without GeoKnit installed (except
-`geoknit.helpers`, which is vendored into the script if used):
+`Export .py` (top bar, `POST /api/export/py`, `geoknit export`) writes one
+script that runs without GeoKnit installed (except `geoknit.helpers`, which is
+vendored into the script if used):
 
 - Slider and Text values become constants at the top, so the script stays
-  easy to tweak.
+  easy to tweak: `N01_PATH = 'data/imd.tif'`, named after the node id and the
+  first input it feeds, with a comment saying where it goes.
 - Each component becomes a function `def n07_reclassify(raster, breaks): ...`
-  containing its settings block and code and returning its outputs.
-- `main()` calls the functions in topological order.
+  containing its settings block and code and returning its outputs (one
+  value, or a tuple in header order). Node ids `nN` are padded to the widest
+  id, at least two digits. The parameters are the wired inputs; an unwired
+  input with a same-named setting keeps that setting, and the setting of a
+  wired input is commented out (`# n_trees = 300  # ← wired input`), which is
+  the same as GeoKnit's "settings, then wired inputs override". Indenting the
+  code into the function never changes a multi-line string.
+- `main()` changes to the script's folder, calls the functions in topological
+  order with keyword arguments, prints each Panel as `geoknit run` does
+  (`--- Panel <id> ---` and its `describe()` summary, `(empty)` when
+  unconnected), and returns `{panel id: value}`. Number → Text wires become
+  `str(...)`; a `list` input gets a list in wire order; a component with an
+  `out: Text` output collects what it prints; a Map Viewer is a comment only.
+- `geoknit.helpers` and `geoknit.core.types` (which the helpers, `describe()`
+  and `ModelBundle` need) are copied in as plain code when a component imports
+  from them or a Panel needs `describe()`; the component's own
+  `from geoknit.helpers import …` lines become comments (`as` names become
+  assignments). Any other `geoknit` import stays and is reported as a warning:
+  that script still needs GeoKnit.
+- Relative paths in the values are relative to the workflow's folder, so the
+  script belongs next to the `.geoknit` file; that is the default export path
+  (`<workflow>.py`, or `workflow.py` for an unsaved workflow).
+- Refused, naming the node: a component whose header or settings do not parse,
+  whose code has a syntax error, or with a required input that is neither
+  wired nor set.
 
 The exported script must give the same results as GeoKnit for the same
-inputs and seeds; CI checks this on the synthetic example.
+inputs and seeds; CI checks this on the synthetic example (the same Panel
+text with `import geoknit` blocked, and the same metrics table value for
+value).
 
 ---
 
@@ -785,6 +818,10 @@ created or saved on this machine (its content hash is not in
   go to stderr. The exit code is 0 when every node succeeded, 1 otherwise,
   and 130 on Ctrl+C. Options: `-q/--quiet` (hide component output),
   `--clear-cache`, `--no-cache`, `--cache-limit GB`.
+- `geoknit export file.geoknit [-o out.py]` writes the workflow as a Python
+  script (section 10), by default next to the workflow with a `.py` suffix.
+  Warnings and errors go to stderr; the exit code is 0 on success, 1
+  otherwise.
 - The wheel contains the built frontend in `geoknit/server/static/`; users
   never need Node.
 - Geo stack from wheels only: rasterio, pyogrio, shapely, pyproj, geopandas,

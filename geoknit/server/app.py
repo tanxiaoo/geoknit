@@ -146,6 +146,13 @@ class SaveComponentBody(BaseModel):
     overwrite: bool = False
 
 
+class ExportBody(BaseModel):
+    path: str | None = Field(
+        default=None, description="write the script here, relative to the project folder"
+    )
+    overwrite: bool = False
+
+
 class RecoverBody(BaseModel):
     restore: bool = Field(description="true restores the autosave, false discards it")
 
@@ -355,10 +362,16 @@ def create_app(
         session.recover(body.restore)
         return session.graph_view()
 
-    @app.post("/api/export/py", status_code=501, tags=["files"])
-    def export_py() -> dict[str, Any]:
-        """Export to a Python script (SPEC 10): arrives in a later version."""
-        return {"detail": "export to Python arrives in a later version"}
+    @app.post("/api/export/py", tags=["files"])
+    def export_py(body: ExportBody | None = None) -> dict[str, Any]:
+        """Export to a Python script that runs without GeoKnit (SPEC 10).
+
+        Returns ``{script, path, warnings}``. With ``path`` the script is also
+        written into the project; an existing file answers 409 unless
+        ``overwrite`` is true.
+        """
+        body = body or ExportBody()
+        return session.export_py(body.path, body.overwrite)
 
     # ── Map Viewer (SPEC 8) ──
     def _bands(text: str | None) -> tuple[int, ...] | None:

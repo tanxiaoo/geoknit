@@ -28,7 +28,14 @@ export const strings = {
   workerRunning: "running",
   workerOffline: "offline",
   exportPy: "Export .py",
-  exportLater: "Export to Python arrives in a later version",
+  exportHint: "Write the workflow as a Python script that runs without GeoKnit",
+  exportAs: "Export as Python script",
+  exportPlaceholder: "name.py",
+  exportButton: "Export",
+  overwriteScript: (message: string) => `${message}. Replace it?`,
+  exported: (path: string) => `Exported to ${path}`,
+  exportedWithWarnings: (path: string, warnings: string[]) =>
+    `Exported to ${path}. ${warnings.join(" · ")}`,
   stop: "Stop",
   run: "Run",
 

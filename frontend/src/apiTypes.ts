@@ -257,3 +257,10 @@ export interface InspectResult {
   lat: number;
   layers: InspectLayer[];
 }
+
+/** `POST /api/export/py` (SPEC 10). `path` is set when the script was written. */
+export interface ExportResult {
+  script: string;
+  path: string | null;
+  warnings: string[];
+}

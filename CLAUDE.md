@@ -73,6 +73,7 @@ pytest tests/core -q               # engine only
 ruff check . && ruff format .      # lint + format
 python examples/synthetic/make_data.py   # create small test rasters/vectors
 geoknit run examples/synthetic/imd.geoknit   # headless run
+geoknit export examples/synthetic/imd.geoknit   # write imd.py next to it
 geoknit examples/synthetic          # start the server, open the browser
 
 cd frontend && npm install

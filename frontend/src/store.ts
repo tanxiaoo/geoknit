@@ -8,6 +8,7 @@ import { ApiError, api as defaultApi, type Api } from "./api";
 import type {
   ComponentEntry,
   Display,
+  ExportResult,
   FileNode,
   GraphView,
   NodeJson,
@@ -353,6 +354,32 @@ export class Store {
       this.showToast(strings.savedAsComponent(saved.ref));
     } catch (e) {
       this.showToast(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** Export .py into the project; asks before replacing an existing file. */
+  async exportPy(path: string, confirmOverwrite: (message: string) => boolean): Promise<boolean> {
+    const target = path.toLowerCase().endsWith(".py") ? path : `${path}.py`;
+    try {
+      let result: ExportResult;
+      try {
+        result = await this.api.exportPy(target);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 409)) throw e;
+        if (!confirmOverwrite(strings.overwriteScript(e.message))) return false;
+        result = await this.api.exportPy(target, true);
+      }
+      const written = result.path ?? target;
+      this.showToast(
+        result.warnings.length
+          ? strings.exportedWithWarnings(written, result.warnings)
+          : strings.exported(written),
+      );
+      void this.refreshFiles();
+      return true;
+    } catch (e) {
+      this.showToast(e instanceof Error ? e.message : String(e));
+      return false;
     }
   }
 

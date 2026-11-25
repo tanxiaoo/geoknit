@@ -34,6 +34,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="GB",
         help="disk cache size limit (default: 10)",
     )
+
+    export = sub.add_parser("export", help="export a workflow to a standalone Python script")
+    export.add_argument("workflow", type=Path, help="a .geoknit file")
+    export.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=None,
+        help="script to write (default: next to the workflow, with a .py suffix)",
+    )
     return parser
 
 
@@ -43,7 +53,8 @@ def build_serve_parser() -> argparse.ArgumentParser:
         prog="geoknit",
         description="Local visual programming for geospatial analysis. "
         "Starts GeoKnit on 127.0.0.1 and opens it in the browser.",
-        epilog="geoknit run FILE.geoknit runs a workflow headless (see geoknit run --help).",
+        epilog="geoknit run FILE.geoknit runs a workflow headless (see geoknit run --help); "
+        "geoknit export FILE.geoknit writes it as a Python script.",
     )
     parser.add_argument("--version", action="version", version=f"geoknit {__version__}")
     parser.add_argument(
@@ -70,6 +81,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             use_cache=not args.no_cache,
             cache_limit_gb=args.cache_limit,
         )
+    if args_list and args_list[0] == "export":
+        args = build_parser().parse_args(args_list)
+        return export_workflow(args.workflow, args.output)
     args = build_serve_parser().parse_args(args_list)
     return serve(args.folder, port=args.port, open_browser=not args.no_browser)
 
@@ -196,3 +210,33 @@ def run_workflow(
         file=err,
     )
     return 0 if report.ok else 1
+
+
+def export_workflow(path: Path, output: Path | None = None) -> int:
+    """``geoknit export``: write the workflow as a script (SPEC 10). 0 on success, 1 otherwise."""
+    from geoknit.components.registry import default_registry
+    from geoknit.core.export import ExportError, export_script
+    from geoknit.core.workflow import WorkflowError, load_workflow
+
+    _safe_stream(sys.stderr)
+    path = Path(path)
+    try:
+        graph = load_workflow(path, default_registry())
+    except (OSError, WorkflowError) as exc:
+        print(f"geoknit: cannot open {path}: {exc}", file=sys.stderr)
+        return 1
+    try:
+        result = export_script(graph, workflow_name=path.name, base_dir=path.resolve().parent)
+    except ExportError as exc:
+        print(f"geoknit: cannot export {path.name}: {exc}", file=sys.stderr)
+        return 1
+    target = Path(output) if output is not None else path.with_suffix(".py")
+    try:
+        target.write_text(result.script, encoding="utf-8", newline="\n")
+    except OSError as exc:
+        print(f"geoknit: cannot write {target}: {exc.strerror or exc}", file=sys.stderr)
+        return 1
+    for warning in result.warnings:
+        print(f"geoknit: warning: {warning}", file=sys.stderr)
+    print(f"geoknit: wrote {target}", file=sys.stderr)
+    return 0

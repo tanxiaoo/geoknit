@@ -27,6 +27,7 @@ from geoknit.components.registry import Registry, default_registry
 from geoknit.core.cache import CacheMiss, DiskCache
 from geoknit.core.component import ComponentParseError, parse_component
 from geoknit.core.executor import Event, RunReport
+from geoknit.core.export import ExportError, export_script
 from geoknit.core.graph import (
     INLINE,
     PARAM_MAP,
@@ -737,6 +738,33 @@ class Session:
             self.events.publish({"type": "workflow_opened", "path": self._rel(target)})
             self._publish_states()
             return self.graph_view()
+
+    def export_py(self, path: str | None = None, overwrite: bool = False) -> dict[str, Any]:
+        """The workflow as a Python script (SPEC 10); written into the project if ``path``."""
+        with self.lock:
+            name = self.workflow_path.name if self.workflow_path is not None else "workflow.geoknit"
+            try:
+                result = export_script(self.graph, workflow_name=name, base_dir=self.base_dir)
+            except ExportError as exc:
+                raise BadRequest(f"cannot export: {exc}") from None
+            warnings = list(result.warnings)
+            written: str | None = None
+            if path is not None:
+                target = self._resolve(path, suffix=".py")
+                if target.exists() and not overwrite:
+                    raise Conflict(f"{self._rel(target)} already exists")
+                if target.parent != self.base_dir:
+                    warnings.append(
+                        "the script is not next to the workflow, so its relative paths "
+                        "will not find the data"
+                    )
+                try:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(result.script, encoding="utf-8", newline="\n")
+                except OSError as exc:
+                    raise BadRequest(f"cannot write {path}: {exc.strerror or exc}") from None
+                written = self._rel(target)
+            return {"script": result.script, "path": written, "warnings": warnings}
 
     # ── component files (SPEC 4) ──
     def save_component(self, node_id: str, overwrite: bool = False) -> dict[str, Any]:

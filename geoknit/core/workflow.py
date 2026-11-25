@@ -60,9 +60,15 @@ def code_signature(source: str) -> str:
 
 
 def is_modified(node: Node) -> bool:
-    """True when the code outside the settings block differs from the library."""
-    if node.library_source is None or node.source is None:
+    """True when the code outside the settings block differs from the library.
+
+    An inline node ``based_on`` a component the library no longer has counts
+    as modified: it was stored inline because it had been edited.
+    """
+    if node.source is None:
         return False
+    if node.library_source is None:
+        return node.component == INLINE and node.based_on is not None
     return code_signature(node.source) != code_signature(node.library_source)
 
 
@@ -188,6 +194,7 @@ def node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None = None)
             raise WorkflowError(f'inline node "{node.id}" has no source')
         node.based_on = raw.get("based_on")
         node.set_source(raw["source"])
+        node.library_source = _based_on_source(node.based_on, library)
         return node
 
     if library is None:
@@ -210,6 +217,16 @@ def node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None = None)
     if wanted:
         node.set_source(set_settings(entry.source, wanted))
     return node
+
+
+def _based_on_source(based_on: str | None, library: ComponentLibrary | None) -> str | None:
+    """Library source of ``ref@version``, to judge "modified" (``None`` if unknown)."""
+    if not based_on or library is None:
+        return None
+    try:
+        return library.get(based_on.rsplit("@", 1)[0]).source
+    except KeyError:
+        return None
 
 
 # ── change a live graph to match a document ──

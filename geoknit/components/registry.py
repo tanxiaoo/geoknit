@@ -16,6 +16,7 @@ warning; it never stops GeoKnit from starting.
 
 from __future__ import annotations
 
+import os
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -33,6 +34,8 @@ from geoknit.core.component import (
 
 BUILTIN_DIR = Path(__file__).parent / "builtin"
 USER_DIR = Path.home() / ".geoknit" / "components"
+USER_DIR_ENV = "GEOKNIT_USER_COMPONENTS"
+"""Environment variable that moves the user component folder (used by end-to-end tests)."""
 ENTRY_POINT_GROUP = "geoknit.components"
 RESERVED_PREFIXES = ("builtin", "user", "inline", "param")
 
@@ -55,8 +58,19 @@ class RegisteredComponent:
 class Registry:
     """All components available by reference."""
 
-    def __init__(self) -> None:
+    def __init__(self, user_dir: Path | None = None) -> None:
         self._items: dict[str, RegisteredComponent] = {}
+        self.user_dir = user_dir
+        """Where "Save as component…" writes (``user/<category>/<name>``); ``None`` = nowhere."""
+
+    def reload_user(self) -> None:
+        """Re-read the user folder after a component was saved there."""
+        if self.user_dir is None:
+            return
+        for ref in [r for r, item in self._items.items() if item.origin == "user"]:
+            del self._items[ref]
+        if self.user_dir.is_dir():
+            self.add_folder(self.user_dir, "user", "0", origin="user")
 
     def add_folder(self, folder: Path, prefix: str, version: str, origin: str = "builtin") -> int:
         """Register ``<folder>/<category>/<name>.py`` as ``<prefix>/<category>/<name>``.
@@ -165,11 +179,17 @@ def default_registry(
     entry_points: Callable[[], Any] | None = None,
 ) -> Registry:
     """Built-ins, then the user folder, then installed packs."""
-    reg = Registry()
+    folder = user_components_dir() if user_dir is None else Path(user_dir)
+    reg = Registry(folder)
     reg.add_folder(BUILTIN_DIR, "builtin", __version__)
-    folder = USER_DIR if user_dir is None else Path(user_dir)
     if folder.is_dir():
         reg.add_folder(folder, "user", "0", origin="user")
     if packs:
         reg.add_packs(entry_points)
     return reg
+
+
+def user_components_dir() -> Path:
+    """``~/.geoknit/components``, or ``$GEOKNIT_USER_COMPONENTS`` when set."""
+    env = os.environ.get(USER_DIR_ENV)
+    return Path(env) if env else USER_DIR

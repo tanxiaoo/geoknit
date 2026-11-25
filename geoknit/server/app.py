@@ -48,11 +48,27 @@ class NodeCreate(BaseModel):
     source: str | None = Field(default=None, description="full component file, for `inline`")
 
 
+class PortBody(BaseModel):
+    name: str
+    type: str = Field(description="Number, Text, Raster, Vector, Table, Model or Any")
+    access: Literal["item", "list"] = "item"
+    file: Literal["write"] | None = None
+    was: str | None = Field(default=None, description="old name, when renaming (wires follow)")
+
+
+class PortsBody(BaseModel):
+    inputs: list[PortBody] = Field(default_factory=list)
+    outputs: list[PortBody] = Field(default_factory=list)
+
+
 class NodePatch(BaseModel):
     """Only the fields that are sent are changed."""
 
     settings: dict[str, Any] | None = None
     source: str | None = None
+    ports: PortsBody | None = Field(
+        default=None, description="rewrite the header's inputs and outputs (Python component)"
+    )
     position: list[float] | None = None
     display: Literal["default", "text", "icon"] | None = None
     value: Any = None
@@ -115,6 +131,10 @@ class GroupCreate(BaseModel):
 class GroupPatch(BaseModel):
     title: str | None = None
     nodes: list[str] | None = None
+
+
+class SaveComponentBody(BaseModel):
+    overwrite: bool = False
 
 
 class RecoverBody(BaseModel):
@@ -194,7 +214,24 @@ def create_app(
     def patch_node(node_id: str, body: NodePatch) -> dict[str, Any]:
         """Change settings, source, position, display, value or slider limits."""
         changes = {k: getattr(body, k) for k in body.model_fields_set}
+        if body.ports is not None:
+            changes["ports"] = body.ports.model_dump(exclude_none=True)
         return session.patch_node(node_id, changes)
+
+    @app.post("/api/nodes/{node_id}/save_component", tags=["graph"])
+    def save_component(node_id: str, body: SaveComponentBody) -> dict[str, Any]:
+        """Save as component…: write the node's file to the user component folder.
+
+        The file is ``<category>/<name>.py`` from its header; it appears in the
+        ribbon as ``user/<category>/<name>``. An existing file answers 409
+        unless ``overwrite`` is true.
+        """
+        return session.save_component(node_id, body.overwrite)
+
+    @app.post("/api/nodes/{node_id}/vscode", tags=["graph"])
+    def open_in_vscode(node_id: str) -> dict[str, Any]:
+        """Open in VS Code: write a temp file, start the editor, apply its saves."""
+        return session.open_in_editor(node_id)
 
     @app.delete("/api/nodes/{node_id}", status_code=204, tags=["graph"])
     def remove_node(node_id: str) -> None:
@@ -310,7 +347,7 @@ def create_app(
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
         """Events: ``states``, ``started``, ``log``, ``done``, ``error``, ``skipped``,
-        ``run_finished``, ``workflow_opened``, ``worker``."""
+        ``run_finished``, ``workflow_opened``, ``worker``, ``node_changed``."""
         await websocket.accept()
         sub = session.events.subscribe()
         await websocket.send_json(session.states_message())

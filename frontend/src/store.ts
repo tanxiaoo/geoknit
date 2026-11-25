@@ -4,7 +4,7 @@
 // canvas always shows what the server holds (it is local and cheap).
 
 import { useSyncExternalStore } from "react";
-import { api as defaultApi, type Api } from "./api";
+import { ApiError, api as defaultApi, type Api } from "./api";
 import type {
   ComponentEntry,
   Display,
@@ -53,6 +53,10 @@ export interface AppState {
   fileMenu: FileMenu;
   /** Node ids the canvas selects once the next graph arrives (after paste). */
   pendingSelect: string[] | null;
+  /** Output log lines per node: the last run, streamed while it runs. */
+  logs: Record<string, string[]>;
+  /** The node whose component window is open (SPEC 8). */
+  windowNode: string | null;
 }
 
 export const initialState: AppState = {
@@ -70,6 +74,8 @@ export const initialState: AppState = {
   tip: null,
   fileMenu: "closed",
   pendingSelect: null,
+  logs: {},
+  windowNode: null,
 };
 
 /** What a port carries after a run: its own output, or the output wired into it. */
@@ -127,7 +133,16 @@ export function reduceEvent(state: AppState, ev: ServerEvent): AppState {
         ? { ...state, graph: { ...withStates(g, ev.states), out_of_date: ev.out_of_date } }
         : state;
     case "started":
-      return g ? { ...state, graph: withStates(g, { [ev.node]: "running" }) } : state;
+      return {
+        ...state,
+        graph: g ? withStates(g, { [ev.node]: "running" }) : g,
+        logs: { ...state.logs, [ev.node]: [] },
+      };
+    case "log":
+      return {
+        ...state,
+        logs: { ...state.logs, [ev.node]: [...(state.logs[ev.node] ?? []), ev.line] },
+      };
     case "done": {
       const errors = { ...state.errors };
       delete errors[ev.node];
@@ -190,10 +205,13 @@ export class Store {
     if (ev.type === "run_finished") {
       if (ev.error) this.showToast(ev.error);
       void this.refreshGraph();
+      if (this.state.windowNode) void this.loadOutput(this.state.windowNode);
       void this.refreshFiles();
     } else if (ev.type === "workflow_opened") {
-      this.set({ summaries: {}, errors: {}, lastChange: null });
+      this.set({ summaries: {}, errors: {}, logs: {}, lastChange: null, windowNode: null });
       void this.refreshGraph();
+    } else if (ev.type === "node_changed") {
+      void this.refreshGraph(); // edited in VS Code
     }
   }
 
@@ -215,7 +233,9 @@ export class Store {
 
   async refreshGraph(): Promise<void> {
     try {
-      this.set({ graph: await this.api.graph() });
+      const graph = await this.api.graph();
+      const open = this.state.windowNode;
+      this.set({ graph, windowNode: open && graph.nodes[open] ? open : null });
       await this.loadResults();
     } catch (e) {
       this.showToast(e instanceof Error ? e.message : String(e));
@@ -252,6 +272,73 @@ export class Store {
       else summaries[id] = out.outputs;
     }
     this.set({ summaries, errors });
+  }
+
+  /** The Output of one node (log and error), for the component window. */
+  async loadOutput(id: string): Promise<void> {
+    try {
+      const out = await this.api.output(id);
+      const errors = { ...this.state.errors };
+      if (out.error) errors[id] = out.error;
+      else delete errors[id];
+      this.set({ logs: { ...this.state.logs, [id]: out.log }, errors });
+    } catch {
+      /* the Output simply stays as it was */
+    }
+  }
+
+  async refreshComponents(): Promise<void> {
+    try {
+      this.set({ components: await this.api.components() });
+    } catch {
+      /* the ribbon stays as it was */
+    }
+  }
+
+  // ── component window (SPEC 8) ──
+  openWindow(id: string): void {
+    this.set({ windowNode: id });
+    void this.loadOutput(id);
+  }
+
+  closeWindow(): void {
+    this.set({ windowNode: null });
+  }
+
+  /** Test: run this component only, using cached inputs. */
+  async test(id: string): Promise<void> {
+    try {
+      await this.api.run("test", id);
+    } catch (e) {
+      this.showToast(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** Save as component…; asks before replacing a user component of the same name. */
+  async saveComponent(id: string, confirmOverwrite: (message: string) => boolean): Promise<void> {
+    try {
+      let saved: { ref: string };
+      try {
+        saved = await this.api.saveComponent(id);
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 409)) throw e;
+        if (!confirmOverwrite(strings.overwriteComponent(e.message))) return;
+        saved = await this.api.saveComponent(id, true);
+      }
+      await this.refreshComponents();
+      this.showToast(strings.savedAsComponent(saved.ref));
+    } catch (e) {
+      this.showToast(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async openInVsCode(id: string): Promise<void> {
+    try {
+      const { path } = await this.api.openInVsCode(id);
+      this.showToast(strings.openedInVsCode(path));
+    } catch (e) {
+      this.showToast(e instanceof Error ? e.message : String(e));
+    }
   }
 
   // ── toasts ──
@@ -298,7 +385,7 @@ export class Store {
       const wire = g.workflow.wires.find((w) => w.from[0] === id);
       return wire ? wire.to[1] : node.title;
     }
-    if (patch.source !== undefined) return node.title;
+    if (patch.source !== undefined || patch.ports) return node.title;
     return null;
   }
 

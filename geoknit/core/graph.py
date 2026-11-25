@@ -20,7 +20,7 @@ from geoknit.core.component import (
     Port,
     parse_component,
 )
-from geoknit.core.settings_edit import set_setting
+from geoknit.core.settings_edit import set_ports, set_setting
 
 PARAM_TEXT = "param/text"
 PARAM_SLIDER = "param/slider"
@@ -230,6 +230,44 @@ class Graph:
         node.set_source(source)
         if node.parse_error is None:
             self._drop_broken_wires(node_id, old_inputs, old_outputs)
+        self._changed(changed=[node_id])
+
+    def set_ports(
+        self,
+        node_id: str,
+        inputs: list[dict[str, Any]],
+        outputs: list[dict[str, Any]],
+    ) -> None:
+        """Rewrite the node's declared ports (Python component window, SPEC 4).
+
+        A port dict may carry ``was``: its old name. Wires on a renamed port
+        follow it; wires on removed ports, or ports whose type no longer fits,
+        are dropped.
+        """
+        node = self.node(node_id)
+        if node.is_param or node.source is None:
+            raise GraphError(f"{node.title} has no ports to edit")
+        if node.parse_error is not None:
+            raise GraphError(f"fix the code first: {node.parse_error}")
+        try:
+            new_source = set_ports(node.source, inputs, outputs)
+        except ValueError as exc:
+            raise GraphError(str(exc)) from None
+        renamed_in = {str(p["was"]): str(p["name"]) for p in inputs if p.get("was")}
+        renamed_out = {str(p["was"]): str(p["name"]) for p in outputs if p.get("was")}
+        old_inputs, old_outputs = dict(node.inputs), dict(node.outputs)
+        node.set_source(new_source)
+        rewired: list[Wire] = []
+        for w in self.wires:
+            if w.dst == node_id and w.dst_port in renamed_in:
+                w = Wire(w.src, w.src_port, w.dst, renamed_in[w.dst_port])
+            elif w.src == node_id and w.src_port in renamed_out:
+                w = Wire(w.src, renamed_out[w.src_port], w.dst, w.dst_port)
+            rewired.append(w)
+        self.wires = rewired
+        old_inputs = {renamed_in.get(k, k): v for k, v in old_inputs.items()}
+        old_outputs = {renamed_out.get(k, k): v for k, v in old_outputs.items()}
+        self._drop_broken_wires(node_id, old_inputs, old_outputs)
         self._changed(changed=[node_id])
 
     def set_value(self, node_id: str, value: Any) -> None:

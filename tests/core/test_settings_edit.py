@@ -5,7 +5,7 @@ import difflib
 import pytest
 
 from geoknit.core.component import parse_component
-from geoknit.core.settings_edit import format_literal, set_setting, set_settings
+from geoknit.core.settings_edit import format_literal, set_ports, set_setting, set_settings
 
 SOURCE = '''\
 # geoknit: component
@@ -111,3 +111,78 @@ def test_unknown_setting_and_bad_value() -> None:
         set_setting(SOURCE, "n_trees", {"a": 1})
     with pytest.raises(ValueError):
         format_literal(float("nan"))
+
+
+# ── ports (Python component window) ──
+
+PY = """\
+# geoknit: component
+# name: Python
+# category: Script
+# icon: python
+# description: Your own code.
+# inputs:
+#   raster: Raster   # the image
+# outputs:
+#   out: Text
+# requires: [numpy]
+
+# --- settings ---
+band = 1
+
+# --- code ---
+print(band)
+"""
+
+
+def test_set_ports_rewrites_only_the_port_lines() -> None:
+    new = set_ports(
+        PY,
+        [
+            {"name": "raster", "type": "Raster"},
+            {"name": "layers", "type": "Any", "access": "list"},
+            {"name": "path", "type": "Text", "file": "write"},
+        ],
+        [{"name": "out", "type": "Text"}, {"name": "a", "type": "Raster"}],
+    )
+    spec = parse_component(new)
+    assert list(spec.inputs) == ["raster", "layers", "path"]
+    assert spec.inputs["layers"].access == "list"
+    assert spec.inputs["path"].file == "write"
+    assert list(spec.outputs) == ["out", "a"]
+    assert spec.requires == ["numpy"]
+    removed = [ln for ln in difflib.ndiff(PY.splitlines(), new.splitlines()) if ln[:2] == "- "]
+    assert removed == ["- #   raster: Raster   # the image"]  # only the port block changed
+    assert new.split("# --- settings ---")[1] == PY.split("# --- settings ---")[1]
+
+
+def test_set_ports_adds_missing_blocks_and_removes_empty_ones() -> None:
+    src = "# geoknit: component\n# name: Bare\n\n# --- code ---\nx = 1\n"
+    new = set_ports(src, [{"name": "x0", "type": "Number"}], [])
+    assert "# inputs:\n#   x0: Number\n" in new
+    assert "outputs" not in new
+    again = set_ports(new, [], [{"name": "y", "type": "Table"}])
+    spec = parse_component(again)
+    assert spec.inputs == {} and list(spec.outputs) == ["y"]
+    assert "inputs" not in again
+
+
+def test_set_ports_keeps_crlf() -> None:
+    src = PY.replace("\n", "\r\n")
+    new = set_ports(src, [], [{"name": "out", "type": "Text"}])
+    assert "\n" not in new.replace("\r\n", "")
+
+
+@pytest.mark.parametrize(
+    ("inputs", "outputs", "message"),
+    [
+        ([{"name": "1x", "type": "Raster"}], [], "not a valid port name"),
+        ([{"name": "x", "type": "Rastr"}], [], 'unknown type "Rastr"'),
+        ([{"name": "x", "type": "Text"}], [{"name": "x", "type": "Text"}], "both input and output"),
+        ([{"name": "x", "type": "Text"}, {"name": "x", "type": "Text"}], [], "used twice"),
+        ([], [{"name": "x", "type": "Text", "access": "list"}], "cannot take a list"),
+    ],
+)
+def test_set_ports_refuses_bad_ports(inputs: list, outputs: list, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        set_ports(PY, inputs, outputs)

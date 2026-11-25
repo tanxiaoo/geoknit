@@ -9,6 +9,8 @@ export default defineConfig({
   build: {
     outDir: "../geoknit/server/static",
     emptyOutDir: true,
+    // Monaco (the Code tab) is one ~3 MB chunk, loaded only when a Code tab opens.
+    chunkSizeWarningLimit: 3500,
   },
   server: {
     proxy: {

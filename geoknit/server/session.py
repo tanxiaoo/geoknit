@@ -24,6 +24,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from geoknit.components.registry import Registry, default_registry
+from geoknit.core.component import ComponentParseError, parse_component
 from geoknit.core.executor import Event, RunReport
 from geoknit.core.graph import (
     INLINE,
@@ -46,6 +47,7 @@ from geoknit.core.workflow import (
     node_from_dict,
 )
 from geoknit.runtime.client import WorkerExecutor
+from geoknit.server.editor import EditorError, ExternalEditors, slugify
 from geoknit.server.events import Broadcaster
 
 UNTRUSTED = "This workflow contains Python code. Trust and allow running?"
@@ -133,6 +135,8 @@ class Session:
         self._redo: list[dict[str, Any]] = []
         self.recovery = False
         """An autosave that differs from the opened workflow exists (SPEC 8)."""
+        self.editors = ExternalEditors(self)
+        """Nodes open in VS Code, synced through temp files."""
 
     # ── lifecycle ──
     @property
@@ -156,6 +160,7 @@ class Session:
             self._check_recovery()
 
     def close(self) -> None:
+        self.editors.stop()
         if self._running:
             self.executor.stop()
         if self._thread is not None:
@@ -434,7 +439,8 @@ class Session:
             return self.node_view(node.id)
 
     def patch_node(self, node_id: str, changes: dict[str, Any]) -> dict[str, Any]:
-        """Apply ``source``, ``settings``, slider fields / ``value``, ``position``, ``display``."""
+        """Apply ``source``, ``ports``, ``settings``, slider fields / ``value``, ``position``,
+        ``display``."""
         with self.lock:
             self._check_trusted()
             node = self._node(node_id)
@@ -451,6 +457,9 @@ class Session:
         node_id, g = node.id, self.graph
         if "source" in changes:
             g.set_source(node_id, changes["source"])
+        if changes.get("ports") is not None:
+            ports = changes["ports"]
+            g.set_ports(node_id, list(ports.get("inputs", [])), list(ports.get("outputs", [])))
         for name, value in (changes.get("settings") or {}).items():
             g.set_setting(node_id, name, value)
         slider = {k: changes[k] for k in ("min", "max", "step") if k in changes}
@@ -705,11 +714,53 @@ class Session:
             self.trusted = self.trust.is_trusted(data)
             self._undo.clear()
             self._redo.clear()
+            self.editors.clear()
             self._check_recovery()
             self.executor.attach(graph, solver, base_dir=self.base_dir)
             self.events.publish({"type": "workflow_opened", "path": self._rel(target)})
             self._publish_states()
             return self.graph_view()
+
+    # ── component files (SPEC 4) ──
+    def save_component(self, node_id: str, overwrite: bool = False) -> dict[str, Any]:
+        """Write the node's code to ``<user folder>/<category>/<name>.py`` (Save as component…)."""
+        with self.lock:
+            self._check_trusted()
+            node = self._node(node_id)
+            if node.is_param or node.source is None:
+                raise BadRequest(f"{node.title} is not a component")
+            folder = self.registry.user_dir
+            if folder is None:
+                raise BadRequest("there is no user component folder")
+            try:
+                spec = parse_component(node.source)
+            except ComponentParseError as exc:
+                raise BadRequest(f"fix the code first: {exc}") from None
+            category, name = slugify(spec.category), slugify(spec.name)
+            target = folder / category / f"{name}.py"
+            ref = f"user/{category}/{name}"
+            if target.exists() and not overwrite:
+                raise Conflict(f'a user component "{spec.name}" ({ref}) already exists')
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(node.source, encoding="utf-8", newline="")
+            except OSError as exc:
+                raise BadRequest(f"cannot write {target}: {exc.strerror or exc}") from None
+            self.registry.reload_user()
+            return {"ref": ref, "path": str(target)}
+
+    def open_in_editor(self, node_id: str) -> dict[str, Any]:
+        """Write the node's file to a temp folder, start VS Code, keep both in sync."""
+        with self.lock:
+            self._check_trusted()
+            node = self._node(node_id)
+            if node.is_param or node.source is None:
+                raise BadRequest(f"{node.title} has no code")
+            try:
+                path = self.editors.open(node_id, node.title, node.source)
+            except EditorError as exc:
+                raise BadRequest(str(exc)) from None
+            return {"path": str(path)}
 
     def trust_current(self) -> None:
         with self.lock:

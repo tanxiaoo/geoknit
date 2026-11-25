@@ -117,12 +117,12 @@ review its plan before it writes code.
 
 ## Phase 6: Component window
 
-- [ ] Double-click opens the floating window: Settings tab, Code tab (Monaco), Output always visible below, Test and OK
-- [ ] Settings ↔ Code sync through `settings_edit` (SPEC 4)
-- [ ] Python component: add / remove / rename ports and set their type from the window
-- [ ] Modified built-ins stored inline with `based_on`, "modified" mark on the node
-- [ ] "Save as component…" into `~/.geoknit/components/`, shows up in the ribbon
-- [ ] Open in VS Code (writes a temp file, watches it, applies changes)
+- [x] Double-click opens the floating window: Settings tab, Code tab (Monaco), Output always visible below, Test and OK
+- [x] Settings ↔ Code sync through `settings_edit` (SPEC 4)
+- [x] Python component: add / remove / rename ports and set their type from the window
+- [x] Modified built-ins stored inline with `based_on`, "modified" mark on the node
+- [x] "Save as component…" into `~/.geoknit/components/`, shows up in the ribbon
+- [x] Open in VS Code (writes a temp file, watches it, applies changes)
 
 **Done when** (Playwright):
 - change `n_trees` in Settings → the Code tab shows the new value, and the reverse

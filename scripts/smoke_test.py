@@ -20,6 +20,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -104,6 +105,20 @@ def check_run_and_export(work: Path) -> None:
     step("the exported script printed the same Panel")
 
 
+def stop_tree(proc: subprocess.Popen[str]) -> None:
+    """Stop the server and its children: on Windows ``geoknit.exe`` is only a launcher,
+    and the worker keeps the project folder busy until it exits."""
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, check=False
+        )
+    else:
+        os.killpg(proc.pid, signal.SIGTERM)
+    proc.wait(timeout=30)
+
+
 def check_server(work: Path) -> None:
     port = free_port()
     base = f"http://127.0.0.1:{port}"
@@ -113,6 +128,7 @@ def check_server(work: Path) -> None:
         stderr=subprocess.PIPE,
         text=True,
         env=ENV,
+        start_new_session=os.name != "nt",  # a process group to stop with the worker
     )
     try:
         deadline = time.monotonic() + 60
@@ -138,15 +154,15 @@ def check_server(work: Path) -> None:
                 fail(f"{asset} answered {status}")
         step(f"the server serves the canvas and its {len(assets)} assets")
     finally:
-        server.terminate()
-        server.wait(timeout=30)
+        stop_tree(server)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--version", help="the version geoknit --version must report")
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="geoknit-smoke-") as tmp:
+    # A process that is slow to exit must not fail the checks that already passed.
+    with tempfile.TemporaryDirectory(prefix="geoknit-smoke-", ignore_cleanup_errors=True) as tmp:
         work = Path(tmp) / "project"
         work.mkdir()
         check_install(args.version, work)

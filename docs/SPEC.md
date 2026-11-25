@@ -823,7 +823,11 @@ created or saved on this machine (its content hash is not in
   Warnings and errors go to stderr; the exit code is 0 on success, 1
   otherwise.
 - The wheel contains the built frontend in `geoknit/server/static/`; users
-  never need Node.
+  never need Node. The sdist carries the built frontend too, so a wheel built
+  from it keeps the canvas. Building a regular wheel without the frontend
+  fails (`hatch_build.py`; `GEOKNIT_ALLOW_NO_FRONTEND=1` overrides it);
+  editable installs are not checked. Releases are tags `vX.Y.Z` published by
+  `.github/workflows/release.yml` (`docs/releasing.md`).
 - Geo stack from wheels only: rasterio, pyogrio, shapely, pyproj, geopandas,
   rioxarray. Never import `osgeo`. The worker ignores a system
   `PROJ_LIB` / `PROJ_DATA` / `GDAL_DATA` (section 6, "Worker protocol").

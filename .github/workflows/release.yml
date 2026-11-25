@@ -1,0 +1,96 @@
+name: Release
+
+# Push a tag vX.Y.Z (equal to geoknit.__version__) to publish to PyPI and
+# create the GitHub release. Run it by hand (Actions → Release → Run
+# workflow) to publish the current branch to TestPyPI instead, as a dry run.
+# Uploads use PyPI trusted publishing (no tokens); see docs/releasing.md.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        name: Version from geoknit/__init__.py
+        run: |
+          version=$(python -c "import re, pathlib; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('geoknit/__init__.py').read_text()).group(1))")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "geoknit $version"
+      - name: The tag matches the version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v${{ steps.read.outputs.version }}" ]; then
+            echo "tag $GITHUB_REF_NAME does not match geoknit.__version__ ${{ steps.read.outputs.version }}"
+            exit 1
+          fi
+
+  package:
+    needs: version
+    uses: ./.github/workflows/package.yml
+    with:
+      expected-version: ${{ needs.version.outputs.version }}
+
+  testpypi:
+    if: github.event_name == 'workflow_dispatch'
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/geoknit/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true  # a second dry run of the same version is not an error
+
+  pypi:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/geoknit/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: [version, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Create the GitHub release with the wheel and sdist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "${{ github.repository }}" \
+            --title "GeoKnit ${{ needs.version.outputs.version }}" \
+            --generate-notes \
+            --verify-tag

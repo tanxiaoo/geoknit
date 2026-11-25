@@ -163,3 +163,25 @@ def test_run_as_a_module_in_a_real_process(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     assert "HELLO" in result.stdout
+
+
+# ── geoknit export ──
+
+
+def test_export_writes_next_to_the_workflow_or_to_o(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import shutil
+
+    from tests.conftest import SYNTHETIC
+
+    wf = tmp_path / "imd.geoknit"
+    shutil.copy(SYNTHETIC / "imd.geoknit", wf)
+    assert main(["export", str(wf)]) == 0
+    assert (tmp_path / "imd.py").read_text(encoding="utf-8").startswith('"""imd.geoknit')
+    assert main(["export", str(wf), "-o", str(tmp_path / "other.py")]) == 0
+    assert (tmp_path / "other.py").is_file()
+    capsys.readouterr()
+
+    assert main(["export", str(tmp_path / "missing.geoknit")]) == 1
+    assert "cannot open" in capsys.readouterr().err

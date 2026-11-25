@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Play, Spline, Square } from "lucide-react";
 import type { FileNode } from "../apiTypes";
 import { store, useStore } from "../store";
@@ -16,6 +16,56 @@ export function openWorkflow(path: string): void {
   const g = store.getState().graph;
   if (g?.dirty && !window.confirm(strings.discardChanges)) return;
   void store.open(path);
+}
+
+/** Where Export .py writes by default: next to the workflow, so its relative paths work. */
+export function exportPath(workflow: string | null): string {
+  if (!workflow) return "workflow.py";
+  return workflow.replace(/\.geoknit$/i, "") + ".py";
+}
+
+function ExportMenu({ path, onClose }: { path: string | null; onClose: () => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    input.current?.focus();
+    const close = (e: PointerEvent) => {
+      if (!box.current?.contains(e.target as Node)) onClose();
+    };
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [onClose]);
+  const doExport = () => {
+    const name = input.current?.value.trim();
+    if (!name) return;
+    void store.exportPy(name, (m) => window.confirm(m)).then((ok) => ok && onClose());
+  };
+  return (
+    <div className="gk-popover gk-export-menu" ref={box} data-testid="export-menu">
+      <div className="gk-save-as">
+        <label>{strings.exportAs}</label>
+        <input
+          ref={input}
+          defaultValue={exportPath(path)}
+          placeholder={strings.exportPlaceholder}
+          onFocus={(e) =>
+            e.currentTarget.setSelectionRange(0, e.currentTarget.value.lastIndexOf("."))
+          }
+          onKeyDown={(e) => {
+            if (e.key === "Enter") doExport();
+            if (e.key === "Escape") onClose();
+          }}
+          data-testid="export-input"
+        />
+        <div className="gk-popover-buttons">
+          <button onClick={onClose}>{strings.cancel}</button>
+          <button onClick={doExport} data-testid="export-ok">
+            {strings.exportButton}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function FileMenu({ path }: { path: string | null }) {
@@ -109,6 +159,8 @@ export function TopBar() {
       ? strings.workerRunning
       : strings.workerIdle;
   const state = !connected ? "offline" : (status?.worker ?? "idle");
+  const [exporting, setExporting] = useState(false);
+  const closeExport = useCallback(() => setExporting(false), []);
   return (
     <header className="gk-topbar">
       <div className="gk-logo">
@@ -136,9 +188,17 @@ export function TopBar() {
         <span className="gk-worker-dot" />
         {strings.workerStatus(status?.python ?? "?", worker)}
       </span>
-      <button className="gk-top-button" disabled title={strings.exportLater}>
-        {strings.exportPy}
-      </button>
+      <div className="gk-export">
+        <button
+          className="gk-top-button"
+          title={strings.exportHint}
+          onClick={() => setExporting(!exporting)}
+          data-testid="export-py"
+        >
+          {strings.exportPy}
+        </button>
+        {exporting && <ExportMenu path={path} onClose={closeExport} />}
+      </div>
       <button className="gk-top-button" onClick={() => void store.stop()} data-testid="stop">
         <Square size={14} />
         {strings.stop}

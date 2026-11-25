@@ -2,6 +2,7 @@
 
 import type {
   ComponentEntry,
+  ExportResult,
   FileNode,
   InspectResult,
   MapView,
@@ -90,6 +91,8 @@ export const api = {
       `/api/nodes/${encodeURIComponent(id)}/save_component`,
       { overwrite },
     ),
+  exportPy: (path?: string, overwrite = false) =>
+    request<ExportResult>("POST", "/api/export/py", { path, overwrite }),
   openInVsCode: (id: string) =>
     request<{ path: string }>("POST", `/api/nodes/${encodeURIComponent(id)}/vscode`),
   mapView: (id: string) => request<MapView>("GET", `/api/map/${encodeURIComponent(id)}`),

@@ -33,6 +33,9 @@ PORT_COLOURS: dict[str, str] = {
     MODEL: "#BE185D",
 }
 
+RASTER_CHUNKS: dict[str, int] = {"band": -1, "y": 512, "x": 512}
+"""Dask chunks for rasters opened lazily: all bands together, 512 × 512 px windows."""
+
 
 @dataclass
 class ModelBundle:

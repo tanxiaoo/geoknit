@@ -97,6 +97,15 @@ button:disabled {
 .gk-save-state.gk-dirty {
   color: #fbbf24;
 }
+.gk-export {
+  position: relative;
+}
+.gk-export-menu {
+  top: 34px;
+  right: 0;
+  min-width: 260px;
+  color: var(--ink, #0f172a);
+}
 .gk-file-menu {
   top: 34px;
   left: 0;

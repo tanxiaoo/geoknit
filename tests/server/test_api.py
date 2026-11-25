@@ -94,7 +94,9 @@ def test_refused_edits_have_clear_messages(client: TestClient) -> None:
     assert r.status_code == 400
     r = client.post("/api/nodes", json={"component": "builtin/raster/nope"})
     assert r.status_code == 400 and "unknown component" in r.json()["detail"]
-    assert client.post("/api/export/py").status_code == 501
+    r = client.post("/api/export/py")
+    assert r.status_code == 400
+    assert 'Read Raster: input "path" is not connected' in r.json()["detail"]
 
 
 def test_edit_run_output_and_out_of_date(client: TestClient) -> None:
@@ -198,6 +200,33 @@ def test_workflow_paths_stay_inside_the_project(client: TestClient, tmp_path: Pa
     assert client.post("/api/workflow/save", json={"path": "a.txt"}).status_code == 400
     assert client.post("/api/workflow/open", json={"path": "missing.geoknit"}).status_code == 400
     assert not (tmp_path / "outside.geoknit").exists()
+
+
+def test_export_py_returns_and_writes_the_script(client: TestClient, project: Path) -> None:
+    text = _add(client, "param/text")
+    client.patch(f"/api/nodes/{text}", json={"value": "hi"})
+    up = _add(client, "inline", source=UPPER)
+    _wire(client, text, "value", up, "text")
+
+    r = client.post("/api/export/py", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["path"] is None and body["warnings"] == []
+    assert "def n02_upper(text):" in body["script"]
+    assert not list(project.glob("*.py"))
+
+    r = client.post("/api/export/py", json={"path": "wf.py"})
+    assert r.status_code == 200 and r.json()["path"] == "wf.py"
+    assert (project / "wf.py").read_text(encoding="utf-8") == body["script"]
+    r = client.post("/api/export/py", json={"path": "wf.py"})
+    assert r.status_code == 409 and "already exists" in r.json()["detail"]
+    assert client.post("/api/export/py", json={"path": "wf.py", "overwrite": True}).is_success
+
+    r = client.post("/api/export/py", json={"path": "scripts/wf.py"})
+    assert "not next to the workflow" in r.json()["warnings"][0]
+    r = client.post("/api/export/py", json={"path": "../outside.py"})
+    assert r.status_code == 400 and "outside the project" in r.json()["detail"]
+    assert client.post("/api/export/py", json={"path": "wf.txt"}).status_code == 400
 
 
 def test_files_tree_hides_the_geoknit_folder(client: TestClient, project: Path) -> None:

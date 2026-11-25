@@ -31,12 +31,10 @@ from typing import Any
 
 from geoknit.core import types
 from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.types import RASTER_CHUNKS
 
 CACHE_FORMAT = 1
 """Bump when the key recipe or the disk layout changes; old entries then miss."""
-
-RASTER_CHUNKS: dict[str, int] = {"band": -1, "y": 512, "x": 512}
-"""Dask chunks for rasters opened lazily: all bands together, 512 × 512 px windows."""
 
 EMPTY_KEY = hashlib.sha256(b"geoknit:empty").hexdigest()
 """Port key of an unconnected Panel's output (value ``None``)."""

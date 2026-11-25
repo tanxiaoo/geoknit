@@ -7,11 +7,11 @@ import { fileBadge } from "./components/FolderTree";
 import { TextNode } from "./components/nodes/TextNode";
 import { groupBox } from "./components/Groups";
 import type { GkNode } from "./components/nodes/kinds";
-import { workflowFiles } from "./components/TopBar";
+import { exportPath, workflowFiles } from "./components/TopBar";
 import { clipOf, initialState, portSummary, reduceEvent, Store, store } from "./store";
 import { strings } from "./strings";
 import { canConnect } from "./types";
-import type { Api } from "./api";
+import { ApiError, type Api } from "./api";
 
 function node(id: string, extra: Partial<NodeView> = {}): NodeView {
   return {
@@ -172,6 +172,30 @@ describe("store", () => {
       x: 5,
       y: 6,
     });
+  });
+});
+
+describe("Export .py (SPEC 10)", () => {
+  test("the default path sits next to the workflow", () => {
+    expect(exportPath(null)).toBe("workflow.py");
+    expect(exportPath("examples/imd.geoknit")).toBe("examples/imd.py");
+  });
+
+  test("an existing file is replaced only after confirming", async () => {
+    const exportPy = vi.fn(async (path?: string, overwrite = false) => {
+      if (!overwrite) throw new ApiError(`${path} already exists`, 409);
+      return { script: "", path: path ?? null, warnings: [] };
+    });
+    const s = new Store(fakeApi({ exportPy, files: vi.fn(async () => ({}) as never) }));
+    expect(await s.exportPy("imd", () => false)).toBe(false);
+    expect(exportPy).toHaveBeenCalledTimes(1);
+    expect(exportPy).toHaveBeenLastCalledWith("imd.py");
+
+    const asked: string[] = [];
+    expect(await s.exportPy("imd.py", (m) => (asked.push(m), true))).toBe(true);
+    expect(asked).toEqual([strings.overwriteScript("imd.py already exists")]);
+    expect(exportPy).toHaveBeenLastCalledWith("imd.py", true);
+    expect(s.getState().toast?.message).toBe(strings.exported("imd.py"));
   });
 });
 

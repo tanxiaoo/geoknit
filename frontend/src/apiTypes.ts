@@ -41,6 +41,8 @@ export interface NodeView {
   category?: string | null;
   icon?: string | null;
   settings?: SettingView[];
+  /** Map Viewer: saved basemap and per-layer styles (SPEC 8). */
+  map?: MapSettings;
 }
 
 export interface WireJson {
@@ -162,4 +164,96 @@ export interface NodePatch {
   max?: number;
   step?: number;
   size?: [number, number] | null;
+  map?: { basemap?: Basemap; styles?: Record<string, Partial<LayerStyle> | null> };
+}
+
+// ── Map Viewer (SPEC 8, 9) ──
+
+export type Basemap = "light" | "none";
+
+/** A layer's look; `color` is for vectors, the rest for rasters. */
+export interface LayerStyle {
+  bands: number[];
+  colormap: string;
+  min: number | null;
+  max: number | null;
+  opacity: number;
+  visible: boolean;
+  color: string;
+}
+
+export interface MapSettings {
+  basemap?: Basemap;
+  styles?: Record<string, Partial<LayerStyle>>;
+}
+
+export interface MapClass {
+  value: number;
+  color: string;
+}
+
+export interface RasterStats {
+  min: number;
+  max: number;
+  classes: MapClass[] | null;
+}
+
+export interface RasterInfo {
+  bands: string[];
+  dtype: string;
+  width: number;
+  height: number;
+  nodata: number | null;
+  crs: string;
+  bounds: [number, number, number, number];
+  stats: RasterStats;
+  default_style: Partial<LayerStyle>;
+}
+
+export interface VectorInfo {
+  features: number;
+  shown: number;
+  geometry: string[];
+  columns: string[];
+  crs: string;
+  bounds: [number, number, number, number] | null;
+  default_style: Partial<LayerStyle>;
+}
+
+export type LayerStatus = "ready" | "not_run" | "no_cache" | "unsupported" | "error";
+
+export interface MapLayer {
+  /** `<source node id>.<port>` */
+  id: string;
+  title: string;
+  source: [string, string];
+  key: string | null;
+  status: LayerStatus;
+  message: string | null;
+  type: PortType | null;
+  raster?: RasterInfo;
+  vector?: VectorInfo;
+  style?: Partial<LayerStyle>;
+}
+
+export interface MapView {
+  basemap: Basemap;
+  layers: MapLayer[];
+  basemaps: Basemap[];
+  /** A few colours of each colormap, low to high. */
+  colormaps: Record<string, string[]>;
+  max_features: number;
+}
+
+export interface InspectLayer {
+  id: string;
+  title: string;
+  outside: boolean;
+  values: { band: string; value: number | null }[];
+}
+
+export interface InspectResult {
+  lon: number;
+  lat: number;
+  layers: InspectLayer[];
 }

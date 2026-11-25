@@ -13,7 +13,7 @@ from typing import Any
 
 from geoknit.core import types
 from geoknit.core.component import PRINT_PORT, run_component
-from geoknit.core.graph import PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 
 
@@ -165,4 +165,6 @@ class InProcessExecutor:
             return {"value": node.value}
         if node.component == PARAM_PANEL:
             return {"data": inputs.get("data")}
+        if node.component == PARAM_MAP:
+            return {}
         raise AssertionError(node.component)  # pragma: no cover

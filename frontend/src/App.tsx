@@ -7,6 +7,7 @@ import { FolderTree } from "./components/FolderTree";
 import { Ribbon } from "./components/Ribbon";
 import { StatusBar } from "./components/StatusBar";
 import { TopBar } from "./components/TopBar";
+import { MapWindow } from "./components/map/MapWindow";
 import { ComponentWindow } from "./components/window/ComponentWindow";
 import { store, useStore } from "./store";
 import { connectEvents } from "./ws";
@@ -55,6 +56,7 @@ export function App() {
           <Assistant />
         </div>
         <ComponentWindow />
+        <MapWindow />
         <Tip />
         <Toast />
       </div>

@@ -25,13 +25,15 @@ from geoknit.core.settings_edit import set_ports, set_setting
 PARAM_TEXT = "param/text"
 PARAM_SLIDER = "param/slider"
 PARAM_PANEL = "param/panel"
-PARAMS = (PARAM_TEXT, PARAM_SLIDER, PARAM_PANEL)
+PARAM_MAP = "param/map"
+PARAMS = (PARAM_TEXT, PARAM_SLIDER, PARAM_PANEL, PARAM_MAP)
 INLINE = "inline"
 
 _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
     PARAM_TEXT: ({}, {"value": Port("value", types.TEXT)}),
     PARAM_SLIDER: ({}, {"value": Port("value", types.NUMBER)}),
     PARAM_PANEL: ({"data": Port("data", types.ANY)}, {"data": Port("data", types.ANY)}),
+    PARAM_MAP: ({"layers": Port("layers", types.ANY, access="list")}, {}),
 }
 
 DISPLAYS = ("default", "text", "icon")
@@ -50,7 +52,7 @@ class Node:
 
     id: str
     component: str
-    """Library reference, ``inline``, or one of ``param/text|slider|panel``."""
+    """Library reference, ``inline``, or one of ``param/text|slider|panel|map``."""
     position: list[float] = field(default_factory=lambda: [0, 0])
     display: str = "default"
     source: str | None = None
@@ -89,9 +91,12 @@ class Node:
     def title(self) -> str:
         if self.spec is not None:
             return self.spec.name
-        return {PARAM_TEXT: "Text", PARAM_SLIDER: "Number Slider", PARAM_PANEL: "Panel"}.get(
-            self.component, self.component
-        )
+        return {
+            PARAM_TEXT: "Text",
+            PARAM_SLIDER: "Number Slider",
+            PARAM_PANEL: "Panel",
+            PARAM_MAP: "Map Viewer",
+        }.get(self.component, self.component)
 
     def set_source(self, source: str) -> None:
         """Replace the source; on a parse error keep the last good ports."""
@@ -177,7 +182,7 @@ class Graph:
             node.value = ""
         elif component == PARAM_SLIDER:
             node.min, node.max, node.step, node.value = 0, 100, 1, 50
-        elif component == PARAM_PANEL:
+        elif component in (PARAM_PANEL, PARAM_MAP):
             pass
         elif component == INLINE:
             if source is None:

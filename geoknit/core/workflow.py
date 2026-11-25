@@ -17,6 +17,7 @@ from geoknit import __version__
 from geoknit.core.component import ComponentLibrary, ComponentParseError, find_blocks
 from geoknit.core.graph import (
     INLINE,
+    PARAM_MAP,
     PARAM_PANEL,
     PARAM_SLIDER,
     PARAM_TEXT,
@@ -111,8 +112,8 @@ def node_to_dict(node: Node, base_dir: Path | None = None) -> dict[str, Any]:
         d["value"] = relativize(node.value, base_dir)
     elif node.component == PARAM_SLIDER:
         d.update(min=node.min, max=node.max, step=node.step, value=node.value)
-    elif node.component == PARAM_PANEL:
-        pass
+    elif node.component in (PARAM_PANEL, PARAM_MAP):
+        pass  # layout and map styles live in ``extra``
     elif node.component == INLINE or is_modified(node) or node.parse_error is not None:
         d["component"] = INLINE
         d["source"] = node.source
@@ -299,8 +300,8 @@ def _update_node(graph: Graph, old: Node, new: Node) -> None:
         graph.set_value(old.id, new.value)
     elif old.component == new.component == PARAM_SLIDER:
         graph.set_slider(old.id, min=new.min, max=new.max, step=new.step, value=new.value)
-    elif old.component == new.component == PARAM_PANEL:
-        pass  # a Panel has no content beyond its layout
+    elif old.component == new.component and old.component in (PARAM_PANEL, PARAM_MAP):
+        pass  # no content beyond layout and map styles (``extra``)
     elif old.component == new.component and not old.is_param:
         old.version, old.based_on = new.version, new.based_on
         graph.set_source(old.id, new.source or "")

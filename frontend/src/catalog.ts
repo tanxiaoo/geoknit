@@ -2,10 +2,26 @@
 
 import type { ComponentEntry, PortType } from "./apiTypes";
 import { strings } from "./strings";
-import { CATEGORY_ORDER, canConnect, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT } from "./types";
+import {
+  CATEGORY_ORDER,
+  canConnect,
+  PARAM_MAP,
+  PARAM_PANEL,
+  PARAM_SLIDER,
+  PARAM_TEXT,
+} from "./types";
+
+const PORT_NAMES: Record<string, string> = {
+  [PARAM_PANEL]: "data",
+  [PARAM_MAP]: "layers",
+};
 
 function param(ref: string, name: string, inputs: PortType[], outputs: PortType[]): ComponentEntry {
-  const port = (t: PortType, n: string) => ({ name: n, type: t, access: "item" as const });
+  const port = (t: PortType, n: string) => ({
+    name: n,
+    type: t,
+    access: ref === PARAM_MAP ? ("list" as const) : ("item" as const),
+  });
   return {
     ref,
     version: "",
@@ -14,8 +30,8 @@ function param(ref: string, name: string, inputs: PortType[], outputs: PortType[
     category: "Params",
     icon: null,
     description: "",
-    inputs: inputs.map((t) => port(t, ref === PARAM_PANEL ? "data" : "value")),
-    outputs: outputs.map((t) => port(t, ref === PARAM_PANEL ? "data" : "value")),
+    inputs: inputs.map((t) => port(t, PORT_NAMES[ref] ?? "value")),
+    outputs: outputs.map((t) => port(t, PORT_NAMES[ref] ?? "value")),
     requires: [],
     settings: [],
   };
@@ -26,6 +42,7 @@ export function paramEntries(): ComponentEntry[] {
     param(PARAM_SLIDER, strings.numberSlider, [], ["Number"]),
     param(PARAM_TEXT, strings.text, [], ["Text"]),
     param(PARAM_PANEL, strings.panel, ["Any"], ["Any"]),
+    param(PARAM_MAP, strings.mapViewer, ["Any"], []),
   ];
 }
 

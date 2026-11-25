@@ -34,6 +34,8 @@ dependencies = [
     "fastapi>=0.110",     # REST API and OpenAPI /docs (SPEC 9)
     "uvicorn>=0.29",      # local ASGI server for `geoknit [folder]`
     "websockets>=11",     # WebSocket support in uvicorn (/ws)
+    "rio-tiler>=9",       # Map Viewer raster tiles from COGs and overviews (SPEC 8, 9)
+    "typing_extensions>=4.13",  # rio-tiler 9 needs TypedDict(extra_items) but asks for 4.10
 ]
 
 [project.optional-dependencies]

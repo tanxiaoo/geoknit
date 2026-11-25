@@ -3,6 +3,9 @@
 import type {
   ComponentEntry,
   FileNode,
+  InspectResult,
+  MapView,
+  RasterStats,
   GraphView,
   NodeJson,
   NodeOutput,
@@ -89,6 +92,14 @@ export const api = {
     ),
   openInVsCode: (id: string) =>
     request<{ path: string }>("POST", `/api/nodes/${encodeURIComponent(id)}/vscode`),
+  mapView: (id: string) => request<MapView>("GET", `/api/map/${encodeURIComponent(id)}`),
+  mapInspect: (id: string, lon: number, lat: number) =>
+    request<InspectResult>(
+      "GET",
+      `/api/map/${encodeURIComponent(id)}/inspect?lon=${lon}&lat=${lat}`,
+    ),
+  rasterStats: (key: string, bands: number[]) =>
+    request<RasterStats>("GET", `/api/raster/${key}/stats?bands=${bands.join(",")}`),
 };
 
 export type Api = typeof api;

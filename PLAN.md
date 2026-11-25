@@ -148,7 +148,7 @@ review its plan before it writes code.
 ## Phase 8: Export, packaging, release
 
 - [x] Export .py (SPEC 10)
-- [ ] Release build: frontend built into `geoknit/server/static`, included in the wheel
+- [x] Release build: frontend built into `geoknit/server/static`, included in the wheel
 - [ ] Docs: `docs/writing-components.md` (the component format with examples), Milan example walkthrough with screenshots
 - [ ] Publish `geoknit` 0.1.0 to PyPI, GitHub release
 

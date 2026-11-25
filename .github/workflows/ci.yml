@@ -76,3 +76,7 @@ jobs:
         with:
           name: playwright-${{ matrix.os }}
           path: frontend/test-results/
+
+  # sdist + wheel with the frontend inside, installed and smoke-tested on both platforms
+  package:
+    uses: ./.github/workflows/package.yml

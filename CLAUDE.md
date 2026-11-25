@@ -48,7 +48,9 @@ geoknit/                  Python package
     files.py              project folder tree
     tiles.py              Map Viewer: layers, rio-tiler tiles, GeoJSON, inspect
     static/               built frontend (generated, git-ignored)
-  cli.py                  `geoknit`, `geoknit run`
+  cli.py                  `geoknit`, `geoknit run`, `geoknit export`
+hatch_build.py            build hook: a wheel must contain the built frontend
+scripts/smoke_test.py     checks an installed wheel (run, export, server)
 frontend/                 React + TypeScript + Vite
   src/strings.ts          ALL user-facing text lives here
   src/api.ts, apiTypes.ts typed client for the SPEC 9 API
@@ -62,6 +64,7 @@ examples/
   milan_imd/              milan_imd.geoknit + README; data/ and outputs/ are git-ignored
 tests/
 docs/SPEC.md
+docs/releasing.md         how to publish a release (tag → PyPI)
 ```
 
 ## Commands

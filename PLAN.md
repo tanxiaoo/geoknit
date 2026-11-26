@@ -152,6 +152,9 @@ review its plan before it writes code.
 - [x] Docs: `docs/writing-components.md` (the component format with examples), Milan example walkthrough with screenshots
 - [ ] Publish `geoknit` 0.1.0 to PyPI, GitHub release
 
+> Before publishing: changes 01–03, 05 and the 0.1.0 set of change 04 in
+> `docs/changes/`.
+
 **Done when:**
 - exported synthetic script run with plain Python gives exactly the same metrics as GeoKnit (CI)
 - on a clean Windows machine: `pip install geoknit`, `geoknit`, open `examples/milan_imd`, Run, see metrics

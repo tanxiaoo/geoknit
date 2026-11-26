@@ -11,6 +11,12 @@ validate (Milan imperviousness example).
 - **`PLAN.md` tracks progress.** Work on one phase step at a time, tick its
   boxes when its "Done when" checks pass, and do not start the next phase
   before the current one is done.
+- **New work lives in `docs/changes/NN-name/`** (see `docs/changes/README.md`).
+  A change starts from its `BRIEF.md`: decisions there are fixed. If one
+  conflicts with the code or is much harder than it looks, do not change it;
+  list it under "Questions for Xiao" at the top of the change's `SPEC.md`.
+  Work one step of the change's `PLAN.md` per session. When a change is done,
+  merge its SPEC into `docs/SPEC.md` and mark it done in the index.
 
 ## Repository layout
 
@@ -67,6 +73,7 @@ examples/
 tests/
 docs/SPEC.md
 docs/releasing.md         how to publish a release (tag → PyPI)
+docs/changes/             one folder per change: BRIEF.md, SPEC.md, PLAN.md; README.md is the index
 ```
 
 ## Commands

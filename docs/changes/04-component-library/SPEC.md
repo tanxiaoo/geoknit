@@ -1,6 +1,6 @@
 # Change 04: Component library
 
-Status: draft (checked against the code, 26 Nov 2026) · Needs 01 (types,
+Status: agreed (checked against the code, 26 Nov 2026) · Needs 01 (types,
 `[A, B]`, `like:`, list values, editable ports and `INPUTS`, groups, icons);
 the Display rows need 03 · Touches `docs/SPEC.md` sections 4 (`tags:`), 7
 

@@ -49,11 +49,11 @@ code.
 
 | # | Change | Status | Needs | Release |
 |---|--------|--------|-------|---------|
-| 01 | [Types and component headers](01-types-and-headers/SPEC.md) | draft (checked against code; questions answered) | – | 0.1.0 |
-| 02 | [Light and dark theme](02-theme-light-dark/SPEC.md) | draft (checked against code) | – (01 for the new type colours) | 0.1.0 |
-| 03 | [Map layers and colormaps](03-map-layers/SPEC.md) | draft (checked against code; questions answered) | 01, 02 | 0.1.0 |
-| 04 | [Component library](04-component-library/SPEC.md) | draft (checked against code; questions answered) | 01 (03 for Display) | core set in 0.1.0, the rest in 0.1.x |
-| 05 | [Run modes, radial menu, disable](05-run-modes/SPEC.md) | draft (checked against code; questions answered) | 01 (icons), 03 (view nodes) | 0.1.0 |
+| 01 | [Types and component headers](01-types-and-headers/SPEC.md) | agreed | – | 0.1.0 |
+| 02 | [Light and dark theme](02-theme-light-dark/SPEC.md) | agreed | – (01 for the new type colours) | 0.1.0 |
+| 03 | [Map layers and colormaps](03-map-layers/SPEC.md) | agreed | 01, 02 | 0.1.0 |
+| 04 | [Component library](04-component-library/SPEC.md) | agreed | 01 (03 for Display) | core set in 0.1.0, the rest in 0.1.x |
+| 05 | [Run modes, radial menu, disable](05-run-modes/SPEC.md) | agreed | 01 (icons), 03 (view nodes) | 0.1.0 |
 
 Statuses: **draft** (being discussed), **agreed** (ready to build),
 **in progress**, **done** (merged into `docs/SPEC.md`).

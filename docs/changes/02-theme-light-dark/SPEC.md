@@ -1,6 +1,6 @@
 # Change 02: Light and dark theme
 
-Status: draft (checked against the code, 26 Nov 2026) · Touches `docs/SPEC.md`
+Status: agreed (checked against the code, 26 Nov 2026) · Touches `docs/SPEC.md`
 sections 3, 8, 9, 12
 
 ## Questions for Xiao

@@ -1,6 +1,6 @@
 # Change 05: Run modes, radial menu, disabling nodes
 
-Status: draft (checked against the code, 26 Nov 2026) · Brief: `BRIEF.md` ·
+Status: agreed (checked against the code, 26 Nov 2026) · Brief: `BRIEF.md` ·
 Release 0.1.0 · Needs 01 (icon registry), 03 (view nodes: Map Layer and
 Map Viewer never need a Run) · Touches `docs/SPEC.md` sections 5, 6, 8, 9,
 10, 12

@@ -1,6 +1,6 @@
 # Change 03: Map layers and colormaps
 
-Status: draft (checked against the code, 26 Nov 2026) · Needs 01 (types,
+Status: agreed (checked against the code, 26 Nov 2026) · Needs 01 (types,
 union inputs, list values, Color and Colormap nodes), 02 (basemap `auto`) ·
 Touches `docs/SPEC.md` sections 5, 6, 7, 8, 9, 10
 

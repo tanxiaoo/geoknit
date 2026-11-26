@@ -1,6 +1,6 @@
 # Change 01: Types and component headers
 
-Status: draft (checked against the code, 26 Nov 2026) · Touches `docs/SPEC.md`
+Status: agreed (checked against the code, 26 Nov 2026) · Touches `docs/SPEC.md`
 sections 3, 4, 5, 6, 7, 8, 9, 10
 
 ## Questions for Xiao

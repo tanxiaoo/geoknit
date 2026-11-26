@@ -366,6 +366,9 @@ Slider, value sent to the worker with `put_value`, and exported as constants
   custom one. Today `geoknit.core.types` is vendored only when a component
   imports `geoknit.helpers`, a Panel needs `describe()`, or an `Any` → Text
   wire needs `_as_text`. A Color or Colormap constant becomes a fourth reason.
+  The constant calls the vendored classes, so in that case the vendored
+  section comes before the values section instead of after it (step 1).
+  Boolean → Text wires become `str(...)`, like Number → Text.
 
 ## 9. Icons (SPEC 4 "Header", SPEC 8)
 

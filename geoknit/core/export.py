@@ -242,6 +242,8 @@ class _Exporter:
         self.warnings: list[str] = []
         self.needs_as_text = False
         self.needs_capture = False
+        self.needs_types = False
+        """A constant is a Color or Colormap: the script needs the vendored types."""
 
     def label(self, node: Node) -> str:
         return f"{node.id} {node.title}"
@@ -256,11 +258,11 @@ class _Exporter:
         return values[0]
 
     def _convert(self, expr: str, wire: Any, in_type: str) -> str:
-        """Number → Text wires get ``str()`` (SPEC 3), as ``convert_for_input`` does."""
+        """Number/Boolean → Text wires get ``str()`` (SPEC 3), like ``convert_for_input``."""
         if in_type != types.TEXT:
             return expr
         out_type = self.out_types[(wire.src, wire.src_port)]
-        if out_type == types.NUMBER:
+        if out_type in types.TO_TEXT:
             return f"str({expr})"
         if out_type == types.ANY:
             self.needs_as_text = True
@@ -283,7 +285,13 @@ class _Exporter:
         comment = f"# {node.id} {note}" + (f" → {targets}" if targets else "")
         self.exprs[(node.id, "value")] = name
         self.out_types[(node.id, "value")] = node.outputs["value"].type
-        return f"{comment}\n{name} = {value!r}\n"
+        return f"{comment}\n{name} = {self.literal(value)}\n"
+
+    def literal(self, value: Any) -> str:
+        """Source for a constant; a Color or Colormap needs the vendored types."""
+        if isinstance(value, types.Color | types.Colormap):
+            self.needs_types = True
+        return python_literal(value)
 
     def function(self, node: Node) -> _Function:
         where = self.label(node)
@@ -381,7 +389,7 @@ class _Exporter:
         used = set().union(*(f.imports.vendored for f in functions)) if functions else set()
         if any(m in HELPER_MODULES for m in used):
             vendor = list(VENDOR_FILES)
-        elif used or panels or self.needs_as_text:
+        elif used or panels or self.needs_as_text or self.needs_types:
             vendor = [TYPES_MODULE]
 
         requires = sorted(
@@ -422,12 +430,17 @@ class _Exporter:
         out.append("import os\nimport sys\nfrom pathlib import Path\n\n")
         out.append("BASE_DIR = Path(__file__).resolve().parent\n\n")
 
-        if constants:
-            out.append("\n# ── Values (Text and Number Slider nodes): change them here ──\n\n")
-            out.append("\n".join(constants))
+        vendored = ""
         if vendor:
-            out.append("\n\n# ── Vendored from GeoKnit (geoknit.helpers and its types) ──\n\n")
-            out.append(vendored_section(vendor))
+            vendored = "\n\n# ── Vendored from GeoKnit (geoknit.helpers and its types) ──\n\n"
+            vendored += vendored_section(vendor)
+        if self.needs_types:  # Color(...) / Colormap(...) constants need the classes first
+            out.append(vendored)
+        if constants:
+            out.append("\n# ── Values (Params nodes): change them here ──\n\n")
+            out.append("\n".join(constants))
+        if not self.needs_types:
+            out.append(vendored)
         out.append("\n\n# ── Script helpers ──\n\n")
         out.append(_PANEL_FN if panels else "")
         out.append(_AS_TEXT_FN if self.needs_as_text else "")
@@ -447,6 +460,19 @@ class _Exporter:
         out.append(f"{INDENT}return {{{shown}}}\n")
         out.append(_MAIN_BLOCK)
         return re.sub(r"\n{4,}", "\n\n\n", "".join(out))
+
+
+def python_literal(value: Any) -> str:
+    """Source that rebuilds ``value``: ``Color("#0B7A7C")``, ``Colormap.named("viridis")``,
+    the full ``Colormap(...)`` constructor for any other colormap, else ``repr``."""
+    if isinstance(value, types.Color):
+        return f'Color("{value.hex}")'
+    if isinstance(value, types.Colormap):
+        if value.is_named and value.min is None and value.max is None:
+            reverse = ", reverse=True" if value.reverse else ""
+            return f'Colormap.named("{value.name}"{reverse})'
+        return repr(value)  # the dataclass repr is the constructor call
+    return repr(value)
 
 
 def _num(value: float | None) -> str:

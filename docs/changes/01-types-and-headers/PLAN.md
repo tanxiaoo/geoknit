@@ -9,17 +9,17 @@ touches.
 
 ## Step 1: New types in the core
 
-- [ ] `core/types.py`: Boolean, Color (with `parse`), Colormap (with the 10
+- [x] `core/types.py`: Boolean, Color (with `parse`), Colormap (with the 10
       named ramps as data, `named()`), the Layer type name; `to_json` /
       `from_json`; `describe()` for each
-- [ ] `type_of`: `bool` and `numpy.bool_` → Boolean; `check_value`: `bool` is
+- [x] `type_of`: `bool` and `numpy.bool_` → Boolean; `check_value`: `bool` is
       not a Number and `0/1` is not a Boolean
-- [ ] Boolean → Text in `can_connect`, `convert_for_input`, export `_convert`
+- [x] Boolean → Text in `can_connect`, `convert_for_input`, export `_convert`
       and the frontend `canConnect`; new types in `DATA_TYPES` (Python and
       TypeScript) and in the header parser
-- [ ] Cache: JSON for Boolean, Color, Colormap (`_write_value` /
+- [x] Cache: JSON for Boolean, Color, Colormap (`_write_value` /
       `_read_value` rebuild by the type in `meta.json`)
-- [ ] Export: types vendored when a Color/Colormap constant is used; vendored
+- [x] Export: types vendored when a Color/Colormap constant is used; vendored
       `types.py` still runs without GeoKnit
 
 **Done when** (pytest):

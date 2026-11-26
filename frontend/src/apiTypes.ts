@@ -1,6 +1,17 @@
 // Shapes of the GeoKnit server API (SPEC 9).
 
-export type PortType = "Number" | "Text" | "Raster" | "Vector" | "Table" | "Model" | "Any";
+export type PortType =
+  | "Number"
+  | "Text"
+  | "Raster"
+  | "Vector"
+  | "Table"
+  | "Model"
+  | "Boolean"
+  | "Color"
+  | "Colormap"
+  | "Layer"
+  | "Any";
 export type NodeState = "never_run" | "out_of_date" | "running" | "done" | "error" | "skipped";
 export type Display = "default" | "text" | "icon";
 

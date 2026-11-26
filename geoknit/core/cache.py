@@ -399,9 +399,10 @@ class DiskCache:
 
 def _write_value(entry: Path, port: str, value: Any) -> dict[str, Any]:
     kind = types.type_of(value)
-    if kind in (types.NUMBER, types.TEXT):
+    if kind in (types.NUMBER, types.TEXT, types.BOOLEAN, types.COLOR, types.COLORMAP):
         name = f"{port}.json"
-        (entry / name).write_text(json.dumps({"value": value}), encoding="utf-8")
+        data = types.to_json_value(types.as_output(value))
+        (entry / name).write_text(json.dumps({"value": data}), encoding="utf-8")
         return {"type": kind, "file": name, "format": "json"}
     if kind == types.RASTER:
         return _write_raster(entry, port, value)
@@ -429,7 +430,8 @@ def _read_value(entry: Path, info: dict[str, Any]) -> Any:
     path = entry / info["file"]
     fmt = info["format"]
     if fmt == "json":
-        return json.loads(path.read_text(encoding="utf-8"))["value"]
+        data = json.loads(path.read_text(encoding="utf-8"))["value"]
+        return types.from_json_value(info.get("type", ""), data)
     if fmt in ("cog", "ref"):
         return _read_raster(path, info)
     if fmt == "geoparquet":

@@ -536,7 +536,7 @@ def run_component(
         if name not in namespace:
             result.error = f'output "{name}" was not set by the code'
             return result
-        value = namespace[name]
+        value = types.as_output(namespace[name])
         problem = types.check_value(port.type, value)
         if problem:
             result.error = f'output "{name}": {problem}'

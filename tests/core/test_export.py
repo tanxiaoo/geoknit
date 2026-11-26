@@ -243,6 +243,60 @@ def test_helpers_are_vendored(tmp_path: Path) -> None:
     assert proc.stdout.endswith("--- Panel n3 ---\n3\n--- Panel n5 ---\n(empty)\n")
 
 
+USES_COLOR = """\
+# geoknit: component
+# name: Shade
+# inputs:
+#   c: Any
+# outputs:
+#   opaque: Boolean
+
+# --- code ---
+opaque = c.rgba[3] == 255
+print("shade", c.hex, c == Color.parse("11,122,124"))
+"""
+
+
+def test_color_constant_vendors_the_types(tmp_path: Path) -> None:
+    # Stand-in for the Color Swatch node (change 01 step 6): a Params node whose
+    # value is a Color. The component uses ``Color`` without importing it, so
+    # only the constant can bring the vendored types into the script.
+    from geoknit.core.types import Color
+
+    g = Graph()
+    t = _text(g, "x")
+    g.nodes[t].value = Color("#0B7A7C")
+    shade = _inline(g, USES_COLOR)
+    g.add_wire(t, "value", shade, "c")
+    length = _inline(g, LENGTH)
+    g.add_wire(shade, "opaque", length, "text")  # Boolean → Text
+    result = export_script(g)
+    assert (t, shade) == ("n1", "n2")
+    assert 'N01_C = Color("#0B7A7C")' in result.script
+    assert "class Color:" in result.script and "NAMED_RAMPS" in result.script
+    assert "text=str(n02_opaque)" in result.script
+    proc = _run_blocked(result.script, tmp_path)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == "shade #0B7A7C True\n"
+
+
+def test_colormap_literals() -> None:
+    from geoknit.core.export import python_literal
+    from geoknit.core.types import Color, Colormap
+
+    assert python_literal(Colormap.named("viridis")) == 'Colormap.named("viridis")'
+    assert python_literal(Colormap.named("blues", reverse=True)) == (
+        'Colormap.named("blues", reverse=True)'
+    )
+    for cm in (
+        Colormap("continuous", name="magma", min=0, max=1),
+        Colormap("continuous", stops=((0, "#000000"), (1, "#FFFFFF"))),
+        Colormap("classes", classes=((1, "#FF0000", "a"),), other="#000000"),
+    ):
+        assert eval(python_literal(cm), {"Color": Color, "Colormap": Colormap}) == cm  # noqa: S307
+    assert python_literal(True) == "True"
+
+
 def test_other_geoknit_imports_are_warned_about() -> None:
     g = Graph()
     n = _inline(g, OTHER_IMPORT)

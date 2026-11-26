@@ -147,3 +147,45 @@ def test_print_port_receives_printed_text() -> None:
     )
     result = run_component(parse_component(src), {}, print_port="out")
     assert result.outputs == {"out": "x\n"}
+
+
+BOOLEAN_PORTS = """\
+# geoknit: component
+# name: Compare
+# inputs:
+#   n: Number
+#   flag: Boolean
+# outputs:
+#   bigger: Boolean
+#   label: Text
+
+# --- code ---
+import numpy as np
+
+bigger = np.float64(2) > n
+label = f"{flag}"
+"""
+
+
+def test_boolean_and_number_are_kept_apart() -> None:
+    spec = parse_component(BOOLEAN_PORTS)
+    assert spec.inputs["flag"].type == "Boolean"
+    assert run_component(spec, {"n": True, "flag": True}).error == (
+        'input "n": expected Number, got Boolean'
+    )
+    assert run_component(spec, {"n": 1, "flag": 1}).error == (
+        'input "flag": expected Boolean, got Number'
+    )
+    result = run_component(spec, {"n": 1, "flag": False})
+    assert result.error is None
+    assert result.outputs == {"bigger": True, "label": "False"}
+    assert type(result.outputs["bigger"]) is bool  # numpy.bool_ is converted
+
+
+def test_new_types_in_headers() -> None:
+    src = (
+        "# geoknit: component\n# name: T\n# inputs:\n#   c: Color\n#   m: Colormap\n"
+        "#   layer: Layer\n# outputs:\n#   y: Boolean\n\n# --- code ---\ny = True\n"
+    )
+    spec = parse_component(src)
+    assert [p.type for p in spec.inputs.values()] == ["Color", "Colormap", "Layer"]

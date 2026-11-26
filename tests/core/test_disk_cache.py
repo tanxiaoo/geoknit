@@ -56,6 +56,26 @@ def test_number_and_text_round_trip_as_json(tmp_path: Path) -> None:
     assert _formats(cache) == {"n": "json", "t": "json"}
 
 
+def test_boolean_color_colormap_round_trip_as_json(tmp_path: Path) -> None:
+    viridis = types.Colormap.named("viridis")
+    classes = types.Colormap("classes", classes=((1, "#FF0000", "built"),), other="#000000")
+    outputs = {
+        "b": np.bool_(True),
+        "c": types.Color.parse("11,122,124"),
+        "m": viridis,
+        "k": classes,
+    }
+    DiskCache(tmp_path / "cache").write(KEY, outputs, {p: "" for p in outputs})
+    cache = DiskCache(tmp_path / "cache")  # a new process (worker restart) reads it back
+    back, _ = cache.read(KEY)
+    assert back == {"b": True, "c": types.Color("#0B7A7C"), "m": viridis, "k": classes}
+    assert type(back["b"]) is bool
+    assert _formats(cache) == {"b": "json", "c": "json", "m": "json", "k": "json"}
+    assert {p: i["type"] for p, i in cache.meta(KEY)["ports"].items()} == {
+        "b": "Boolean", "c": "Color", "m": "Colormap", "k": "Colormap",
+    }  # fmt: skip
+
+
 def test_vector_and_table_round_trip_as_parquet(tmp_path: Path) -> None:
     cache = DiskCache(tmp_path / "cache")
     gdf = gpd.GeoDataFrame({"imd": [10, 80]}, geometry=[Point(0, 0), Point(1, 1)], crs=32632)

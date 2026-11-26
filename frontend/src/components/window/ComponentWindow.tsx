@@ -10,7 +10,13 @@ import type {
 } from "../../apiTypes";
 import { store, useStore } from "../../store";
 import { strings } from "../../strings";
-import { categoryColour, DATA_TYPES, PARAM_SLIDER, PARAM_TEXT, PORT_COLOURS } from "../../types";
+import {
+  categoryColour,
+  EDITABLE_PORT_TYPES,
+  PARAM_SLIDER,
+  PARAM_TEXT,
+  PORT_COLOURS,
+} from "../../types";
 import { CodeEditor } from "./CodeEditor";
 import { defaultFor, errorLine, freshName, parseValue, valueText } from "./values";
 
@@ -266,7 +272,7 @@ function SettingsTab({ view }: { view: NodeView }) {
               <PortLabel
                 port={p}
                 editable={editablePorts}
-                types={[...DATA_TYPES, "Any"]}
+                types={[...EDITABLE_PORT_TYPES, "Any"]}
                 onRename={(name) => change("in", i, { name })}
                 onType={(type) => change("in", i, { type })}
                 onRemove={() => remove("in", i)}
@@ -300,7 +306,7 @@ function SettingsTab({ view }: { view: NodeView }) {
                 <PortLabel
                   port={p}
                   editable
-                  types={DATA_TYPES}
+                  types={EDITABLE_PORT_TYPES}
                   onRename={(name) => change("out", i, { name })}
                   onType={(type) => change("out", i, { type })}
                   onRemove={() => remove("out", i)}

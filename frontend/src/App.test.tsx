@@ -68,6 +68,11 @@ describe("connection rules (SPEC 3)", () => {
     ["Table", "Any", true],
     ["Any", "Model", true],
     ["Vector", "Raster", false],
+    ["Boolean", "Text", true],
+    ["Boolean", "Number", false],
+    ["Number", "Boolean", false],
+    ["Color", "Color", true],
+    ["Colormap", "Color", false],
   ] as const)("%s → %s: %s", (out, input, ok) => {
     expect(canConnect(out, input)).toBe(ok);
   });

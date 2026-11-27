@@ -46,8 +46,20 @@ OTHER = "Other"
 
 PARAMS_TAB = "Params"
 
-PARAM_ICONS: dict[str, str | None] = {PARAM_MAP: "map-viewer"}
-"""Icons of the Params nodes (they have no header)."""
+# Literal keys and values: frontend/src/icons/registry.test.ts reads this
+# block to check that every name resolves in the icon registry.
+PARAM_ICONS: dict[str, str] = {
+    "param/text": "lucide:type",
+    "param/number": "lucide:hash",
+    "param/slider": "lucide:sliders-horizontal",
+    "param/toggle": "lucide:toggle-right",
+    "param/value_list": "lucide:list",
+    "param/color": "gis:color",
+    "param/colormap": "lucide:rainbow",
+    "param/panel": "lucide:sticky-note",
+    "param/map": "gis:map",
+}
+"""Icons of the Params nodes (they have no header); every kind in ``PARAMS`` has one."""
 
 Layout = dict[str, dict[str, list[str]]]
 
@@ -122,7 +134,7 @@ def param_entry(kind: str) -> dict[str, Any]:
         "name": PARAM_TITLES[kind],
         "category": PARAMS_TAB,
         "group": None,
-        "icon": PARAM_ICONS.get(kind),
+        "icon": PARAM_ICONS[kind],
         "description": "",
         "inputs": [input_view(p) for p in inputs.values()],
         "outputs": [output_view(p) for p in outputs.values()],

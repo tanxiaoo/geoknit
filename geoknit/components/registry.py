@@ -54,6 +54,8 @@ class RegisteredComponent:
     origin: str
     """``builtin``, ``user`` or ``pack``."""
     path: Path
+    root: Path
+    """The folder the component was loaded from (the pack folder); ``.svg`` icons stay inside it."""
 
 
 class Registry:
@@ -91,7 +93,7 @@ class Registry:
                 warnings.warn(f"skipped component {path}: {exc}", RegistryWarning, stacklevel=2)
                 continue
             entry = LibraryEntry(ref=ref, source=source, version=version)
-            self._items[ref] = RegisteredComponent(entry, spec, origin, path)
+            self._items[ref] = RegisteredComponent(entry, spec, origin, path, Path(folder))
             added += 1
         return added
 
@@ -146,6 +148,27 @@ class Registry:
 
     def refs(self) -> list[str]:
         return sorted(self._items)
+
+    def icon_path(self, ref: str) -> Path | None:
+        """The ``.svg`` file a component's ``icon:`` names, or ``None``.
+
+        The path is relative to the component file and must stay inside the
+        folder the component was loaded from (its pack); an unknown
+        component, a ``<set>:<name>`` icon, a path outside that folder or a
+        missing file all give ``None`` (change 01, section 9).
+        """
+        item = self._items.get(ref)
+        icon = item.spec.icon if item is not None else None
+        if item is None or not icon or not icon.lower().endswith(".svg"):
+            return None
+        relative = Path(icon)
+        if relative.is_absolute() or relative.drive:
+            return None
+        root = item.root.resolve()
+        path = (item.path.parent / relative).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            return None
+        return path
 
     def entries(self) -> list[dict[str, Any]]:
         """Header metadata of every component, for the ribbon (``GET /api/components``)."""

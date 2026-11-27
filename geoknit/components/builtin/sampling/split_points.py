@@ -2,7 +2,7 @@
 # name: Split Points
 # category: Sampling
 # group: Split
-# icon: split-points
+# icon: gis:split
 # description: Split sample points into random training and test points (held out for validation).
 # inputs:
 #   points: Vector

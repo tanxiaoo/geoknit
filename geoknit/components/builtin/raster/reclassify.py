@@ -2,7 +2,7 @@
 # name: Reclassify
 # category: Raster
 # group: Calculate
-# icon: reclassify
+# icon: gis:map-legend
 # description: Turn a continuous raster into classes using break rules such as 0 | 0-20 | 20-40.
 # inputs:
 #   raster: Raster

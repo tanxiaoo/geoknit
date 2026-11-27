@@ -2,7 +2,7 @@
 # name: Predict Raster
 # category: Model
 # group: Apply
-# icon: predict
+# icon: lucide:wand-sparkles
 # description: Apply a model to every pixel of a raster, window by window.
 # inputs:
 #   model: Model

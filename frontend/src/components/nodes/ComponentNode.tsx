@@ -1,5 +1,5 @@
 import type { NodeProps } from "@xyflow/react";
-import { iconFor } from "../../icons";
+import { iconFor } from "../../icons/registry";
 import { useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
 import { carriesList, needsRun, portTypes } from "../../types";
@@ -13,7 +13,9 @@ export function ComponentNode({ id, data, selected }: NodeProps<GkNode>) {
   const error = useStore((s) => s.errors[id]);
   const colour = useCategoryColour(view.category);
   const display = view.display === "default" ? canvasDisplay : view.display;
-  const Icon = iconFor(view.icon, view.category);
+  // A pack's `.svg` icon is served for the library component (an inline copy: the one it came from).
+  const iconRef = view.component === "inline" ? view.based_on : view.component;
+  const Icon = iconFor(view.icon, view.category, iconRef);
   const state = view.state ?? "never_run";
   return (
     <div

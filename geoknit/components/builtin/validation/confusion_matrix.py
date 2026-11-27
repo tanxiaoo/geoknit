@@ -2,7 +2,7 @@
 # name: Confusion Matrix
 # category: Validation
 # group: Classification
-# icon: confusion-matrix
+# icon: lucide:grid-2x2-check
 # description: Compare a class map with reference points (confusion matrix, accuracy, kappa, F1).
 # inputs:
 #   map: Raster

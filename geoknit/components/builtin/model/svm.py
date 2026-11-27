@@ -2,7 +2,7 @@
 # name: SVM
 # category: Model
 # group: Train
-# icon: svm
+# icon: lucide:sigma
 # description: Train a support vector machine (regression or classification) on a table.
 # inputs:
 #   table: Table

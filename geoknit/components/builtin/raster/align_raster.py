@@ -2,7 +2,7 @@
 # name: Align Raster
 # category: Raster
 # group: Extent
-# icon: align
+# icon: gis:snap
 # description: Resample a raster onto the grid (CRS, resolution, extent) of a reference raster.
 # inputs:
 #   source: Raster

@@ -452,6 +452,13 @@ class Session:
             entry["settings"] = [_setting_view(s) for s in spec.settings.values()]
         return library(out)
 
+    def component_icon(self, ref: str) -> Path:
+        """The ``.svg`` file a component's ``icon:`` names (change 01, section 9)."""
+        path = self.registry.icon_path(ref)
+        if path is None:
+            raise NotFound(f'"{ref}" has no .svg icon inside its folder')
+        return path
+
     def output(self, node_id: str) -> dict[str, Any]:
         self._node(node_id)
         ex = self.executor

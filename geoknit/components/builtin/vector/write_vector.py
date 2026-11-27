@@ -2,7 +2,7 @@
 # name: Write Vector
 # category: Vector
 # group: Files
-# icon: write-vector
+# icon: gis:layer-download
 # description: Save a vector layer; the extension picks the format (.gpkg .shp .geojson .parquet).
 # inputs:
 #   vector: Vector

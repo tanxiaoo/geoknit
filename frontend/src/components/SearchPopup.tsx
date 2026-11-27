@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentEntry } from "../apiTypes";
 import { fittingPort, matches, placeOf, type WireFrom } from "../catalog";
-import { iconFor } from "../icons";
+import { iconFor } from "../icons/registry";
 import { useStore } from "../store";
 import { strings } from "../strings";
 import { categoryColour } from "../types";
@@ -61,7 +61,7 @@ export function SearchPopup({ x, y, from, onPick, onClose }: Props) {
       <ul>
         {list.length === 0 && <li className="gk-muted">{strings.noMatches}</li>}
         {list.map((e, i) => {
-          const Icon = iconFor(e.icon, e.category);
+          const Icon = iconFor(e.icon, e.category, e.ref);
           return (
             <li
               key={e.ref}

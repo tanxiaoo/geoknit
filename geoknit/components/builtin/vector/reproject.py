@@ -2,7 +2,7 @@
 # name: Reproject
 # category: Vector
 # group: CRS
-# icon: reproject
+# icon: gis:proj-geo
 # description: Transform a vector layer to another CRS, e.g. EPSG:32632.
 # inputs:
 #   vector: Vector

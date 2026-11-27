@@ -2,7 +2,7 @@
 # name: Stratified Sample
 # category: Sampling
 # group: Draw
-# icon: stratified-sample
+# icon: gis:layers-poi
 # description: Draw the same number of random points per class, at pixel centres inside the AOI.
 # inputs:
 #   classes: Raster

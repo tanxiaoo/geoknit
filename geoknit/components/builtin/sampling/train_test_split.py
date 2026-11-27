@@ -2,7 +2,7 @@
 # name: Train/Test Split
 # category: Sampling
 # group: Split
-# icon: split
+# icon: gis:split
 # description: Split a table into random training and test rows.
 # inputs:
 #   table: Table

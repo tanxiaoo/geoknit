@@ -36,6 +36,14 @@ test("the Raster tab shows its groups in layout order", async ({ page }) => {
   await expect(
     page.getByTestId("ribbon-builtin/raster/clip").locator(".gk-button-icon"),
   ).toHaveCSS("color", "rgb(11, 122, 124)");
+  // Change 01 step 7: a vendored Font-GIS icon, drawn inline in currentColor.
+  const legend = page
+    .getByTestId("ribbon-builtin/raster/reclassify")
+    .locator('[data-icon="gis:map-legend"] svg');
+  await expect(legend).toHaveAttribute("fill", "currentColor");
+  await expect(legend).toHaveCSS("color", "rgb(11, 122, 124)");
+  const box = await legend.boundingBox();
+  expect(box?.width).toBe(16);
 
   await page.getByTestId("ribbon-search").fill("align");
   await expect(page.locator(".gk-search-results")).toContainText("Align Raster Raster › Extent");

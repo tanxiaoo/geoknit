@@ -2,7 +2,7 @@
 # name: Python
 # category: Script
 # group: Python
-# icon: python
+# icon: tabler:brand-python
 # description: Your own Python code. Add inputs and outputs in the component window.
 # ports: {inputs: editable, outputs: editable}
 # outputs:

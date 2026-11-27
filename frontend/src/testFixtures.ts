@@ -20,7 +20,7 @@ function param(
     name,
     category: "Params",
     group,
-    icon: ref === "param/map" ? "map-viewer" : null,
+    icon: ref === "param/map" ? "gis:map" : null,
     description: "",
     inputs,
     outputs,

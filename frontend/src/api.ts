@@ -108,3 +108,8 @@ export const api = {
 };
 
 export type Api = typeof api;
+
+/** `GET /api/components/{ref}/icon`: a component's own `.svg` icon (change 01, section 9). */
+export function componentIconUrl(ref: string): string {
+  return `/api/components/${ref.split("/").map(encodeURIComponent).join("/")}/icon`;
+}

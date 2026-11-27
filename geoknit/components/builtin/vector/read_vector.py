@@ -2,7 +2,7 @@
 # name: Read Vector
 # category: Vector
 # group: Files
-# icon: read-vector
+# icon: gis:polygon-pt
 # description: Read a vector file (GeoPackage, Shapefile, GeoJSON, GeoParquet).
 # inputs:
 #   path: Text

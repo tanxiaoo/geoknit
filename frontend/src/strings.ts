@@ -43,6 +43,9 @@ export const strings = {
   paramsTab: "Params",
   /** Search results: where a component sits in the ribbon. */
   tabGroup: (tab: string, group: string) => `${tab} › ${group}`,
+  /** Console warning, once per name, when a header names an icon the registry lacks. */
+  unknownIcon: (name: string) =>
+    `GeoKnit: unknown icon "${name}"; using the category icon (see docs/icons.md)`,
   searchPlaceholder: "Search components (or double-click empty canvas)",
   noMatches: "No matching components",
   addHint: "Click to add, or drag onto the canvas",

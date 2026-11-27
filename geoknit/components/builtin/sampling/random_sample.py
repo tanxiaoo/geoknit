@@ -2,7 +2,7 @@
 # name: Random Sample
 # category: Sampling
 # group: Draw
-# icon: random-sample
+# icon: gis:multipoint
 # description: Draw random points at the centres of valid (non-nodata) pixels inside the AOI.
 # inputs:
 #   raster: Raster

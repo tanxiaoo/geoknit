@@ -239,6 +239,12 @@ def create_app(
         """The ribbon: every component and Params node with its tab and group, and the tabs."""
         return session.components()
 
+    @app.get("/api/components/{ref:path}/icon", tags=["library"])
+    def component_icon(ref: str) -> Response:
+        """A component's own ``.svg`` icon (``icon: icons/x.svg``), only from inside its folder."""
+        path = session.component_icon(ref)
+        return Response(path.read_bytes(), media_type="image/svg+xml")
+
     @app.get("/api/colormaps", tags=["library"])
     def colormaps() -> dict[str, list[str]]:
         """The named ramps a Colormap can use: 11 stops each, low to high (``#RRGGBB``)."""

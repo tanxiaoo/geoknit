@@ -26,7 +26,7 @@ band):
 # geoknit: component
 # name: Normalized Difference
 # category: Raster
-# icon: bands
+# icon: gis:layers
 # description: (a - b) / (a + b) of two bands, e.g. NDVI from NIR and red.
 # inputs:
 #   raster: Raster
@@ -72,17 +72,22 @@ line and parses the rest.
 |-----|----------|---------|
 | `name` | yes | Shown on the node and in the ribbon. |
 | `category` | no (`Script`) | The ribbon tab. A new category becomes a new tab. |
-| `icon` | no | A built-in icon name (below); otherwise the category's icon is used. |
+| `icon` | no | An icon name such as `gis:layers` (below), or a relative `.svg` path; otherwise the category's icon is used. |
 | `description` | no | One sentence, shown in the ribbon and search. |
 | `inputs` | no | Port name → type, or a mapping with `type`, `access`, `file`. |
 | `outputs` | no | Port name → type. |
 | `requires` | no | pip package names the code needs, e.g. `[scikit-learn]`. |
 
-Built-in icon names: `accuracy`, `align`, `bands`, `clip`,
-`confusion-matrix`, `extract`, `map-viewer`, `predict`, `python`,
-`random-forest`, `random-sample`, `read-raster`, `read-vector`, `reclassify`,
-`reproject`, `split`, `split-points`, `stratified-sample`, `svm`,
-`write-raster`, `write-vector`.
+Icon names are `<set>:<name>`, from [Font-GIS](https://github.com/Viglino/font-gis)
+(`gis:`), [Lucide](https://lucide.dev) (`lucide:`) or
+[Tabler](https://tabler.io/icons) (`tabler:`), for example `icon: gis:map-legend`.
+GeoKnit bundles only the icons it uses; [icons.md](icons.md) lists every
+available name with a preview. A name that is not in that list falls back to
+the category's icon (with a warning in the browser console). For any other
+icon, ship an `.svg` file with your component and give its path relative to
+the component file, e.g. `icon: icons/my-icon.svg`; it must stay inside your
+pack's folder. Icons are drawn in one colour, so draw them in black or
+`currentColor` on a transparent background.
 
 Port names must be valid Python names, and an output cannot share its name
 with an input. A component that returns a changed copy of an input names its

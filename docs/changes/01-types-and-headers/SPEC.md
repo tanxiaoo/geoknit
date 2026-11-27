@@ -657,6 +657,78 @@ Rules:
   lists the bare names today and changes with them.
 - Icons are drawn with `currentColor`, so they follow the theme (change 02).
 
+Details settled while building step 7:
+
+- **Names.** A Font-GIS name is the file name of its SVG in the Font-GIS
+  sources without the code-point prefix (`uEA85-map-legend.svg` →
+  `gis:map-legend`, the same as its `fg-map-legend` CSS class); Lucide and
+  Tabler use their kebab-case names (`lucide:grid-2x2-check`,
+  `tabler:brand-python`). The registry (`ICONS` in
+  `frontend/src/icons/registry.tsx`) holds only the icons in use: built-in
+  headers, Params entries and the tab fallbacks.
+- **Chosen icons.** Built-ins: Read Raster `gis:mosaic`, Write Raster and
+  Write Vector `gis:layer-download`, Band Select `gis:layers`, Reclassify
+  `gis:map-legend`, Clip `gis:select-extent`, Align Raster `gis:snap`, Read
+  Vector `gis:polygon-pt`, Reproject `gis:proj-geo`, Random Sample
+  `gis:multipoint`, Stratified Sample `gis:layers-poi`, Split Points and
+  Train/Test Split `gis:split`, Extract Values `gis:poi-info`, Random Forest
+  `lucide:trees`, SVM `lucide:sigma`, Predict Raster `lucide:wand-sparkles`,
+  Confusion Matrix `lucide:grid-2x2-check`, Accuracy `lucide:target`, Python
+  `tabler:brand-python` (neither Font-GIS nor Lucide has a Python icon).
+  Params (`PARAM_ICONS` in `geoknit/components/layout.py`, one per kind):
+  Text `lucide:type`, Number `lucide:hash`, Number Slider
+  `lucide:sliders-horizontal`, Boolean Toggle `lucide:toggle-right`, Value
+  List `lucide:list`, Color Swatch `gis:color`, Colormap `lucide:rainbow`,
+  Panel `lucide:sticky-note`, Map Viewer `gis:map`. Tab fallbacks
+  (`CATEGORY_ICONS`): Params `lucide:sliders-horizontal`, Maths
+  `lucide:calculator`, Sets `lucide:list`, Table `lucide:table`, Vector
+  `gis:polygon-pt`, Raster `gis:mosaic`, Sampling `gis:multipoint`, Model
+  `lucide:trees`, Validation `lucide:target`, Display `gis:map`, Script and
+  pack or user tabs `lucide:code`.
+- **Vendored files.** Font-GIS SVGs come from the `font-gis` npm package
+  1.0.6 (`svg/`), Tabler from `@tabler/icons` 3.53.0 (`icons/outline/`);
+  neither is a dependency. On copy, Font-GIS files lose their Inkscape
+  metadata and ids and get a `viewBox`; every fill and stroke colour becomes
+  `currentColor`; a comment at the top credits the author and licence and
+  says what changed (CC BY 4.0 asks for both). `gis/` holds Font-GIS's
+  `LICENSE.md` and `LICENSE-CC-BY.md`, `tabler/` Tabler's `LICENSE`. Lucide
+  is not vendored (it comes from `lucide-react`); its ISC licence and the
+  MIT licence of its Feather-derived icons are quoted in
+  `THIRD_PARTY_NOTICES.md`. Vendored SVGs are inserted inline, so
+  `currentColor` follows the text colour.
+- **Wheel.** `force-include` puts the file at
+  `geoknit/THIRD_PARTY_NOTICES.md` inside the wheel (the package folder,
+  since the wheel has no other place for it besides `dist-info`);
+  `scripts/smoke_test.py` checks it is in the installed package.
+- **`.svg` icons.** The path is relative to the component file and must stay
+  inside the folder the component was loaded from: the pack folder (for a
+  pack), the user folder or the built-in folder. So `icons/x.svg` and
+  `../shared/x.svg` both work in a pack; an absolute path, a path that
+  leaves the pack, a missing file or a `<set>:<name>` icon answer `404`, as
+  does an unknown reference (`Registry.icon_path`). The file is served as
+  `image/svg+xml` with its bytes unchanged. The icon is the one in the
+  library header: a node whose source was edited uses its library
+  component's file, an inline node the file of the component it is
+  `based_on` (none: the category icon). The ribbon, search and node draw it
+  as a CSS mask filled with `currentColor` (so it is one colour, like the
+  other icons, and an SVG's scripts never run); if it fails to load, the
+  category icon is drawn instead. The frontend builds the URL with
+  `componentIconUrl(ref)` (`api.ts`).
+- **`docs/icons.md`** has one row per name (preview, name, set and licence)
+  and a short note for pack authors. GitHub does not render inline SVG, so
+  the previews are files in `docs/icons/` (`gis-map.svg`, …) drawn in
+  `#64748b`, readable on light and dark backgrounds; the test checks both the
+  Markdown and the folder (no missing, changed or extra file). Command:
+  `UPDATE_ICONS=1 npx vitest run src/icons` in `frontend/`. The test reads
+  the built-in headers with `import.meta.glob(…, {query: "?raw"})` and the
+  `PARAM_ICONS` block of `layout.py` with `?raw`, so `PARAM_ICONS` keeps
+  literal keys and values; the few Node APIs it uses are declared in
+  `frontend/src/icons/node.d.ts` instead of adding `@types/node`.
+- **Unknown names** (including the old bare names) draw the category's icon
+  and log `GeoKnit: unknown icon "x"; using the category icon (see
+  docs/icons.md)` once per name (`strings.unknownIcon`). A missing `icon:`
+  draws the category icon silently.
+
 ## 10. Renames and merges before release (SPEC 5, 7)
 
 | Before | After | Why |

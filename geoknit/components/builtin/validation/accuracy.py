@@ -2,7 +2,7 @@
 # name: Accuracy
 # category: Validation
 # group: Regression
-# icon: accuracy
+# icon: lucide:target
 # description: Compare a continuous map with reference points (n, RMSE, MAE, R², bias).
 # inputs:
 #   map: Raster

@@ -6,7 +6,8 @@ Run it with the Python of a fresh environment where only the wheel was
 installed (``pip install dist/geoknit-*.whl``), not an editable checkout. It
 works in a temporary folder and checks that:
 
-1. ``geoknit`` is imported from the installed package, ``geoknit --version`` works;
+1. ``geoknit`` is imported from the installed package, ``geoknit --version`` works,
+   and the wheel carried ``THIRD_PARTY_NOTICES.md`` (icon licences) into the package;
 2. ``geoknit run`` on the synthetic example prints the metrics Panel;
 3. ``geoknit export`` writes a script that prints the same Panel;
 4. ``geoknit <folder>`` serves the built canvas (not the placeholder) and its assets.
@@ -83,6 +84,10 @@ def check_install(version: str | None, work: Path) -> None:
     if ROOT in location.parents:
         fail(f"geoknit is imported from the checkout ({location}), not from the wheel")
     step(f"imported from {location.parent}")
+    notices = location.parent / "THIRD_PARTY_NOTICES.md"
+    if not notices.is_file() or "Font-GIS" not in notices.read_text(encoding="utf-8"):
+        fail(f"{notices} is missing from the wheel (force-include in pyproject.toml)")
+    step("THIRD_PARTY_NOTICES.md is in the installed package")
     out = run([*geoknit_command(), "--version"], work).stdout.strip()
     if version is not None and out != f"geoknit {version}":
         fail(f'geoknit --version says "{out}", expected "geoknit {version}"')

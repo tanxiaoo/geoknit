@@ -2,7 +2,7 @@
 # name: Random Forest
 # category: Model
 # group: Train
-# icon: random-forest
+# icon: lucide:trees
 # description: Train a random forest (regression or classification) on a table.
 # inputs:
 #   table: Table

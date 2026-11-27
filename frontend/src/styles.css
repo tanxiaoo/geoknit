@@ -277,6 +277,21 @@ button:disabled {
   background: #f1f5f9;
 }
 
+/* Vendored (Font-GIS, Tabler) and pack .svg icons: drawn in currentColor (change 01, section 9). */
+.gk-svg-icon {
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+}
+.gk-svg-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.gk-file-icon {
+  background-color: currentColor;
+}
+
 /* ── main area ── */
 .gk-main {
   display: grid;

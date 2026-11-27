@@ -3,7 +3,7 @@ import { useReactFlow } from "@xyflow/react";
 import { Search } from "lucide-react";
 import type { ComponentEntry } from "../apiTypes";
 import { groupsOf, matches, placeOf } from "../catalog";
-import { iconFor } from "../icons";
+import { iconFor } from "../icons/registry";
 import { store, useStore } from "../store";
 import { strings } from "../strings";
 import { categoryColour } from "../types";
@@ -75,7 +75,7 @@ export function Ribbon() {
           <section className="gk-ribbon-group" key={group} data-testid={`ribbon-group-${group}`}>
             <div className="gk-ribbon-group-buttons">
               {entries.map((e) => {
-                const Icon = iconFor(e.icon, e.category);
+                const Icon = iconFor(e.icon, e.category, e.ref);
                 return (
                   <button
                     key={e.ref}

@@ -42,12 +42,12 @@ after change 01 step 5).
 
 ## Step 3: Setting, API, toggle
 
-- [ ] `settings.json` next to the trust file, read/write (unknown keys kept);
+- [x] `settings.json` next to the trust file, read/write (unknown keys kept);
       `GET/PATCH /api/settings`
-- [ ] Server route for `/` and `/index.html` ahead of the static mount,
+- [x] Server route for `/` and `/index.html` ahead of the static mount,
       writing `data-theme-setting`; inline script in `frontend/index.html`
       resolving it (and `system`) to `data-theme` before the CSS
-- [ ] Top-bar button cycling System → Light → Dark; `system` follows
+- [x] Top-bar button cycling System → Light → Dark; `system` follows
       `prefers-color-scheme` live
 
 **Done when:**

@@ -163,6 +163,9 @@ button:disabled {
   background: var(--gk-topbar-raised);
   color: var(--gk-topbar-ink);
 }
+.gk-theme-button {
+  padding: 7px 9px;
+}
 .gk-run {
   background: var(--gk-primary);
   border-color: var(--gk-primary);

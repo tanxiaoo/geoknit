@@ -1,8 +1,9 @@
 // Change 02 step 1: screenshot baselines of the synthetic workflow's canvas, a component
 // window and the Map Viewer window, taken before any colour moves to theme tokens, so the
 // token refactor can be checked to change nothing visible. Step 2 adds the same three
-// shots in the dark theme (`*-dark.png`, `data-theme="dark"` set on <html> after a reload);
-// the light ones set no attribute.
+// shots in the dark theme (`*-dark.png`). Since step 3 the theme is chosen as the user
+// does, through `PATCH /api/settings` and a reload (light for the light shots, so they do
+// not depend on the host's colour scheme); the setting goes back to `system` at the end.
 //
 // Font rendering differs between Windows and Linux, so the comparison runs on Linux only
 // (the CI ubuntu job) against the `*-chromium-linux.png` baselines next to this file.
@@ -99,18 +100,20 @@ test.describe.serial("theme screenshots", () => {
         { timeout: 120_000 },
       )
       .toBe(true);
-    await fresh(null); // light: no data-theme attribute
+    await fresh("light");
   });
 
   test.afterAll(async () => {
+    await api(page, "PATCH", "/api/settings", { theme: "system" });
     await page.close();
   });
 
-  /** Reload (fits the view to the workflow; no run logs, nothing selected: the windows
-   * select their node), set the theme, and fit again once every node is drawn. */
-  async function fresh(theme: "dark" | null) {
+  /** Save the theme and reload (fits the view to the workflow; no run logs, nothing
+   * selected: the windows select their node), then fit again once every node is drawn. */
+  async function fresh(theme: "light" | "dark") {
+    await api(page, "PATCH", "/api/settings", { theme });
     await page.reload();
-    if (theme) await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     await expect(page.getByTestId(`map-count-${viewer}`)).toContainText("2 layers");
     await expect(page.getByTestId(`panel-text-${panel}`)).toHaveClass(/gk-panel-view/);
     // The fit on page load can run before every node is measured, so the framing varies;
@@ -163,7 +166,6 @@ test.describe.serial("theme screenshots", () => {
     await expect(win).toHaveCount(0);
   }
 
-  // light: no data-theme attribute (the light tokens apply without one)
   test("canvas", async () => {
     await canvasShot("canvas.png");
   });
@@ -176,14 +178,17 @@ test.describe.serial("theme screenshots", () => {
     await mapWindowShot("map-window.png");
   });
 
-  // Change 02 step 2: the same three in the dark theme (set on <html> as the app will)
+  // Change 02 step 2: the same three in the dark theme
   test("canvas, dark", async () => {
     await fresh("dark");
     await canvasShot("canvas-dark.png");
   });
 
-  // set again in each test: after a failure Playwright restarts the worker (a new page)
-  const dark = () => page.evaluate(() => (document.documentElement.dataset.theme = "dark"));
+  // checked again in each test: after a failure Playwright restarts the worker (a new page)
+  const dark = async () => {
+    const now = await page.evaluate(() => document.documentElement.dataset.theme);
+    if (now !== "dark") await fresh("dark");
+  };
 
   test("component window, dark", async () => {
     await dark();

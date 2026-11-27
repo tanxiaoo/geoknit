@@ -16,6 +16,7 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
     viewport: { width: 1920, height: 1080 },
     deviceScaleFactor: 1,
+    colorScheme: "light", // never the host's (the app follows prefers-color-scheme)
   },
   webServer: {
     command: `${python} serve_milan.py ${port}`, // runs in this folder

@@ -60,6 +60,7 @@ from geoknit.runtime.client import WorkerExecutor
 from geoknit.server import tables, tiles
 from geoknit.server.editor import EditorError, ExternalEditors, slugify
 from geoknit.server.events import Broadcaster
+from geoknit.server.user_settings import UserSettings
 
 UNTRUSTED = "This workflow contains Python code. Trust and allow running?"
 RUNNING_MSG = "stop the run first"
@@ -148,6 +149,8 @@ class Session:
         self.project = Path(project).resolve()
         self.registry = registry if registry is not None else default_registry()
         self.trust = trust if trust is not None else TrustStore()
+        self.user_settings = UserSettings(self.trust.path.parent / "settings.json")
+        """The user's settings (theme), next to the trust file; not part of the workflow."""
         self.events = Broadcaster()
         self.lock = threading.RLock()
         self.graph = Graph()

@@ -38,6 +38,9 @@ export const strings = {
     `Exported to ${path}. ${warnings.join(" · ")}`,
   stop: "Stop",
   run: "Run",
+  themeNames: { system: "System", light: "Light", dark: "Dark" },
+  /** Tooltip of the top-bar theme button: the current choice, and that a click changes it. */
+  themeHint: (current: string) => `Theme: ${current} (click to change)`,
 
   // ribbon
   paramsTab: "Params",

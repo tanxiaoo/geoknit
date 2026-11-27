@@ -2,8 +2,8 @@
  * here; no other .css/.ts/.tsx file under src/ holds a colour literal (checked by
  * src/colourLiterals.test.ts). Data colours (Map Viewer swatches) live in palettes.ts.
  *
- * Light is today's look. Until the theme setting exists, the light tokens also apply
- * when <html> has no data-theme attribute. */
+ * Light is today's look. The inline script of index.html always sets data-theme; the
+ * light tokens also apply without it (no JavaScript, or a page not served by GeoKnit). */
 
 :root,
 :root[data-theme="light"] {

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import html
+import re
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -185,6 +187,21 @@ class ExportBody(BaseModel):
 
 class RecoverBody(BaseModel):
     restore: bool = Field(description="true restores the autosave, false discards it")
+
+
+class SettingsPatch(BaseModel):
+    """Only the fields that are sent are changed."""
+
+    theme: Literal["system", "light", "dark"] | None = Field(
+        default=None, description="`system` follows the browser's prefers-color-scheme"
+    )
+
+
+def themed_index(page: str, theme: str) -> str:
+    """The built ``index.html`` with the saved theme on ``<html>`` (``data-theme-setting``),
+    which its inline script turns into ``data-theme`` before any CSS applies."""
+    attr = f' data-theme-setting="{html.escape(theme, quote=True)}"'
+    return re.sub(r"<html\b", lambda m: m.group(0) + attr, page, count=1, flags=re.IGNORECASE)
 
 
 # ── app ──
@@ -435,6 +452,21 @@ def create_app(
         body = body or ExportBody()
         return session.export_py(body.path, body.overwrite)
 
+    # ── user settings ──
+    @app.get("/api/settings", tags=["settings"])
+    def get_settings() -> dict[str, Any]:
+        """The user's settings (``settings.json`` next to the trust file): ``{theme}``."""
+        return session.user_settings.get()
+
+    @app.patch("/api/settings", tags=["settings"])
+    def patch_settings(body: SettingsPatch) -> dict[str, Any]:
+        """Change the user's settings. Not part of undo, never makes anything out of date,
+        allowed during a run and on a read-only workflow."""
+        changes = {k: getattr(body, k) for k in body.model_fields_set}
+        if any(v is None for v in changes.values()):
+            raise SessionError("a setting cannot be null")
+        return session.user_settings.update(changes)
+
     # ── Map Viewer (SPEC 8) ──
     def _bands(text: str | None) -> tuple[int, ...] | None:
         if text is None or text == "":
@@ -531,6 +563,17 @@ def create_app(
 
     # ── frontend ──
     if (STATIC_DIR / "index.html").is_file():
+
+        @app.get("/", include_in_schema=False)
+        @app.get("/index.html", include_in_schema=False)
+        def index_page() -> HTMLResponse:
+            # ahead of the static mount, so the first paint already has the saved theme
+            page = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+            return HTMLResponse(
+                themed_index(page, session.user_settings.theme),
+                headers={"Cache-Control": "no-cache"},
+            )
+
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
     else:
 

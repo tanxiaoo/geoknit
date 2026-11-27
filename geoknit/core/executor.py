@@ -13,7 +13,7 @@ from typing import Any
 
 from geoknit.core import types
 from geoknit.core.component import PRINT_PORT, run_component
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, VALUE_PARAMS, Graph, Node, param_output
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 
 
@@ -167,8 +167,8 @@ class InProcessExecutor:
 
     @staticmethod
     def _run_param(node: Node, inputs: dict[str, Any]) -> dict[str, Any]:
-        if node.component in (PARAM_TEXT, PARAM_SLIDER):
-            return {"value": node.value}
+        if node.component in VALUE_PARAMS:
+            return {"value": param_output(node)}
         if node.component == PARAM_PANEL:
             return {"data": inputs.get("data")}
         if node.component == PARAM_MAP:

@@ -6,7 +6,7 @@ import { needsRun } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
 
-function formatNumber(n: number): string {
+export function formatNumber(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Number(n.toPrecision(6)));
 }
 
@@ -17,6 +17,7 @@ export function SliderNode({ id, data, selected }: NodeProps<GkNode>) {
   const max = view.max ?? 100;
   const step = view.step ?? 1;
   const value = typeof view.value === "number" ? view.value : min;
+  const integer = view.integer ?? false;
   const [local, setLocal] = useState(value);
   const [open, setOpen] = useState(false);
   const state = view.state ?? "never_run";
@@ -32,6 +33,7 @@ export function SliderNode({ id, data, selected }: NodeProps<GkNode>) {
       className={`gk-node gk-slider gk-state-${state}${selected ? " gk-selected" : ""}`}
       data-testid={`node-${id}`}
       data-state={state}
+      data-integer={integer}
     >
       {needsRun(state) && <span className="gk-dot" />}
       <input
@@ -63,6 +65,7 @@ export function SliderNode({ id, data, selected }: NodeProps<GkNode>) {
           max={max}
           step={step}
           value={local}
+          integer={integer}
           onCancel={() => setOpen(false)}
           onOk={(v) => {
             setOpen(false);
@@ -79,11 +82,13 @@ interface WindowProps {
   max: number;
   step: number;
   value: number;
-  onOk: (v: { min: number; max: number; step: number; value: number }) => void;
+  integer: boolean;
+  onOk: (v: { min: number; max: number; step: number; value: number; integer: boolean }) => void;
   onCancel: () => void;
 }
 
-/** The small min / max / step / value window of a Number Slider (SPEC 8). */
+/** The small min / max / step / value window of a Number Slider (SPEC 8), with integer mode
+ * (change 01, section 2). */
 export function SliderWindow(props: WindowProps) {
   const [fields, setFields] = useState({
     min: String(props.min),
@@ -91,6 +96,7 @@ export function SliderWindow(props: WindowProps) {
     step: String(props.step),
     value: String(props.value),
   });
+  const [integer, setInteger] = useState(props.integer);
   const names = ["min", "max", "step", "value"] as const;
   const label = {
     min: strings.sliderMin,
@@ -104,6 +110,7 @@ export function SliderWindow(props: WindowProps) {
       max: Number(fields.max),
       step: Number(fields.step),
       value: Number(fields.value),
+      integer,
     });
   return (
     <form
@@ -131,6 +138,15 @@ export function SliderWindow(props: WindowProps) {
           />
         </label>
       ))}
+      <label className="gk-integer" title={strings.integerHint}>
+        <span>{strings.integer}</span>
+        <input
+          type="checkbox"
+          checked={integer}
+          onChange={(e) => setInteger(e.currentTarget.checked)}
+          data-testid="slider-integer"
+        />
+      </label>
       <div className="gk-popover-buttons">
         <button type="button" onClick={props.onCancel}>
           {strings.cancel}

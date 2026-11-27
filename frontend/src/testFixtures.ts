@@ -32,7 +32,12 @@ function param(
 
 export const PARAM_ENTRIES: ComponentEntry[] = [
   param("param/text", "Text", "Input", [], [port("value", "Text", { like: null })]),
+  param("param/number", "Number", "Input", [], [port("value", "Number", { like: null })]),
   param("param/slider", "Number Slider", "Input", [], [port("value", "Number", { like: null })]),
+  param("param/toggle", "Boolean Toggle", "Input", [], [port("value", "Boolean", { like: null })]),
+  param("param/value_list", "Value List", "Input", [], [port("value", "Number", { like: null })]),
+  param("param/color", "Color Swatch", "Style", [], [port("value", "Color", { like: null })]),
+  param("param/colormap", "Colormap", "Style", [], [port("value", "Colormap", { like: null })]),
   param("param/panel", "Panel", "Inspect", [port("data", "Any")], [port("data", "Any", { like: "data" })]),
   param("param/map", "Map Viewer", "Map", [port("layers", "Any", { access: "list" })], []),
 ];

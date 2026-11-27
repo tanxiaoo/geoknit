@@ -6,6 +6,7 @@ import type {
   FileNode,
   InspectResult,
   MapView,
+  NamedRamps,
   RasterStats,
   GraphView,
   NodeJson,
@@ -50,6 +51,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   components: () => request<Library>("GET", "/api/components"),
+  colormaps: () => request<NamedRamps>("GET", "/api/colormaps"),
   graph: () => request<GraphView>("GET", "/api/graph"),
   status: () => request<Status>("GET", "/api/status"),
   files: () => request<FileNode>("GET", "/api/files"),

@@ -25,16 +25,22 @@ from typing import Any
 
 from geoknit.components.layout import library
 from geoknit.components.registry import Registry, default_registry
+from geoknit.core import types
 from geoknit.core.cache import CacheMiss, DiskCache
 from geoknit.core.component import ComponentParseError, parse_component
 from geoknit.core.executor import Event, RunReport
 from geoknit.core.export import ExportError, export_script
 from geoknit.core.graph import (
     INLINE,
+    PARAM_COLOR,
+    PARAM_COLORMAP,
     PARAM_MAP,
+    PARAM_NUMBER,
     PARAM_PANEL,
     PARAM_SLIDER,
     PARAM_TEXT,
+    PARAM_TOGGLE,
+    PARAM_VALUE_LIST,
     Graph,
     GraphError,
     Node,
@@ -373,7 +379,16 @@ class Session:
         if node.component == PARAM_TEXT:
             view["value"] = node.value
         elif node.component == PARAM_SLIDER:
-            view.update(min=node.min, max=node.max, step=node.step, value=node.value)
+            view.update(
+                min=node.min, max=node.max, step=node.step, value=node.value, integer=node.integer
+            )
+        elif node.component == PARAM_NUMBER:
+            view.update(value=node.value, integer=node.integer)
+        elif node.component == PARAM_VALUE_LIST:
+            # The output type follows the options: ``outputs[0].type`` (change 01, 8).
+            view.update(options=[dict(o) for o in node.options or []], value=node.value)
+        elif node.component in (PARAM_TOGGLE, PARAM_COLOR, PARAM_COLORMAP):
+            view["value"] = types.to_json_value(node.value)
         elif node.component == PARAM_PANEL:
             view["size"] = node.extra.get("size")
         elif node.component == PARAM_MAP:
@@ -492,16 +507,7 @@ class Session:
             )
         for name, value in (changes.get("settings") or {}).items():
             g.set_setting(node_id, name, value)
-        slider = {k: changes[k] for k in ("min", "max", "step") if k in changes}
-        if slider:
-            if "value" in changes:
-                slider["value"] = changes["value"]
-            g.set_slider(node_id, **slider)
-        elif "value" in changes:
-            if node.component == PARAM_SLIDER:
-                g.set_slider(node_id, value=changes["value"])
-            else:
-                g.set_value(node_id, changes["value"])
+        self._apply_value_patch(node, changes)
         if "position" in changes:
             g.set_position(node_id, changes["position"])
         if "display" in changes:
@@ -525,6 +531,27 @@ class Session:
                 raise BadRequest(exc.message) from None
             if not node.extra["map"]:
                 del node.extra["map"]
+
+    def _apply_value_patch(self, node: Node, changes: dict[str, Any]) -> None:
+        """``min``/``max``/``step``, ``integer``, ``options`` and ``value`` of a Params node."""
+        node_id, g = node.id, self.graph
+        limits = {k: changes[k] for k in ("min", "max", "step") if k in changes}
+        integer = changes.get("integer")
+        value = changes.get("value")
+        if "integer" in changes and node.component not in (PARAM_SLIDER, PARAM_NUMBER):
+            raise BadRequest(f"{node.title} has no integer mode")
+        if "options" in changes and node.component != PARAM_VALUE_LIST:
+            raise BadRequest(f"{node.title} has no options")
+        if node.component == PARAM_SLIDER or limits:
+            if limits or "value" in changes or "integer" in changes:
+                g.set_slider(node_id, **limits, value=value, integer=integer)
+        elif node.component == PARAM_NUMBER:
+            if "value" in changes or "integer" in changes:
+                g.set_number(node_id, value=value, integer=integer)
+        elif "options" in changes:
+            g.set_options(node_id, changes["options"], value=value)
+        elif "value" in changes:
+            g.set_value(node_id, value)
 
     def remove_node(self, node_id: str) -> None:
         with self.lock:

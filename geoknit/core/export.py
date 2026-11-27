@@ -23,7 +23,21 @@ from typing import Any
 from geoknit import __version__
 from geoknit.core import types
 from geoknit.core.component import INPUTS_NAME, PRINT_PORT, ComponentSpec
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import (
+    PARAM_COLOR,
+    PARAM_COLORMAP,
+    PARAM_MAP,
+    PARAM_NUMBER,
+    PARAM_PANEL,
+    PARAM_SLIDER,
+    PARAM_TEXT,
+    PARAM_TOGGLE,
+    PARAM_VALUE_LIST,
+    VALUE_PARAMS,
+    Graph,
+    Node,
+    param_output,
+)
 from geoknit.core.workflow import relativize
 
 INDENT = "    "
@@ -294,18 +308,35 @@ class _Exporter:
         wires = [w for w in self.graph.wires if w.src == node.id]
         suffix = slug(wires[0].dst_port).upper() if wires else "VALUE"
         name = f"{self.names[node.id].upper()}_{suffix}"
-        value = node.value
+        value = param_output(node)
         if node.component == PARAM_TEXT and isinstance(value, str):
             value = relativize(value, self.base_dir)
-        if node.component == PARAM_SLIDER:
-            note = f"Number Slider ({_num(node.min)}..{_num(node.max)}, step {_num(node.step)})"
-        else:
-            note = "Text"
+        note = self.constant_note(node)
         targets = ", ".join(f"{w.dst} {self.graph.nodes[w.dst].title}.{w.dst_port}" for w in wires)
         comment = f"# {node.id} {note}" + (f" → {targets}" if targets else "")
         self.exprs[(node.id, "value")] = name
         self.out_types[(node.id, "value")] = self.graph.output_types(node.id, "value")
         return f"{comment}\n{name} = {self.literal(value)}\n"
+
+    @staticmethod
+    def constant_note(node: Node) -> str:
+        """What the constant comes from, for its comment."""
+        integer = ", integer" if node.integer else ""
+        if node.component == PARAM_SLIDER:
+            limits = f"{_num(node.min)}..{_num(node.max)}, step {_num(node.step)}"
+            return f"Number Slider ({limits}{integer})"
+        if node.component == PARAM_NUMBER:
+            return f"Number{' (integer)' if node.integer else ''}"
+        if node.component == PARAM_VALUE_LIST:
+            options = ", ".join(f"{o['label']}={o['value']}" for o in node.options or [])
+            return f"Value List ({options})"
+        if node.component == PARAM_TOGGLE:
+            return "Boolean Toggle"
+        if node.component == PARAM_COLOR:
+            return "Color Swatch"
+        if node.component == PARAM_COLORMAP:
+            return "Colormap"
+        return "Text"
 
     def literal(self, value: Any) -> str:
         """Source for a constant; a Color or Colormap needs the vendored types."""
@@ -382,7 +413,7 @@ class _Exporter:
 
         for nid in self.order:
             node = self.graph.nodes[nid]
-            if node.component in (PARAM_TEXT, PARAM_SLIDER):
+            if node.component in VALUE_PARAMS:
                 constants.append(self.constant(node))
             elif node.component == PARAM_PANEL:
                 wires = self.graph.wires_into(nid, "data")

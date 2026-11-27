@@ -124,14 +124,14 @@ touches.
 
 ## Step 6: New Params nodes and integer mode
 
-- [ ] `param/number`, `param/toggle`, `param/value_list`, `param/color`,
+- [x] `param/number`, `param/toggle`, `param/value_list`, `param/color`,
       `param/colormap` (the colormap editor window comes in change 03; until
       then the node offers named ramps only); each through every place listed
       in SPEC section 8
-- [ ] Value List output type computed from its options, with the wire
+- [x] Value List output type computed from its options, with the wire
       re-check from step 2
-- [ ] `integer` on Number and Number Slider (`PATCH` field too)
-- [ ] Save/load, undo, autosave, export for each
+- [x] `integer` on Number and Number Slider (`PATCH` field too)
+- [x] Save/load, undo, autosave, export for each
 
 **Done when:**
 - pytest: save → load → save is byte-identical for a workflow with one of

@@ -8,6 +8,7 @@ one place.
 from __future__ import annotations
 
 import contextlib
+import math
 import re
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
@@ -24,15 +25,34 @@ from geoknit.core.component import (
 from geoknit.core.settings_edit import set_ports, set_setting
 
 PARAM_TEXT = "param/text"
+PARAM_NUMBER = "param/number"
 PARAM_SLIDER = "param/slider"
+PARAM_TOGGLE = "param/toggle"
+PARAM_VALUE_LIST = "param/value_list"
+PARAM_COLOR = "param/color"
+PARAM_COLORMAP = "param/colormap"
 PARAM_PANEL = "param/panel"
 PARAM_MAP = "param/map"
-PARAMS = (PARAM_TEXT, PARAM_SLIDER, PARAM_PANEL, PARAM_MAP)
+PARAMS = (
+    PARAM_TEXT, PARAM_NUMBER, PARAM_SLIDER, PARAM_TOGGLE, PARAM_VALUE_LIST,
+    PARAM_COLOR, PARAM_COLORMAP, PARAM_PANEL, PARAM_MAP,
+)  # fmt: skip
+VALUE_PARAMS = (
+    PARAM_TEXT, PARAM_NUMBER, PARAM_SLIDER, PARAM_TOGGLE, PARAM_VALUE_LIST,
+    PARAM_COLOR, PARAM_COLORMAP,
+)  # fmt: skip
+"""Params nodes whose ``value`` output the server provides (no worker run, SPEC 6)."""
 INLINE = "inline"
 
 _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
     PARAM_TEXT: ({}, {"value": Port("value", types.TEXT)}),
+    PARAM_NUMBER: ({}, {"value": Port("value", types.NUMBER)}),
     PARAM_SLIDER: ({}, {"value": Port("value", types.NUMBER)}),
+    PARAM_TOGGLE: ({}, {"value": Port("value", types.BOOLEAN)}),
+    # The default options are numbers; a node's own type follows its options.
+    PARAM_VALUE_LIST: ({}, {"value": Port("value", types.NUMBER)}),
+    PARAM_COLOR: ({}, {"value": Port("value", types.COLOR)}),
+    PARAM_COLORMAP: ({}, {"value": Port("value", types.COLORMAP)}),
     # The pass-through takes the type of what is wired in; unwired it is ``Any`` (SPEC 4).
     PARAM_PANEL: (
         {"data": Port("data", types.ANY)},
@@ -41,17 +61,151 @@ _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
     PARAM_MAP: ({"layers": Port("layers", types.ANY, access="list")}, {}),
 }
 
+_VALUE_LIST_PORTS: dict[str, dict[str, Port]] = {
+    t: {"value": Port("value", t)} for t in (types.NUMBER, types.TEXT)
+}
+
 PARAM_TITLES: dict[str, str] = {
     PARAM_TEXT: "Text",
+    PARAM_NUMBER: "Number",
     PARAM_SLIDER: "Number Slider",
+    PARAM_TOGGLE: "Boolean Toggle",
+    PARAM_VALUE_LIST: "Value List",
+    PARAM_COLOR: "Color Swatch",
+    PARAM_COLORMAP: "Colormap",
     PARAM_PANEL: "Panel",
     PARAM_MAP: "Map Viewer",
 }
 
 
 def param_ports(kind: str) -> tuple[dict[str, Port], dict[str, Port]]:
-    """The fixed (inputs, outputs) of a Params node kind."""
+    """The fixed (inputs, outputs) of a Params node kind (a Value List's default)."""
     return _PARAM_PORTS[kind]
+
+
+DEFAULT_OPTIONS: tuple[tuple[str, int], ...] = (("One", 1), ("Two", 2), ("Three", 3))
+"""Options of a new Value List."""
+
+DEFAULT_COLOR = "#0B7A7C"
+DEFAULT_COLORMAP = "viridis"
+
+
+def default_options() -> list[dict[str, Any]]:
+    return [{"label": label, "value": value} for label, value in DEFAULT_OPTIONS]
+
+
+def round_half_up(value: float) -> int:
+    """``2.5`` → ``3``, ``-2.5`` → ``-2``: the rounding of the integer mode (as ``Math.round``)."""
+    return math.floor(value + 0.5)
+
+
+def _is_number(value: Any) -> bool:
+    return types.type_of(value) == types.NUMBER and math.isfinite(value)
+
+
+def check_options(options: Any) -> list[dict[str, Any]]:
+    """A Value List's options as ``[{label, value}]``, or a ``GraphError`` saying why not.
+
+    Labels are text; values are numbers or text, each listed once.
+    """
+    if not isinstance(options, list | tuple) or not options:
+        raise GraphError("a Value List needs at least one option")
+    out: list[dict[str, Any]] = []
+    for i, option in enumerate(options):
+        if not isinstance(option, dict) or set(option) != {"label", "value"}:
+            raise GraphError(f"option {i}: an option is {{label, value}}")
+        label, value = option["label"], option["value"]
+        if not isinstance(label, str):
+            raise GraphError(f"option {i}: the label must be text")
+        if not (_is_number(value) or isinstance(value, str)):
+            raise GraphError(f"option {i}: the value must be a number or text")
+        if any(_same_value(o["value"], value) for o in out):
+            raise GraphError(f"option {i}: the value {value!r} is listed twice")
+        out.append({"label": label, "value": value})
+    return out
+
+
+def _same_value(a: Any, b: Any) -> bool:
+    """Equal option values of the same kind (``1`` equals ``1.0`` but not ``"1"``)."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return False
+    return isinstance(a, str) == isinstance(b, str) and a == b
+
+
+def value_list_type(options: list[dict[str, Any]]) -> str:
+    """Number when every option value is a number, otherwise Text (change 01, 8)."""
+    numeric = all(_is_number(o["value"]) for o in options)
+    return types.NUMBER if numeric else types.TEXT
+
+
+def _option_value(options: list[dict[str, Any]], value: Any) -> Any:
+    """The option value equal to ``value`` (same kind: ``1`` is not ``"1"``)."""
+    for o in options:
+        if _same_value(o["value"], value):
+            return o["value"]
+    raise GraphError(f"{value!r} is not one of the Value List's options")
+
+
+_NEW_VALUE_PARAMS = (PARAM_NUMBER, PARAM_TOGGLE, PARAM_VALUE_LIST, PARAM_COLOR, PARAM_COLORMAP)
+"""The Params kinds of change 01 (section 8), set through ``param_value``."""
+
+
+def set_param_defaults(node: Node) -> None:
+    """The value (and options) of a new Number, Toggle, Value List, Color Swatch or Colormap."""
+    kind = node.component
+    if kind == PARAM_NUMBER:
+        node.value = 0
+    elif kind == PARAM_TOGGLE:
+        node.value = False
+    elif kind == PARAM_VALUE_LIST:
+        node.options = default_options()
+        node.value = node.options[0]["value"]
+    elif kind == PARAM_COLOR:
+        node.value = types.Color(DEFAULT_COLOR)
+    elif kind == PARAM_COLORMAP:
+        node.value = types.Colormap.named(DEFAULT_COLORMAP)
+
+
+def param_value(node: Node, value: Any) -> Any:
+    """``value`` checked and normalised for a Number, Boolean Toggle, Color Swatch,
+    Colormap or Value List node (a ``GraphError`` says why it does not fit)."""
+    kind = node.component
+    if kind == PARAM_NUMBER:
+        if not _is_number(value):
+            raise GraphError("a Number value must be a number")
+        return round_half_up(value) if node.integer else value
+    if kind == PARAM_TOGGLE:
+        if not isinstance(value, bool):
+            raise GraphError("a Boolean Toggle value must be true or false")
+        return value
+    if kind == PARAM_COLOR:
+        if isinstance(value, types.Color):
+            return value
+        try:
+            return types.Color.parse(value)
+        except ValueError as exc:
+            raise GraphError(str(exc)) from None
+    if kind == PARAM_COLORMAP:
+        if isinstance(value, types.Colormap):
+            return value
+        try:
+            return types.Colormap.from_json(value)
+        except (ValueError, TypeError) as exc:
+            raise GraphError(f"not a colormap: {exc}") from None
+    if kind == PARAM_VALUE_LIST:
+        return _option_value(node.options or [], value)
+    raise GraphError(f"{node.title} has no value")
+
+
+def param_output(node: Node) -> Any:
+    """The value a Params node's ``value`` output carries.
+
+    A Value List of type Text gives its number values as text (``str``, like a
+    Number → Text wire).
+    """
+    if node.component == PARAM_VALUE_LIST and node.outputs["value"].type == types.TEXT:
+        return node.value if isinstance(node.value, str) else str(node.value)
+    return node.value
 
 
 DISPLAYS = ("default", "text", "icon")
@@ -70,7 +224,7 @@ class Node:
 
     id: str
     component: str
-    """Library reference, ``inline``, or one of ``param/text|slider|panel|map``."""
+    """Library reference, ``inline``, or one of ``PARAMS`` (``param/text``, …)."""
     position: list[float] = field(default_factory=lambda: [0, 0])
     display: str = "default"
     source: str | None = None
@@ -80,9 +234,15 @@ class Node:
     library_source: str | None = None
     """Source of the library component this node came from, to detect edits."""
     value: Any = None
+    """A Params node's value: ``str``, number, ``bool``, ``Color`` or ``Colormap``
+    (a Value List: the chosen option's value)."""
     min: float | None = None
     max: float | None = None
     step: float | None = None
+    integer: bool = False
+    """Number and Number Slider: the value is an ``int`` (change 01, 2)."""
+    options: list[dict[str, Any]] | None = None
+    """Value List: ``[{label, value}]``."""
     extra: dict[str, Any] = field(default_factory=dict)
     """Unknown keys from the workflow file, written back unchanged."""
     spec: ComponentSpec | None = None
@@ -101,6 +261,8 @@ class Node:
 
     @property
     def outputs(self) -> dict[str, Port]:
+        if self.component == PARAM_VALUE_LIST:
+            return _VALUE_LIST_PORTS[value_list_type(self.options or default_options())]
         if self.is_param:
             return _PARAM_PORTS[self.component][1]
         return self.spec.outputs if self.spec else {}
@@ -196,6 +358,8 @@ class Graph:
             node.value = ""
         elif component == PARAM_SLIDER:
             node.min, node.max, node.step, node.value = 0, 100, 1, 50
+        elif component in _NEW_VALUE_PARAMS:
+            set_param_defaults(node)
         elif component in (PARAM_PANEL, PARAM_MAP):
             pass
         elif component == INLINE:
@@ -306,10 +470,52 @@ class Graph:
             assert node.min is not None and node.max is not None
             if not node.min <= value <= node.max:
                 raise GraphError(f"value {value} is outside {node.min}..{node.max}")
+            if node.integer:
+                value = round_half_up(value)
         else:
-            raise GraphError(f"{node.title} has no value")
+            value = param_value(node, value)
+        self._update_value(node, value)
+
+    def _update_value(self, node: Node, value: Any) -> None:
+        """Set a Params value; only a real change (``5`` → ``5.0`` is one) marks it."""
+        changed = value != node.value or type(value) is not type(node.value)
         node.value = value
-        self._changed(changed=[node_id])
+        if changed:
+            self._changed(changed=[node.id])
+
+    def set_number(
+        self, node_id: str, *, value: float | None = None, integer: bool | None = None
+    ) -> None:
+        """A Number node's value and integer mode (``None`` keeps it)."""
+        node = self.node(node_id)
+        if node.component != PARAM_NUMBER:
+            raise GraphError(f"{node.title} is not a Number")
+        if integer is not None:
+            node.integer = bool(integer)
+        self._update_value(node, param_value(node, node.value if value is None else value))
+
+    def set_options(self, node_id: str, options: list[dict[str, Any]], value: Any = None) -> None:
+        """A Value List's options and chosen value.
+
+        Without ``value`` the chosen value stays when it is still an option,
+        otherwise the first option is chosen. The output type follows the
+        options, so wires leaving the node are re-checked (SPEC 4).
+        """
+        node = self.node(node_id)
+        if node.component != PARAM_VALUE_LIST:
+            raise GraphError(f"{node.title} has no options")
+        checked = check_options(options)
+        if value is None:
+            kept = [o["value"] for o in checked if _same_value(o["value"], node.value)]
+            value = kept[0] if kept else checked[0]["value"]
+        else:
+            value = _option_value(checked, value)
+        before = (node.options, param_output(node))
+        node.options = checked
+        node.value = value
+        if (node.options, param_output(node)) != before:
+            self._changed(changed=[node_id])
+        self._recheck()
 
     def set_slider(
         self,
@@ -319,6 +525,7 @@ class Graph:
         max: float | None = None,
         step: float | None = None,
         value: float | None = None,
+        integer: bool | None = None,
     ) -> None:
         node = self.node(node_id)
         if node.component != PARAM_SLIDER:
@@ -327,16 +534,21 @@ class Graph:
         hi = node.max if max is None else max
         st = node.step if step is None else step
         val = node.value if value is None else value
+        whole = node.integer if integer is None else bool(integer)
         assert lo is not None and hi is not None and st is not None
+        for v in (lo, hi, st, val):
+            if not _is_number(v):
+                raise GraphError("slider min, max, step and value must be numbers")
+        if whole:  # integer mode: whole numbers, step at least 1 (change 01, 2)
+            lo, hi, val = round_half_up(lo), round_half_up(hi), round_half_up(val)
+            st = round_half_up(st) if st >= 1 else 1
         if not lo < hi:
             raise GraphError("slider min must be below max")
         if st <= 0:
             raise GraphError("slider step must be positive")
         val = _clamp(val, lo, hi)
-        changed = val != node.value
-        node.min, node.max, node.step, node.value = lo, hi, st, val
-        if changed:
-            self._changed(changed=[node_id])
+        node.min, node.max, node.step, node.integer = lo, hi, st, whole
+        self._update_value(node, val)
 
     # ── edits that do not change results ──
     def set_position(self, node_id: str, position: Iterable[float]) -> None:

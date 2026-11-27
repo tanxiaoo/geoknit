@@ -14,18 +14,27 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from geoknit import __version__
+from geoknit.core import types
 from geoknit.core.component import ComponentLibrary, ComponentParseError, find_blocks
 from geoknit.core.graph import (
     INLINE,
+    PARAM_COLOR,
+    PARAM_COLORMAP,
     PARAM_MAP,
+    PARAM_NUMBER,
     PARAM_PANEL,
     PARAM_SLIDER,
     PARAM_TEXT,
+    PARAM_TOGGLE,
+    PARAM_VALUE_LIST,
     PARAMS,
     Graph,
     GraphError,
     Node,
     Wire,
+    check_options,
+    param_value,
+    set_param_defaults,
 )
 from geoknit.core.settings_edit import set_settings
 
@@ -37,7 +46,7 @@ MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {}
 
 _NODE_KEYS = {
     "id", "component", "version", "settings", "source", "based_on", "position", "display",
-    "value", "min", "max", "step",
+    "value", "min", "max", "step", "integer", "options",
 }  # fmt: skip
 
 
@@ -112,6 +121,17 @@ def node_to_dict(node: Node, base_dir: Path | None = None) -> dict[str, Any]:
         d["value"] = relativize(node.value, base_dir)
     elif node.component == PARAM_SLIDER:
         d.update(min=node.min, max=node.max, step=node.step, value=node.value)
+        if node.integer:  # stored only when true, so older files keep their bytes
+            d["integer"] = True
+    elif node.component == PARAM_NUMBER:
+        d["value"] = node.value
+        if node.integer:
+            d["integer"] = True
+    elif node.component == PARAM_VALUE_LIST:
+        d["options"] = [dict(o) for o in node.options or []]
+        d["value"] = node.value
+    elif node.component in (PARAM_TOGGLE, PARAM_COLOR, PARAM_COLORMAP):
+        d["value"] = types.to_json_value(node.value)
     elif node.component in (PARAM_PANEL, PARAM_MAP):
         pass  # layout and map styles live in ``extra``
     elif node.component == INLINE or is_modified(node) or node.parse_error is not None:
@@ -195,6 +215,9 @@ def node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None = None)
         elif node.component == PARAM_SLIDER:
             node.min, node.max = raw.get("min", 0), raw.get("max", 100)
             node.step, node.value = raw.get("step", 1), raw.get("value", 50)
+            node.integer = raw.get("integer") is True
+        elif node.component not in (PARAM_PANEL, PARAM_MAP):
+            _param_from_dict(node, raw)
         return node
 
     if node.component == INLINE:
@@ -225,6 +248,21 @@ def node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None = None)
     if wanted:
         node.set_source(set_settings(entry.source, wanted))
     return node
+
+
+def _param_from_dict(node: Node, raw: dict[str, Any]) -> None:
+    """Number, Boolean Toggle, Value List, Color Swatch and Colormap: checked values."""
+    set_param_defaults(node)
+    try:
+        if node.component == PARAM_NUMBER:
+            node.integer = raw.get("integer") is True
+        if node.component == PARAM_VALUE_LIST and "options" in raw:
+            node.options = check_options(raw["options"])
+            node.value = node.options[0]["value"]
+        if "value" in raw:
+            node.value = param_value(node, raw["value"])
+    except GraphError as exc:
+        raise WorkflowError(f'node "{node.id}": {exc}') from None
 
 
 def _based_on_source(based_on: str | None, library: ComponentLibrary | None) -> str | None:
@@ -309,7 +347,17 @@ def _update_node(graph: Graph, old: Node, new: Node) -> None:
     if old.component == new.component == PARAM_TEXT:
         graph.set_value(old.id, new.value)
     elif old.component == new.component == PARAM_SLIDER:
-        graph.set_slider(old.id, min=new.min, max=new.max, step=new.step, value=new.value)
+        graph.set_slider(
+            old.id, min=new.min, max=new.max, step=new.step, value=new.value, integer=new.integer
+        )
+    elif old.component == new.component == PARAM_NUMBER:
+        graph.set_number(old.id, value=new.value, integer=new.integer)
+    elif old.component == new.component == PARAM_VALUE_LIST:
+        graph.set_options(old.id, new.options or [], value=new.value)
+    elif old.component == new.component and old.component in (
+        PARAM_TOGGLE, PARAM_COLOR, PARAM_COLORMAP,
+    ):  # fmt: skip
+        graph.set_value(old.id, new.value)
     elif old.component == new.component and old.component in (PARAM_PANEL, PARAM_MAP):
         pass  # no content beyond layout and map styles (``extra``)
     elif old.component == new.component and not old.is_param:

@@ -514,6 +514,106 @@ Slider, value sent to the worker with `put_value`, and exported as constants
   section comes before the values section instead of after it (step 1).
   Boolean → Text wires become `str(...)`, like Number → Text.
 
+Details settled while building step 6 (backend):
+
+- **Ribbon.** Params › Input: Text, Number, Number Slider, Boolean Toggle,
+  Value List; Params › Style: Color Swatch, Colormap (change 04's group
+  name; change 03 keeps them there); then Inspect and Map. Change 04's
+  Geometry group goes between Input and Style.
+- **New nodes start as** Number `0`; Toggle `false`; Value List options
+  One = 1, Two = 2, Three = 3 with `1` chosen; Color Swatch `#0B7A7C`;
+  Colormap `viridis` (named, 2–98 % stretch).
+- **Values in the graph.** `Node.value` holds the Python value (`Color`,
+  `Colormap`, `bool`, number, text); the workflow file, the cache key and the
+  API use the JSON form (`to_json()`): Color `"#RRGGBB[AA]"`, Colormap its
+  JSON object. `PATCH value` of a Color Swatch takes any `Color.parse` form
+  (`#0b7a7c`, `11,122,124`); of a Colormap any valid Colormap JSON (the
+  node offers named ramps until change 03, but the server already stores and
+  checks the full form). Errors (`400`): `a Number value must be a number`
+  (a `bool` is not one), `a Boolean Toggle value must be true or false`, the
+  Color parse message, `not a colormap: …`, `'x' is not one of the Value
+  List's options`. A file with such a value is refused on load, naming the
+  node.
+- **Value List.** `options` is a non-empty list of `{label, value}` (exactly
+  these keys); `label` is text, `value` a number (not a Boolean) or text,
+  each value listed once (`1` and `1.0` are the same value, `1` and `"1"`
+  are not). The output is Number when every value is a number, else Text;
+  in a Text list a number option's value is given as text (`str`, as a
+  Number → Text wire does), and the cache key and export constant use that
+  text. Its value names a file like a Text node's (fingerprinted for the
+  cache key). Changing the options keeps the chosen value when it is still
+  an option, otherwise chooses the first; `PATCH` may send `options` and
+  `value` together. `Graph.set_options` re-checks wires graph-wide, so a
+  wire into a Number input is removed when the list becomes Text (and the
+  receiving node goes out of date).
+- **Integer mode** rounds half up (`2.5` → `3`, `-2.5` → `-2`, like the
+  frontend's `Math.round`). On a Slider it rounds `min`, `max` and `value`
+  and makes `step` a whole number of at least 1; a range that collapses
+  (`0.2..0.4`) is refused (`slider min must be below max`). Turning it off
+  keeps the rounded values. `PATCH integer` on any other node: `Text has no
+  integer mode` (`400`); `options` on a node other than a Value List:
+  `Text has no options`. A Slider whose value only changes type
+  (`5` → `5.0`) counts as changed, since its cache key does.
+- **Cache keys** keep their recipe and name the output type:
+  `{"format", <kind>: <JSON value>, "files"}` with kind `text`, `number`,
+  `boolean`, `color` or `colormap`. Text and Slider keys are unchanged; a
+  Number and a Slider with the same value share a key, a Toggle `true` and a
+  Number `1` do not.
+- **Export.** Constants are named as before; the comment says where they
+  come from: `# n3 Number (integer)`, `# n4 Boolean Toggle → n5 Flip.flag`,
+  `# n6 Value List (One=1, Two=2, Three=3)`, `# n7 Color Swatch`,
+  `# n8 Colormap`, and a Slider in integer mode `(0..10, step 1, integer)`.
+- **API** (`GET /api/graph` nodes, `POST /api/nodes` and `PATCH` replies):
+  Number `{value, integer}`; Number Slider gains `integer`; Boolean Toggle
+  `{value: bool}`; Value List `{options: [{label, value}], value}`, with its
+  current type in `outputs[0].type` / `resolved_type` (`Number` or `Text`);
+  Color Swatch `{value: "#RRGGBB[AA]"}`; Colormap `{value: <Colormap JSON>}`.
+  `PATCH /api/nodes/{id}` takes `integer` and `options` next to `value`.
+  `GET /api/components` lists the five nodes (`origin: "param"`); the Value
+  List entry shows the default `Number` output.
+
+Details settled while building step 6 (frontend):
+
+- **Named ramps for the canvas.** `GET /api/colormaps` (new, tag `library`)
+  answers `{name: ["#RRGGBB", …11]}` straight from `NAMED_RAMPS` in
+  `core/types.py`, in its order. The frontend loads it once, when the first
+  Colormap node is drawn (`store.loadRamps`), and draws a named ramp's
+  gradient from those 11 stops (a custom colormap from its own `stops`;
+  `reverse` flips them). One source of truth for the stops; the Map Viewer
+  keeps drawing tiles and legends from rio-tiler's tables
+  (`GET /api/map/{id}` `colormaps`), which the step 1 test keeps within ±1.
+  SPEC 9 gains the row when this SPEC is merged.
+- **Number** edits inline like Text (double-click, Enter or blur sends,
+  Escape cancels). Text that is not a number (`abc`) is not sent; a toast
+  says `"abc" is not a number`. While editing, a "whole numbers" box next
+  to the field switches integer mode at once (its own undo step).
+- **Number Slider** integer mode is a "whole numbers" box in its min / max /
+  step / value window; OK sends it with the limits in one `PATCH`.
+- **Boolean Toggle**: the switch and its `True` / `False` label are one
+  button; a click sends `PATCH value: !value` (one undo step).
+- **Value List**: the dropdown on the node lists the labels and sends the
+  chosen option's `value`. Double-click on the node (outside the dropdown)
+  opens a small options window (label and value per row, add, remove, OK /
+  Cancel), like the Slider's, rather than the component window (Params
+  nodes have no Settings / Code tabs). OK sends `options` only, so the
+  server keeps the chosen value when it is still an option. A value typed as
+  a number (`3`, `-0.5`, `1e3`) is a number, anything else text; a row whose
+  value text was not touched keeps its value as it was (so text `"1"` stays
+  text). A blank label takes the value's text. The port colour follows the
+  server's `outputs[0].type`.
+- **Color Swatch**: double-click opens a window with `<input type=color>`
+  and a hex field. The picker has no alpha, so picking keeps the field's
+  `AA`; the field also takes `r,g,b[,a]`, checked by the server.
+- **Colormap**: a gradient strip (class chips for a classes colormap) with
+  the ramp's name (`custom` for own stops, `N classes`). Double-click lists
+  the named ramps with a "Reversed" box; picking one sends
+  `{kind: continuous, name, min, max, reverse}`, keeping a continuous
+  colormap's `min` / `max`. A classes or custom colormap made through the API
+  is drawn but can only be replaced by a named ramp until change 03.
+- **Settings tab** shows a wired Params value as `wired: Boolean Toggle =
+  True`, `wired: Value List = One` (the option's label), `wired: Colormap =
+  viridis`, `wired: Number = 3`, `wired: Color Swatch = #0B7A7C`.
+
 ## 9. Icons (SPEC 4 "Header", SPEC 8)
 
 `icon:` takes one of:

@@ -13,7 +13,7 @@ import { clipOf, initialState, portSummary, reduceEvent, Store, store } from "./
 import { strings } from "./strings";
 import { canConnect, connectionError, portTypes } from "./types";
 import { ApiError, type Api } from "./api";
-import { PARAM_ENTRIES } from "./testFixtures";
+import { PARAM_ENTRIES, paramEntry } from "./testFixtures";
 
 function node(id: string, extra: Partial<NodeView> = {}): NodeView {
   return {
@@ -163,7 +163,7 @@ describe("catalog", () => {
     };
     expect(fittingPort(rf, from)).toBe("n_trees");
     expect(fittingPort(rf, { ...from, types: ["Raster"] })).toBeNull();
-    const [text, slider, panel] = PARAM_ENTRIES;
+    const [text, slider, panel] = ["param/text", "param/slider", "param/panel"].map(paramEntry);
     expect(fittingPort(slider, { ...from, side: "in", types: ["Text"] })).toBe("value");
     expect(fittingPort(text, { ...from, side: "in", types: ["Number"] })).toBeNull();
     expect(fittingPort(panel, { ...from, types: ["Raster"] })).toBe("data");

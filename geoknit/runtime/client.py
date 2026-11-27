@@ -19,7 +19,7 @@ from typing import Any
 from geoknit.core import types
 from geoknit.core.cache import DEFAULT_LIMIT, GraphKeys, compute_keys
 from geoknit.core.executor import Event, EventFn, RunReport
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, VALUE_PARAMS, Graph, Node, param_output
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 from geoknit.runtime import protocol as p
 from geoknit.runtime.worker import worker_main
@@ -377,8 +377,8 @@ class WorkerExecutor:
 
     def _finish_param(self, node: Node, keys: GraphKeys, report: RunReport) -> None:
         nid = node.id
-        if node.component in (PARAM_TEXT, PARAM_SLIDER):
-            summary = types.describe(node.value)
+        if node.component in VALUE_PARAMS:
+            summary = types.describe(param_output(node))
             self.summaries[nid] = {"value": summary}
         elif node.component == PARAM_MAP:
             self.summaries[nid] = {}

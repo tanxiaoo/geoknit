@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from geoknit import __version__
 from geoknit.components.registry import Registry
+from geoknit.core import types
 from geoknit.core.cache import CacheMiss
 from geoknit.core.graph import GraphError
 from geoknit.core.trust import TrustStore
@@ -47,7 +48,10 @@ PLACEHOLDER = """<!doctype html>
 
 class NodeCreate(BaseModel):
     component: str = Field(
-        description="library reference, `inline`, or `param/text|slider|panel|map`"
+        description=(
+            "library reference, `inline`, or a Params node: `param/text|number|slider|toggle|"
+            "value_list|color|colormap|panel|map`"
+        )
     )
     position: list[float] = Field(default_factory=lambda: [0.0, 0.0])
     source: str | None = Field(default=None, description="full component file, for `inline`")
@@ -83,10 +87,23 @@ class NodePatch(BaseModel):
     )
     position: list[float] | None = None
     display: Literal["default", "text", "icon"] | None = None
-    value: Any = None
+    value: Any = Field(
+        default=None,
+        description=(
+            "Params value: text, number, true/false, a colour (`#RRGGBB[AA]` or `r,g,b[,a]`), "
+            "Colormap JSON, or a Value List option's value"
+        ),
+    )
     min: float | None = None
     max: float | None = None
     step: float | None = None
+    integer: bool | None = Field(
+        default=None, description="Number and Number Slider: whole numbers only"
+    )
+    options: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Value List: `[{label, value}]`; the output is Number when every value is one",
+    )
     size: list[float] | None = Field(default=None, description="Panel [width, height]")
     map: dict[str, Any] | None = Field(
         default=None,
@@ -222,6 +239,11 @@ def create_app(
         """The ribbon: every component and Params node with its tab and group, and the tabs."""
         return session.components()
 
+    @app.get("/api/colormaps", tags=["library"])
+    def colormaps() -> dict[str, list[str]]:
+        """The named ramps a Colormap can use: 11 stops each, low to high (``#RRGGBB``)."""
+        return {name: [f"#{c}" for c in ramp] for name, ramp in types.NAMED_RAMPS.items()}
+
     @app.get("/api/graph", tags=["graph"])
     def graph() -> dict[str, Any]:
         """The current workflow, with per-node state, ports and settings."""
@@ -243,7 +265,8 @@ def create_app(
 
     @app.patch("/api/nodes/{node_id}", tags=["graph"])
     def patch_node(node_id: str, body: NodePatch) -> dict[str, Any]:
-        """Change settings, source, position, display, value or slider limits."""
+        """Change settings, source, ports, position, display, a Params value, slider limits,
+        integer mode or Value List options."""
         changes = {k: getattr(body, k) for k in body.model_fields_set}
         if body.ports is not None:
             changes["ports"] = body.ports.model_dump(exclude_none=True)

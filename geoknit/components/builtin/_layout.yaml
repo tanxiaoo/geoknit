@@ -8,7 +8,9 @@
 # A component's `category:` and `group:` header must match its place here.
 
 Params:
-  Input: [param/text, param/slider]
+  Input: [param/text, param/number, param/slider, param/toggle, param/value_list]
+  # Change 04's Geometry group (builtin/params/*) goes here.
+  Style: [param/color, param/colormap]
   Inspect: [param/panel]
   # Moves to Display › Map in change 03.
   Map: [param/map]

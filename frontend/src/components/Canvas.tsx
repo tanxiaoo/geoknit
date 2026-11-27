@@ -24,13 +24,18 @@ import {
   PORT_COLOURS,
   portTypes as viewTypes,
 } from "../types";
+import { ColorNode } from "./nodes/ColorNode";
+import { ColormapNode } from "./nodes/ColormapNode";
 import { ComponentNode } from "./nodes/ComponentNode";
 import { nodeKind, PANEL_SIZE, type GkNode } from "./nodes/kinds";
 import { MapNode } from "./nodes/MapNode";
+import { NumberNode } from "./nodes/NumberNode";
 import { PanelNode } from "./nodes/PanelNode";
 import { DragContext, hideTip, portName, type DragFrom } from "./nodes/Port";
 import { SliderNode } from "./nodes/SliderNode";
 import { TextNode } from "./nodes/TextNode";
+import { ToggleNode } from "./nodes/ToggleNode";
+import { ValueListNode } from "./nodes/ValueListNode";
 import { Groups } from "./Groups";
 import { SearchPopup } from "./SearchPopup";
 import { TypedEdge, type GkEdge } from "./TypedEdge";
@@ -41,7 +46,12 @@ export const MIME_PATH = "application/x-geoknit-path";
 const nodeTypes = {
   component: ComponentNode,
   text: TextNode,
+  number: NumberNode,
   slider: SliderNode,
+  toggle: ToggleNode,
+  value_list: ValueListNode,
+  color: ColorNode,
+  colormap: ColormapNode,
   panel: PanelNode,
   map: MapNode,
 };
@@ -349,7 +359,8 @@ export function Canvas() {
           onConnectEnd={onConnectEnd}
           onBeforeDelete={onBeforeDelete}
           onNodeDoubleClick={(e, n) => {
-            // Text edits inline and the Slider opens its own window (SPEC 8)
+            // Text and Number edit inline; Slider, Value List, Color Swatch and Colormap
+            // open their own small window (SPEC 8, change 01 section 8)
             if (n.type === "map") {
               e.stopPropagation();
               store.openMap(n.id);

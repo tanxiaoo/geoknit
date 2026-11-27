@@ -19,6 +19,12 @@ function literal(value: unknown): string {
 
 const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 
+/** A typed number (`3`, `-0.5`, `1e3`), or null when the text is not one. */
+export function parseNumber(text: string): number | null {
+  const t = text.trim();
+  return NUMBER.test(t) ? Number(t) : null;
+}
+
 /**
  * Read a typed value. A setting that holds text stays text; otherwise
  * `None`, `True`/`False`, numbers and `[...]` lists are understood, and

@@ -10,11 +10,9 @@ import type {
 } from "../../apiTypes";
 import { store, useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
-import {
-  PARAM_SLIDER,
-  PARAM_TEXT,
-  PORT_COLOURS,
-} from "../../types";
+import type { ColormapJson } from "../../apiTypes";
+import { PARAM_COLORMAP, PARAM_SLIDER, PARAM_TEXT, PARAM_TOGGLE, PORT_COLOURS } from "../../types";
+import { colormapLabel } from "../nodes/ColormapNode";
 import { CodeEditor } from "./CodeEditor";
 import { defaultFor, errorLine, freshName, parseValue, valueText } from "./values";
 
@@ -203,9 +201,19 @@ export function wiredLabel(graph: GraphView, nodeId: string, port: string): stri
       if (!src) return strings.wiredFrom(w.from[0], w.from[1]);
       if (src.component === PARAM_TEXT) return strings.wiredText(String(src.value ?? ""));
       if (src.component === PARAM_SLIDER) return strings.wiredSlider(String(src.value ?? ""));
+      if (src.component.startsWith("param/") && !src.inputs.length)
+        return strings.wiredParam(src.title, paramValueText(src));
       return strings.wiredFrom(src.title, w.from[1]);
     })
     .join(" · ");
+}
+
+/** A Params node's value as the Settings tab names it (`True`, `#0B7A7C`, `viridis`, `One`). */
+function paramValueText(src: NodeView): string {
+  if (src.component === PARAM_TOGGLE) return src.value ? strings.toggleTrue : strings.toggleFalse;
+  if (src.component === PARAM_COLORMAP) return colormapLabel(src.value as ColormapJson);
+  const option = src.options?.find((o) => o.value === src.value);
+  return option ? option.label : String(src.value ?? "");
 }
 
 function toEdit(p: PortView): PortEdit {

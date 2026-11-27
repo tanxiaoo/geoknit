@@ -8,7 +8,10 @@ be keyed in topological order without running anything:
   sorted by name, wires in wire order), and a fingerprint of every file named
   by a text setting;
 - ``param/text``: its value plus the fingerprint of the file it names, if any;
-- ``param/slider``: its value;
+- ``param/slider`` and ``param/number``: its value;
+- ``param/toggle``, ``param/color``, ``param/colormap``: its value (JSON form);
+- ``param/value_list``: the value it outputs (text when its type is Text, then
+  also the fingerprint of the file it names, as for ``param/text``);
 - ``param/panel``: no key of its own; its ``data`` output reuses the key of the
   wire feeding it;
 - ``param/map``: no key and no outputs (the Map Viewer reads its inputs' entries).
@@ -30,7 +33,16 @@ from pathlib import Path
 from typing import Any
 
 from geoknit.core import types
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import (
+    PARAM_MAP,
+    PARAM_PANEL,
+    PARAM_TEXT,
+    PARAM_VALUE_LIST,
+    VALUE_PARAMS,
+    Graph,
+    Node,
+    param_output,
+)
 from geoknit.core.types import RASTER_CHUNKS
 
 CACHE_FORMAT = 1
@@ -90,9 +102,9 @@ def node_files(node: Node, base_dir: Path | None, graph: Graph | None = None) ->
     the write itself would otherwise change the key on every Run.
     """
     texts: list[str] = []
-    if node.component == PARAM_TEXT:
+    if node.component in (PARAM_TEXT, PARAM_VALUE_LIST):
         if graph is None or not _feeds_only_written_files(graph, node.id):
-            texts = _strings(node.value)
+            texts = _strings(param_output(node))  # a Value List of numbers names no file
     elif node.spec is not None and not node.is_param:
         for s in node.spec.settings.values():
             port = node.spec.inputs.get(s.name)
@@ -113,7 +125,7 @@ class GraphKeys:
     inputs: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     """Upstream port keys feeding each input, in wire order."""
     values: dict[str, Any] = field(default_factory=dict)
-    """Port key → value for Text, Slider and empty Panel outputs."""
+    """Port key → value for the Params values (``VALUE_PARAMS``) and empty Panel outputs."""
 
 
 def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
@@ -142,17 +154,19 @@ def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
             keys.ports[nid] = {}
             continue
 
-        if node.component in (PARAM_TEXT, PARAM_SLIDER):
-            kind = "text" if node.component == PARAM_TEXT else "number"
+        if node.component in VALUE_PARAMS:
+            # ``text``, ``number``, ``boolean``, ``color`` or ``colormap``: the output type
+            kind = node.outputs["value"].type.lower()
+            value = param_output(node)
             nkey = _sha(
                 {
                     "format": CACHE_FORMAT,
-                    kind: node.value,
+                    kind: types.to_json_value(value),
                     "files": node_files(node, base_dir, graph),
                 }
             )
             pkey = port_key(nkey, "value")
-            keys.values[pkey] = node.value
+            keys.values[pkey] = value
         else:
             nkey = _sha(
                 {

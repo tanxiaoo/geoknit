@@ -118,6 +118,11 @@ export function needsRun(state: NodeState | null | undefined): boolean {
 }
 
 export const PARAM_TEXT = "param/text";
+export const PARAM_NUMBER = "param/number";
 export const PARAM_SLIDER = "param/slider";
+export const PARAM_TOGGLE = "param/toggle";
+export const PARAM_VALUE_LIST = "param/value_list";
+export const PARAM_COLOR = "param/color";
+export const PARAM_COLORMAP = "param/colormap";
 export const PARAM_PANEL = "param/panel";
 export const PARAM_MAP = "param/map";

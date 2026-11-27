@@ -17,7 +17,7 @@ from geoknit.core.export import (
     indent,
     vendored_section,
 )
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph
+from geoknit.core.graph import PARAM_COLOR, PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph
 from tests.core.sources import LENGTH, REPEAT, TO_NUMBER
 
 MULTILINE = '''\
@@ -258,14 +258,11 @@ print("shade", c.hex, c == Color.parse("11,122,124"))
 
 
 def test_color_constant_vendors_the_types(tmp_path: Path) -> None:
-    # Stand-in for the Color Swatch node (change 01 step 6): a Params node whose
-    # value is a Color. The component uses ``Color`` without importing it, so
-    # only the constant can bring the vendored types into the script.
-    from geoknit.core.types import Color
-
+    # The component uses ``Color`` without importing it, so only the Color
+    # Swatch's constant can bring the vendored types into the script.
     g = Graph()
-    t = _text(g, "x")
-    g.nodes[t].value = Color("#0B7A7C")
+    t = g.add_component(PARAM_COLOR).id
+    g.set_value(t, "#0b7a7c")
     shade = _inline(g, USES_COLOR)
     g.add_wire(t, "value", shade, "c")
     length = _inline(g, LENGTH)

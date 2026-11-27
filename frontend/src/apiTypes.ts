@@ -53,6 +53,10 @@ export interface NodeView {
   min?: number;
   max?: number;
   step?: number;
+  /** Number and Number Slider: whole numbers only (change 01, section 2). */
+  integer?: boolean;
+  /** Value List: its options; the chosen one is `value` (change 01, section 8). */
+  options?: ValueOption[];
   size?: [number, number] | null;
   source?: string;
   version?: string | null;
@@ -67,6 +71,28 @@ export interface NodeView {
   /** Map Viewer: saved basemap and per-layer styles (SPEC 8). */
   map?: MapSettings;
 }
+
+/** One option of a Value List: a number or text value under a label. */
+export interface ValueOption {
+  label: string;
+  value: number | string;
+}
+
+/** A Colormap as the API and the workflow file give it (`Colormap.to_json()`, change 01).
+ * A named ramp's `stops` are left out: they follow from `name` (`GET /api/colormaps`). */
+export type ColormapJson =
+  | {
+      kind: "continuous";
+      name: string | null;
+      stops?: [number, string][];
+      min: number | null;
+      max: number | null;
+      reverse: boolean;
+    }
+  | { kind: "classes"; classes: [number, string, string][]; other: string | null };
+
+/** `GET /api/colormaps`: the named ramps, 11 `#RRGGBB` stops each, low to high. */
+export type NamedRamps = Record<string, string[]>;
 
 /** Which sides of a component the Settings tab edits, and the types it offers. */
 export interface EditablePorts {
@@ -215,6 +241,8 @@ export interface NodePatch {
   min?: number;
   max?: number;
   step?: number;
+  integer?: boolean;
+  options?: ValueOption[];
   size?: [number, number] | null;
   map?: { basemap?: Basemap; styles?: Record<string, Partial<LayerStyle> | null> };
 }

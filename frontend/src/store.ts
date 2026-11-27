@@ -14,6 +14,7 @@ import type {
   NodeJson,
   NodePatch,
   NodeState,
+  NamedRamps,
   RunReport,
   ServerEvent,
   Status,
@@ -65,6 +66,8 @@ export interface AppState {
   windowNode: string | null;
   /** The Map Viewer whose map window is open (SPEC 8). */
   mapNode: string | null;
+  /** The named colormap ramps (`GET /api/colormaps`), loaded when a Colormap node needs them. */
+  ramps: NamedRamps | null;
 }
 
 export const initialState: AppState = {
@@ -86,6 +89,7 @@ export const initialState: AppState = {
   logs: {},
   windowNode: null,
   mapNode: null,
+  ramps: null,
 };
 
 /** What a port carries after a run: its own output, or the output wired into it. */
@@ -309,6 +313,20 @@ export class Store {
     }
   }
 
+  private rampsLoading: Promise<void> | null = null;
+
+  /** Load the named colormap ramps once (Colormap nodes draw their gradient from them). */
+  loadRamps(): Promise<void> {
+    if (this.state.ramps) return Promise.resolve();
+    this.rampsLoading ??= this.api
+      .colormaps()
+      .then((ramps) => this.set({ ramps }))
+      .catch(() => {
+        this.rampsLoading = null; // try again next time
+      });
+    return this.rampsLoading;
+  }
+
   async refreshComponents(): Promise<void> {
     try {
       const library = await this.api.components();
@@ -439,7 +457,8 @@ export class Store {
     const node = g?.nodes[id];
     if (!g || !node) return null;
     if (patch.settings) return Object.keys(patch.settings)[0] ?? node.title;
-    if ("value" in patch || "min" in patch || "max" in patch || "step" in patch) {
+    const keys = ["value", "min", "max", "step", "integer", "options"] as const;
+    if (keys.some((k) => k in patch)) {
       const wire = g.workflow.wires.find((w) => w.from[0] === id);
       return wire ? wire.to[1] : node.title;
     }

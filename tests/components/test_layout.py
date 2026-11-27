@@ -105,9 +105,21 @@ def test_tabs_groups_and_order_of_the_builtins(builtins: Registry) -> None:
         "groups": ["Files", "Bands", "Calculate", "Extent"],
     }
     assert tabs["Sampling"]["colour"] == "#B45309"
-    assert tabs["Params"]["groups"] == ["Input", "Inspect", "Map"]
+    assert tabs["Params"]["groups"] == ["Input", "Style", "Inspect", "Map"]
     refs = [c["ref"] for c in lib["components"]]
-    assert refs[:4] == ["param/text", "param/slider", "param/panel", "param/map"]
+    assert refs[:9] == [
+        "param/text",
+        "param/number",
+        "param/slider",
+        "param/toggle",
+        "param/value_list",
+        "param/color",
+        "param/colormap",
+        "param/panel",
+        "param/map",
+    ]
+    value_list = next(c for c in lib["components"] if c["ref"] == "param/value_list")
+    assert value_list["group"] == "Input" and value_list["outputs"][0]["type"] == "Number"
     raster = [c["ref"] for c in lib["components"] if c["category"] == "Raster"]
     assert raster == [
         "builtin/raster/read_raster",

@@ -73,6 +73,8 @@ export interface AppState {
   windowNode: string | null;
   /** The Map Viewer whose map window is open (SPEC 8). */
   mapNode: string | null;
+  /** The Colormap node whose editor window is open (change 03, section 2). */
+  colormapNode: string | null;
   /** The named colormap ramps (`GET /api/colormaps`), loaded when a Colormap node needs them. */
   ramps: NamedRamps | null;
   /** The user's theme setting (`GET /api/settings`, change 02). */
@@ -107,6 +109,7 @@ export const initialState: AppState = {
   logs: {},
   windowNode: null,
   mapNode: null,
+  colormapNode: null,
   ramps: null,
   theme: "system",
 };
@@ -261,6 +264,7 @@ export class Store {
         lastChange: null,
         windowNode: null,
         mapNode: null,
+        colormapNode: null,
       });
       void this.refreshGraph();
     } else if (ev.type === "node_changed") {
@@ -289,10 +293,12 @@ export class Store {
       const graph = await this.api.graph();
       const open = this.state.windowNode;
       const map = this.state.mapNode;
+      const cm = this.state.colormapNode;
       this.set({
         graph,
         windowNode: open && graph.nodes[open] ? open : null,
         mapNode: map && graph.nodes[map] ? map : null,
+        colormapNode: cm && graph.nodes[cm] ? cm : null,
       });
       await this.loadResults();
     } catch (e) {
@@ -408,6 +414,16 @@ export class Store {
 
   closeMap(): void {
     this.set({ mapNode: null });
+  }
+
+  // ── colormap editor (change 03, section 2) ──
+  openColormap(id: string): void {
+    this.set({ colormapNode: id });
+    void this.loadRamps();
+  }
+
+  closeColormap(): void {
+    this.set({ colormapNode: null });
   }
 
   /** Test: run this component only, using cached inputs. */

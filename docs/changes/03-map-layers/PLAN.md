@@ -25,9 +25,9 @@ and Color nodes) and change 02 step 4 (basemap `auto`). Read `CLAUDE.md`,
 
 ## Step 2: Colormap editor
 
-- [ ] Window for `param/colormap`: kind, named ramp, reverse, min/max,
+- [x] Window for `param/colormap`: kind, named ramp, reverse, min/max,
       custom stops, class table, fill from ramp, paste table
-- [ ] Each change one `PATCH {value}`, so one undo step
+- [x] Each change one `PATCH {value}`, so one undo step
 
 **Done when** (Playwright):
 - build a 3-class map in the editor, save the workflow, reopen: identical

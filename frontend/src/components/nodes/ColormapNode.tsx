@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { NodeProps } from "@xyflow/react";
 import type { ColormapJson, NamedRamps } from "../../apiTypes";
 import { store, useStore } from "../../store";
@@ -15,7 +15,7 @@ export const DEFAULT_COLORMAP: ColormapJson = {
   reverse: false,
 };
 
-function isColormap(v: unknown): v is ColormapJson {
+export function isColormap(v: unknown): v is ColormapJson {
   return typeof v === "object" && v !== null && "kind" in v;
 }
 
@@ -43,12 +43,14 @@ export interface StripProps {
   cm: ColormapJson;
   ramps: NamedRamps | null;
   testId?: string;
+  className?: string;
 }
 
-export function Strip({ cm, ramps, testId }: StripProps) {
+export function Strip({ cm, ramps, testId, className }: StripProps) {
+  const extra = className ? ` ${className}` : "";
   if (cm.kind === "classes") {
     return (
-      <span className="gk-ramp gk-ramp-classes" data-testid={testId}>
+      <span className={`gk-ramp gk-ramp-classes${extra}`} data-testid={testId}>
         {cm.classes.map(([value, colour, label]) => (
           <span
             key={String(value)}
@@ -63,7 +65,7 @@ export function Strip({ cm, ramps, testId }: StripProps) {
   const stops = stopsOf(cm, ramps);
   return (
     <span
-      className="gk-ramp"
+      className={`gk-ramp${extra}`}
       style={stops ? { background: gradientCss(stops) } : undefined}
       data-testid={testId}
     />
@@ -77,13 +79,12 @@ export function colormapLabel(cm: ColormapJson): string {
   return cm.reverse ? `${name} (${strings.colormapReverse.toLowerCase()})` : name;
 }
 
-/** Colormap: a gradient strip; double-click offers the named ramps (change 01, section 8;
- * the full colormap editor is change 03). */
+/** Colormap: a gradient strip; double-click opens the Colormap editor window (change 03,
+ * section 2). */
 export function ColormapNode({ id, data, selected }: NodeProps<GkNode>) {
   const view = data.view;
   const cm = isColormap(view.value) ? view.value : DEFAULT_COLORMAP;
   const ramps = useStore((s) => s.ramps);
-  const [open, setOpen] = useState(false);
   const state = view.state ?? "never_run";
   useEffect(() => void store.loadRamps(), []);
   return (
@@ -91,90 +92,16 @@ export function ColormapNode({ id, data, selected }: NodeProps<GkNode>) {
       className={`gk-node gk-text gk-colormap gk-state-${state}${selected ? " gk-selected" : ""}`}
       data-testid={`node-${id}`}
       data-state={state}
-      title={strings.colormapHint}
+      title={strings.cmEditorHint}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        setOpen(true);
+        store.openColormap(id);
       }}
     >
       {needsRun(state) && <span className="gk-dot" />}
       <Strip cm={cm} ramps={ramps} testId={`ramp-${id}`} />
       <span className="gk-text-value">{colormapLabel(cm)}</span>
       <Port nodeId={id} side="out" name="value" types={["Colormap"]} />
-      {open && (
-        <RampWindow
-          value={cm}
-          ramps={ramps ?? {}}
-          onCancel={() => setOpen(false)}
-          onPick={(next) => {
-            setOpen(false);
-            void store.patchNode(id, { value: next });
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-interface WindowProps {
-  value: ColormapJson;
-  ramps: NamedRamps;
-  onPick: (value: ColormapJson) => void;
-  onCancel: () => void;
-}
-
-/** The named ramps to choose from, with a "reversed" box. A continuous colormap keeps its
- * min and max. */
-export function RampWindow({ value, ramps, onPick, onCancel }: WindowProps) {
-  const [reverse, setReverse] = useState(value.kind === "continuous" && value.reverse);
-  const current = value.kind === "continuous" && !value.stops ? value.name : null;
-  const wasReversed = value.kind === "continuous" && value.reverse;
-  const pick = (name: string) =>
-    onPick({
-      kind: "continuous",
-      name,
-      min: value.kind === "continuous" ? value.min : null,
-      max: value.kind === "continuous" ? value.max : null,
-      reverse,
-    });
-  return (
-    <div
-      className="nodrag nowheel gk-popover gk-slider-window gk-ramp-window"
-      onDoubleClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onCancel();
-        e.stopPropagation();
-      }}
-      data-testid="ramp-window"
-    >
-      <strong>{strings.colormapRamps}</strong>
-      <ul>
-        {Object.keys(ramps).map((name) => (
-          <li
-            key={name}
-            className={name === current && reverse === wasReversed ? "gk-active" : ""}
-            onClick={() => pick(name)}
-            data-testid={`ramp-${name}`}
-          >
-            <Strip cm={{ kind: "continuous", name, min: null, max: null, reverse }} ramps={ramps} />
-            <span>{name}</span>
-          </li>
-        ))}
-      </ul>
-      <label className="gk-ramp-reverse">
-        <input
-          type="checkbox"
-          checked={reverse}
-          onChange={(e) => setReverse(e.currentTarget.checked)}
-          data-testid="ramp-reverse"
-        />
-        <span>{strings.colormapReverse}</span>
-      </label>
-      <div className="gk-popover-buttons">
-        <button type="button" onClick={onCancel}>
-          {strings.cancel}
-        </button>
-      </div>
     </div>
   );
 }

@@ -20,3 +20,18 @@ export const VECTOR_COLOURS = [
 
 /** What a Color Swatch shows and its picker starts from when the value is not a hex colour. */
 export const FALLBACK_COLOR_VALUE = "#000000";
+
+/** Colours the Colormap editor gives new classes, in turn (change 03, section 2). */
+export const NEW_CLASS_COLOURS = [
+  "#1F77B4",
+  "#FF7F0E",
+  "#2CA02C",
+  "#D62728",
+  "#9467BD",
+  "#8C564B",
+  "#E377C2",
+  "#17BECF",
+];
+
+/** The colour "Other values" starts from when it stops being transparent. */
+export const DEFAULT_OTHER_COLOUR = "#808080";

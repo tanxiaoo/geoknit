@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from geoknit.components.registry import BUILTIN_DIR, Registry, input_view, output_view
-from geoknit.core.graph import PARAM_MAP, PARAM_TITLES, PARAMS, param_ports
+from geoknit.core.graph import PARAM_TITLES, PARAMS, VIEW_NODES, param_ports
 
 LAYOUT_FILE = BUILTIN_DIR / "_layout.yaml"
 
@@ -45,6 +45,8 @@ OTHER = "Other"
 """Group of a pack or user component without ``group:``; shown last."""
 
 PARAMS_TAB = "Params"
+DISPLAY_TAB = "Display"
+"""Tab of the view nodes, Map Layer and Map Viewer (change 03, section 1)."""
 
 # Literal keys and values: frontend/src/icons/registry.test.ts reads this
 # block to check that every name resolves in the icon registry.
@@ -57,6 +59,7 @@ PARAM_ICONS: dict[str, str] = {
     "param/color": "gis:color",
     "param/colormap": "lucide:rainbow",
     "param/panel": "lucide:sticky-note",
+    "param/layer": "gis:layers",
     "param/map": "gis:map",
 }
 """Icons of the Params nodes (they have no header); every kind in ``PARAMS`` has one."""
@@ -107,7 +110,7 @@ def check_layout(layout: Layout, registry: Registry) -> list[str]:
                     continue
                 seen[ref] = where
                 if ref in PARAMS:
-                    if tab != PARAMS_TAB and ref != PARAM_MAP:
+                    if tab != (DISPLAY_TAB if ref in VIEW_NODES else PARAMS_TAB):
                         problems.append(f"{ref} is a Params node but is listed in {where}")
                     continue
                 if ref not in builtins:
@@ -132,7 +135,7 @@ def param_entry(kind: str) -> dict[str, Any]:
         "version": "",
         "origin": "param",
         "name": PARAM_TITLES[kind],
-        "category": PARAMS_TAB,
+        "category": DISPLAY_TAB if kind in VIEW_NODES else PARAMS_TAB,
         "group": None,
         "icon": PARAM_ICONS[kind],
         "description": "",

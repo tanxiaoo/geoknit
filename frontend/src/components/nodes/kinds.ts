@@ -3,6 +3,7 @@ import type { NodeView } from "../../apiTypes";
 import {
   PARAM_COLOR,
   PARAM_COLORMAP,
+  PARAM_LAYER,
   PARAM_MAP,
   PARAM_NUMBER,
   PARAM_PANEL,
@@ -25,6 +26,7 @@ const KINDS = {
   [PARAM_COLOR]: "color",
   [PARAM_COLORMAP]: "colormap",
   [PARAM_PANEL]: "panel",
+  [PARAM_LAYER]: "layer",
   [PARAM_MAP]: "map",
 } as const;
 

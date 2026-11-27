@@ -5,6 +5,7 @@ import type {
   ExportResult,
   FileNode,
   InspectResult,
+  MapLayerInfo,
   MapView,
   NamedRamps,
   RasterStats,
@@ -107,6 +108,8 @@ export const api = {
   openInVsCode: (id: string) =>
     request<{ path: string }>("POST", `/api/nodes/${encodeURIComponent(id)}/vscode`),
   mapView: (id: string) => request<MapView>("GET", `/api/map/${encodeURIComponent(id)}`),
+  layerInfo: (id: string) =>
+    request<MapLayerInfo>("GET", `/api/layer/${encodeURIComponent(id)}`),
   mapInspect: (id: string, lon: number, lat: number) =>
     request<InspectResult>(
       "GET",

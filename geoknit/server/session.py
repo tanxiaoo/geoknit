@@ -34,6 +34,7 @@ from geoknit.core.graph import (
     INLINE,
     PARAM_COLOR,
     PARAM_COLORMAP,
+    PARAM_LAYER,
     PARAM_MAP,
     PARAM_NUMBER,
     PARAM_PANEL,
@@ -168,6 +169,8 @@ class Session:
         """An autosave that differs from the opened workflow exists (SPEC 8)."""
         self.editors = ExternalEditors(self)
         """Nodes open in VS Code, synced through temp files."""
+        self._layer_keys: dict[str, str] = {}
+        """Each Map Layer's port key at the last refresh, to send ``map_changed``."""
 
     # ── lifecycle ──
     @property
@@ -222,7 +225,33 @@ class Session:
         }
 
     def _publish_states(self) -> None:
+        self._refresh_views()
         self.events.publish(self.states_message())
+
+    def _refresh_views(self) -> None:
+        """Rebuild the view nodes (no Run, change 03 section 4); send ``map_changed``
+        for each Map Layer whose layer changed (its port key), with the Map Viewers
+        downstream of it, so open maps redraw at once."""
+        with self.lock:
+            if self._executor is None or self._running:
+                return
+            keys = self._executor.refresh_views()
+            now = {
+                nid: keys.ports[nid]["layer"]
+                for nid, node in self.graph.nodes.items()
+                if node.component == PARAM_LAYER
+            }
+            changed = [
+                n for n, k in now.items() if n in self._layer_keys and self._layer_keys[n] != k
+            ]
+            self._layer_keys = now
+            for nid in changed:
+                viewers = sorted(
+                    n
+                    for n in self.graph.downstream(nid)
+                    if self.graph.nodes[n].component == PARAM_MAP
+                )
+                self.events.publish({"type": "map_changed", "node": nid, "viewers": viewers})
 
     # ── guards ──
     def _check_trusted(self) -> None:
@@ -398,6 +427,9 @@ class Session:
             view["size"] = node.extra.get("size")
         elif node.component == PARAM_MAP:
             view["map"] = copy.deepcopy(node.extra.get("map", {}))
+        elif node.component == PARAM_LAYER:
+            view["style"] = copy.deepcopy(node.style)
+            view["layer"] = self._layer_view(node_id)
         elif not node.is_param:
             spec = node.spec
             view.update(
@@ -412,6 +444,47 @@ class Session:
                 editable_ports=spec.ports.as_dict() if spec and spec.ports else None,
             )
         return view
+
+    def _layer_view(self, node_id: str) -> dict[str, Any] | None:
+        """``{key, value, issues, wired}`` of a Map Layer as last built, or ``None``."""
+        ex = self._executor
+        build = ex.layers.get(node_id) if ex is not None else None
+        if ex is None or build is None:
+            return None
+        key = self._layer_keys.get(node_id)
+        return {"key": key, **build.to_json()}
+
+    def layer_info(self, node_id: str) -> dict[str, Any]:
+        """A Map Layer for its window (``GET /api/layer/{id}``): the node's ``layer``
+        view plus ``columns`` of a vector and ``bands`` (names) of a raster, read
+        from the data's disk cache entry (``null`` until it has a result)."""
+        with self.lock:
+            node = self._node(node_id)
+            if node.component != PARAM_LAYER:
+                raise BadRequest(f"{node.title} is not a Map Layer")
+            self._refresh_views()
+            view = self._layer_view(node_id) or {"key": None, "value": None, "issues": {}}
+            out: dict[str, Any] = {
+                "node": node_id,
+                "state": self.solver.states.get(node_id),
+                "style": copy.deepcopy(node.style),
+                **view,
+                "columns": None,
+                "bands": None,
+            }
+            layer = view.get("value")
+            folder = self.executor.cache_dir
+            if layer is None or folder is None or out["state"] != DONE:
+                return out
+            cache = DiskCache(folder)
+            try:
+                if layer["kind"] == "vector":
+                    out["columns"] = tiles.describe_vector(cache, layer["source"])["columns"]
+                else:
+                    out["bands"] = cache.band_names(layer["source"])
+            except (CacheMiss, tiles.MapError):
+                pass
+            return out
 
     def status(self) -> dict[str, Any]:
         """Python version and worker state, for the top bar."""
@@ -534,6 +607,9 @@ class Session:
         for name, value in (changes.get("settings") or {}).items():
             g.set_setting(node_id, name, value)
         self._apply_value_patch(node, changes)
+        if "style" in changes:  # Map Layer: merged, ``null`` resets a field (or all of it)
+            style = changes["style"]
+            g.set_style(node_id, {k: None for k in node.style} if style is None else style)
         if "position" in changes:
             g.set_position(node_id, changes["position"])
         if "display" in changes:
@@ -806,6 +882,7 @@ class Session:
             self.graph, self.solver = graph, solver
             self.workflow_path, self._opened_bytes = target, data
             self.trusted = self.trust.is_trusted(data)
+            self._layer_keys = {}
             self._undo.clear()
             self._redo.clear()
             self.editors.clear()

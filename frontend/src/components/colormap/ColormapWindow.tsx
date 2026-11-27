@@ -642,7 +642,7 @@ function ColourField({
   );
 }
 
-type CommitProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
+export type CommitProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
   value: string;
   /** False puts the field back to ``value``. */
   onCommit: (text: string) => boolean;
@@ -650,7 +650,7 @@ type CommitProps = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChan
 };
 
 /** A text field that sends its text on Enter or when it loses focus, not per key. */
-function CommitInput({ value, onCommit, ...rest }: CommitProps) {
+export function CommitInput({ value, onCommit, ...rest }: CommitProps) {
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   const commit = () => {

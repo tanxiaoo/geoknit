@@ -1926,3 +1926,57 @@ pre.gk-output-error {
   align-items: center;
   gap: 10px;
 }
+
+/* Map Layer window (change 03, section 3) */
+.gk-layer-row {
+  display: grid;
+  gap: 3px;
+}
+.gk-layer-row .gk-cm-field > input:not([type="range"]),
+.gk-layer-row .gk-cm-field > select {
+  flex: 0 1 200px;
+}
+.gk-layer-colormap,
+.gk-layer-opacity,
+.gk-layer-wired {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.gk-layer-colormap .gk-ramp {
+  width: 48px;
+  height: 12px;
+}
+.gk-layer-opacity input[type="range"] {
+  width: 150px;
+  accent-color: var(--gk-slider);
+}
+.gk-layer-number {
+  min-width: 32px;
+  font-family: var(--mono);
+  text-align: right;
+}
+.gk-layer-wired {
+  color: var(--gk-ink);
+}
+.gk-layer-from {
+  color: var(--gk-muted);
+  font-style: italic;
+}
+.gk-layer-issue {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--gk-banner-warn-bg);
+  color: var(--gk-banner-warn-ink);
+  font-size: 11px;
+}
+.gk-layer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--gk-line);
+}

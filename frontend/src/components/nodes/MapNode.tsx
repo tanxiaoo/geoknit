@@ -11,7 +11,7 @@ export function MapNode({ id, data, selected }: NodeProps<GkNode>) {
   const view = data.view;
   const count = useStore((s) => s.graph?.workflow.wires.filter((w) => w.to[0] === id).length ?? 0);
   const state = view.state ?? "never_run";
-  const colour = useCategoryColour("Params");
+  const colour = useCategoryColour("Display");
   return (
     <div
       className={`gk-node gk-comp gk-map-node gk-state-${state}${selected ? " gk-selected" : ""}`}

@@ -34,15 +34,23 @@ PARAM_COLOR = "param/color"
 PARAM_COLORMAP = "param/colormap"
 PARAM_PANEL = "param/panel"
 PARAM_MAP = "param/map"
+PARAM_LAYER = "param/layer"
 PARAMS = (
     PARAM_TEXT, PARAM_NUMBER, PARAM_SLIDER, PARAM_TOGGLE, PARAM_VALUE_LIST,
-    PARAM_COLOR, PARAM_COLORMAP, PARAM_PANEL, PARAM_MAP,
+    PARAM_COLOR, PARAM_COLORMAP, PARAM_PANEL, PARAM_LAYER, PARAM_MAP,
 )  # fmt: skip
 VALUE_PARAMS = (
     PARAM_TEXT, PARAM_NUMBER, PARAM_SLIDER, PARAM_TOGGLE, PARAM_VALUE_LIST,
     PARAM_COLOR, PARAM_COLORMAP,
 )  # fmt: skip
 """Params nodes whose ``value`` output the server provides (no worker run, SPEC 6)."""
+VIEW_NODES = (PARAM_LAYER, PARAM_MAP)
+"""Map Layer and Map Viewer (change 03, section 4): never in a run plan's work, not
+counted as out of date; ``done`` when their sources are."""
+LAYER_STYLE_INPUTS = ("colormap", "color", "opacity", "bands", "name")
+"""Map Layer inputs that only style the layer: wires into them carry no out-of-date."""
+STYLE_KEYS = (*LAYER_STYLE_INPUTS, "field")
+"""Keys of a Map Layer's saved ``style`` (the values of its unwired inputs, plus ``field``)."""
 INLINE = "inline"
 
 _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
@@ -58,6 +66,17 @@ _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
     PARAM_PANEL: (
         {"data": Port("data", types.ANY)},
         {"data": Port("data", types.ANY, like="data")},
+    ),
+    PARAM_LAYER: (
+        {
+            "data": Port("data", types.RASTER, types=(types.RASTER, types.VECTOR)),
+            "colormap": Port("colormap", types.COLORMAP),
+            "color": Port("color", types.COLOR),
+            "opacity": Port("opacity", types.NUMBER),
+            "bands": Port("bands", types.TEXT),
+            "name": Port("name", types.TEXT),
+        },
+        {"layer": Port("layer", types.LAYER)},
     ),
     PARAM_MAP: ({"layers": Port("layers", types.ANY, access="list")}, {}),
 }
@@ -75,6 +94,7 @@ PARAM_TITLES: dict[str, str] = {
     PARAM_COLOR: "Color Swatch",
     PARAM_COLORMAP: "Colormap",
     PARAM_PANEL: "Panel",
+    PARAM_LAYER: "Map Layer",
     PARAM_MAP: "Map Viewer",
 }
 
@@ -249,6 +269,81 @@ def param_output(node: Node) -> Any:
     return node.value
 
 
+def parse_bands(text: str) -> list[int | str]:
+    """``"1"``, ``"4,3,2"`` or band names (``"red,green,blue"``): 1 or 3 entries.
+
+    Numbers count from 1; anything else is a band name, matched against the
+    raster's band names when the layer is built.
+    """
+    if not isinstance(text, str):
+        raise GraphError("bands is text such as 1 or 4,3,2")
+    parts = [p.strip() for p in text.split(",")]
+    if len(parts) not in (1, 3) or not all(parts):
+        raise GraphError("bands is 1 or 3 band numbers or names, such as 1 or 4,3,2")
+    out: list[int | str] = []
+    for p in parts:
+        if p.isdigit():
+            if int(p) < 1:
+                raise GraphError("band numbers count from 1")
+            out.append(int(p))
+        else:
+            out.append(p)
+    return out
+
+
+def _style_value(name: str, value: Any) -> Any:
+    """One saved Map Layer style field, checked and in its normal JSON form."""
+    if name == "colormap":
+        try:
+            if isinstance(value, str):  # a named ramp, as the window's dropdown offers
+                return types.Colormap.named(value).to_json()
+            return types.Colormap.from_json(value).to_json()
+        except (ValueError, TypeError) as exc:
+            raise GraphError(f"colormap: {exc}") from None
+    if name == "color":
+        try:
+            return types.Color.parse(value).hex
+        except ValueError as exc:
+            raise GraphError(str(exc)) from None
+    if name == "opacity":
+        if not _is_number(value) or not 0 <= value <= 1:
+            raise GraphError("opacity is a number from 0 to 1")
+        return value
+    if name == "bands":
+        return ",".join(str(b) for b in parse_bands(value))
+    if not isinstance(value, str) or not value.strip():  # name, field
+        raise GraphError(f"{name} is text (null resets it)")
+    return value
+
+
+def check_style(style: Any) -> dict[str, Any]:
+    """A Map Layer's saved ``style`` checked (a ``GraphError`` says why not), keys
+    ``STYLE_KEYS``: colormap (Colormap JSON), color, opacity, bands, name, field."""
+    if not isinstance(style, dict):
+        raise GraphError("a Map Layer style is an object")
+    out: dict[str, Any] = {}
+    for name, value in style.items():
+        if name not in STYLE_KEYS:
+            raise GraphError(f'unknown style field "{name}" (use {", ".join(STYLE_KEYS)})')
+        out[name] = _style_value(name, value)
+    return out
+
+
+def merge_style(current: dict[str, Any], change: Any) -> dict[str, Any]:
+    """A ``style`` patch merged into ``current``; a ``null`` field resets it."""
+    if not isinstance(change, dict):
+        raise GraphError("style is an object of fields to change")
+    merged = dict(current)
+    for name, value in change.items():
+        if value is None:
+            if name not in STYLE_KEYS:
+                raise GraphError(f'unknown style field "{name}" (use {", ".join(STYLE_KEYS)})')
+            merged.pop(name, None)
+        else:
+            merged.update(check_style({name: value}))
+    return merged
+
+
 DISPLAYS = ("default", "text", "icon")
 
 ChangeListener = Callable[[set[str], set[str]], None]
@@ -284,6 +379,8 @@ class Node:
     """Number and Number Slider: the value is an ``int`` (change 01, 2)."""
     options: list[dict[str, Any]] | None = None
     """Value List: ``[{label, value}]``."""
+    style: dict[str, Any] = field(default_factory=dict)
+    """Map Layer: values of its unwired style inputs and ``field`` (``check_style``)."""
     extra: dict[str, Any] = field(default_factory=dict)
     """Unknown keys from the workflow file, written back unchanged."""
     spec: ComponentSpec | None = None
@@ -293,6 +390,11 @@ class Node:
     @property
     def is_param(self) -> bool:
         return self.component in PARAMS
+
+    @property
+    def is_view(self) -> bool:
+        """Map Layer or Map Viewer: shows results, never runs (change 03, section 4)."""
+        return self.component in VIEW_NODES
 
     @property
     def inputs(self) -> dict[str, Port]:
@@ -401,7 +503,7 @@ class Graph:
             node.min, node.max, node.step, node.value = 0, 100, 1, 50
         elif component in _NEW_VALUE_PARAMS:
             set_param_defaults(node)
-        elif component in (PARAM_PANEL, PARAM_MAP):
+        elif component in (PARAM_PANEL, PARAM_LAYER, PARAM_MAP):
             pass
         elif component == INLINE:
             if source is None:
@@ -423,7 +525,7 @@ class Graph:
 
     def remove_node(self, node_id: str) -> None:
         self.node(node_id)
-        children = {w.dst for w in self.wires if w.src == node_id}
+        children = {w.dst for w in self.wires if w.src == node_id and self.carries(w)}
         self.wires = [w for w in self.wires if node_id not in (w.src, w.dst)]
         del self.nodes[node_id]
         for g in self.groups:
@@ -601,6 +703,17 @@ class Graph:
         node.min, node.max, node.step, node.integer = lo, hi, st, whole
         self._update_value(node, val)
 
+    def set_style(self, node_id: str, change: dict[str, Any]) -> None:
+        """Merge ``change`` into a Map Layer's saved style (``null`` resets a field).
+
+        Like a style wire (``carries``), this marks nothing out of date: the Map
+        Layer is a view node and its layer is rebuilt from the new style.
+        """
+        node = self.node(node_id)
+        if node.component != PARAM_LAYER:
+            raise GraphError(f"{node.title} is not a Map Layer")
+        node.style = merge_style(node.style, change)
+
     # ── edits that do not change results ──
     def set_position(self, node_id: str, position: Iterable[float]) -> None:
         self.node(node_id).position = list(position)
@@ -636,7 +749,7 @@ class Graph:
         if src == dst or src in self.downstream(dst):
             raise GraphError(f"connecting {a.title} → {b.title} would create a cycle")
         self.wires.append(wire)
-        self._changed(changed=[dst])
+        self._changed(changed=[dst] if self.carries(wire) else [])
         self._recheck()
         return wire
 
@@ -645,8 +758,19 @@ class Graph:
         if wire not in self.wires:
             raise GraphError(f"no wire {wire}")
         self.wires.remove(wire)
-        self._changed(changed=[dst])
+        self._changed(changed=[dst] if self.carries(wire) else [])
         self._recheck()
+
+    def carries(self, wire: Wire) -> bool:
+        """Whether a change upstream of ``wire`` makes its target out of date.
+
+        Not for wires into a Map Layer's style inputs (change 03, section 4): a
+        new colormap only restyles the layer, no component needs a Run.
+        """
+        dst = self.nodes.get(wire.dst)
+        return not (
+            dst is not None and dst.component == PARAM_LAYER and wire.dst_port in LAYER_STYLE_INPUTS
+        )
 
     def wires_into(self, node_id: str, port: str | None = None) -> list[Wire]:
         return [w for w in self.wires if w.dst == node_id and (port is None or w.dst_port == port)]

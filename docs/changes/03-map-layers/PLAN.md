@@ -35,16 +35,16 @@ and Color nodes) and change 02 step 4 (basemap `auto`). Read `CLAUDE.md`,
 
 ## Step 3: Map Layer node and view-node rule
 
-- [ ] `param/layer` with `data: [Raster, Vector]`, colormap, color, opacity,
+- [x] `param/layer` with `data: [Raster, Vector]`, colormap, color, opacity,
       bands, name; `style` saved on the node; its window for unwired values;
       `field` for vectors
-- [ ] MapLayer built by the server; style values from Params nodes, or from
+- [x] MapLayer built by the server; style values from Params nodes, or from
       a component's cache entry
-- [ ] `compute_keys` branch for Map Layer; value sent with `put_value`
-- [ ] Solver: no out-of-date along wires into Map Layer style inputs; Map
+- [x] `compute_keys` branch for Map Layer; value sent with `put_value`
+- [x] Solver: no out-of-date along wires into Map Layer style inputs; Map
       Layer and Map Viewer are view nodes (not in run plans, not counted in
       the banner, `done` when their sources are)
-- [ ] Display tab with Style and Map groups; Map Viewer moved there
+- [x] Display tab with Style and Map groups; Map Viewer moved there
       (`_layout.yaml`)
 
 **Done when** (pytest + Playwright):

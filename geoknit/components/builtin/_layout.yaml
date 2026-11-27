@@ -12,8 +12,6 @@ Params:
   # Change 04's Geometry group (builtin/params/*) goes here.
   Style: [param/color, param/colormap]
   Inspect: [param/panel]
-  # Moves to Display › Map in change 03.
-  Map: [param/map]
 
 Vector:
   Files: [builtin/vector/read_vector, builtin/vector/write_vector]
@@ -37,6 +35,10 @@ Model:
 Validation:
   Classification: [builtin/validation/confusion_matrix]
   Regression: [builtin/validation/regression_accuracy]
+
+Display:
+  Style: [param/layer]
+  Map: [param/map]
 
 Script:
   Python: [builtin/script/python]

@@ -143,8 +143,9 @@ describe("catalog", () => {
       ...initialState,
       components: [...PARAM_ENTRIES, ...raster],
       tabs: [
-        { name: "Params", colour: "#475569", groups: ["Input", "Inspect", "Map"] },
+        { name: "Params", colour: "#475569", groups: ["Input", "Inspect"] },
         { name: "Raster", colour: "#0B7A7C", groups: ["Files", "Extent"] },
+        { name: "Display", colour: "#A21CAF", groups: ["Style", "Map"] },
       ],
     });
     const { unmount } = render(
@@ -154,9 +155,15 @@ describe("catalog", () => {
     );
     const labels = () =>
       [...document.querySelectorAll(".gk-ribbon-group-label")].map((el) => el.textContent);
-    expect(screen.getAllByRole("button", { name: /^(Params|Raster)$/ }).map((b) => b.textContent))
-      .toEqual(["Params", "Raster"]);
-    expect(labels()).toEqual(["Input", "Inspect", "Map"]);
+    expect(
+      screen.getAllByRole("button", { name: /^(Params|Raster|Display)$/ }).map((b) => b.textContent),
+    ).toEqual(["Params", "Raster", "Display"]);
+    expect(labels()).toEqual(["Input", "Inspect"]);
+    // change 03, section 1: Map Layer in Display › Style, Map Viewer in Display › Map
+    fireEvent.click(screen.getByTestId("tab-Display"));
+    expect(labels()).toEqual(["Style", "Map"]);
+    expect(screen.getByTestId("ribbon-group-Style").textContent).toContain("Map Layer");
+    expect(screen.getByTestId("ribbon-group-Map").textContent).toContain("Map Viewer");
     fireEvent.click(screen.getByTestId("tab-Raster"));
     expect(labels()).toEqual(["Files", "Extent"]);
     expect(screen.getByTestId("ribbon-group-Extent").textContent).toContain("Clip");

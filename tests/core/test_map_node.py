@@ -31,13 +31,16 @@ def test_map_viewer_takes_several_wires_and_has_no_outputs() -> None:
         g.add_wire(text, "value", viewer, "layers")  # the same wire twice
 
 
-def test_map_viewer_has_no_key_and_runs_after_its_inputs() -> None:
+def test_map_viewer_has_no_key_and_is_done_when_its_inputs_are() -> None:
+    """A view node (change 03, section 4): never in a run plan, done with its sources."""
     g, _, _, viewer = _viewer()
     keys = compute_keys(g)
     assert keys.nodes[viewer] is None and keys.ports[viewer] == {}
-    report = InProcessExecutor(g).run()
-    assert report.ok and viewer in report.ran
-    assert g.nodes[viewer] is not None
+    ex = InProcessExecutor(g)
+    assert viewer not in ex.solver.plan() and ex.solver.states[viewer] == "never_run"
+    report = ex.run()
+    assert report.ok and viewer not in report.ran
+    assert ex.solver.states[viewer] == "done" and ex.solver.out_of_date_count == 0
 
 
 def test_map_styles_are_saved_and_loaded(tmp_path: Path) -> None:

@@ -57,7 +57,7 @@ interface Inspected {
 function Window({ view }: { view: NodeView }) {
   const id = view.id;
   const runCount = useStore((s) => s.runCount);
-  const colour = useCategoryColour("Params");
+  const colour = useCategoryColour("Display");
   // the wires into the viewer, as a string so the effect below only reruns when they change
   const wired = useStore((s) =>
     (s.graph?.workflow.wires ?? [])
@@ -154,7 +154,7 @@ function Window({ view }: { view: NodeView }) {
         onPointerUp={() => (drag.current = null)}
       >
         <span className="gk-window-category" style={{ color: colour }}>
-          {strings.paramsTab}
+          {strings.displayTab}
         </span>
         <span className="gk-window-title">{strings.mapViewer}</span>
         <div className="gk-spacer" />

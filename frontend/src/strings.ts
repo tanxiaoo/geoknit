@@ -247,6 +247,28 @@ export const strings = {
   inspectNodata: "nodata",
   inspectNoFeature: "no feature here",
 
+  // Map Layer (change 03, section 3)
+  displayTab: "Display",
+  mapLayer: "Map Layer",
+  layerHint: "Double-click to set the layer's style",
+  layerData: "Data",
+  layerBands: "Bands",
+  layerBandsHint: 'Band numbers or names: "1" or "4,3,2"; empty for the default choice',
+  layerName: "Name",
+  layerField: "Colour by field",
+  layerFieldNone: "none (one colour)",
+  layerFieldLater: "The columns are listed once the data has a result.",
+  layerColormapNone: "none (Map Viewer default)",
+  layerColormapEdited: (label: string) => `${label} (edited)`,
+  layerDefault: "default",
+  layerResetField: "Back to the default",
+  layerResetAll: "Reset all",
+  /** A wired style input whose value is used: where it comes from. */
+  layerFrom: (title: string) => `from ${title}`,
+  layerFromResult: (title: string) => `from ${title} (last result)`,
+  layerIssue: (input: string, why: string) => `${input}: ${why}`,
+  layerNoRunHint: "Style changes redraw the map without a Run.",
+
   // status bar
   dataTypes: "Data types",
   legendOutOfDate: "out of date",

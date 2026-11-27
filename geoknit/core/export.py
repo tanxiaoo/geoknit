@@ -26,6 +26,7 @@ from geoknit.core.component import INPUTS_NAME, PRINT_PORT, ComponentSpec
 from geoknit.core.graph import (
     PARAM_COLOR,
     PARAM_COLORMAP,
+    PARAM_LAYER,
     PARAM_MAP,
     PARAM_NUMBER,
     PARAM_PANEL,
@@ -430,6 +431,11 @@ class _Exporter:
                 self.exprs[(nid, "data")] = value
                 self.out_types[(nid, "data")] = self.graph.output_types(nid, "data")
                 panel_values[nid] = value if wires else None
+            elif node.component == PARAM_LAYER:
+                # Change 03 step 5 writes the full comment; a Panel on it prints this.
+                steps.append(f"# {nid} Map Layer: view only, not exported")
+                self.exprs[(nid, "layer")] = '"(Map Layer, not exported)"'
+                self.out_types[(nid, "layer")] = (types.TEXT,)
             elif node.component == PARAM_MAP:
                 steps.append(f"# {nid} Map Viewer: view only, not exported")
             else:

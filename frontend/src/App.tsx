@@ -8,6 +8,7 @@ import { Ribbon } from "./components/Ribbon";
 import { StatusBar } from "./components/StatusBar";
 import { TopBar } from "./components/TopBar";
 import { ColormapWindow } from "./components/colormap/ColormapWindow";
+import { LayerWindow } from "./components/layer/LayerWindow";
 import { MapWindow } from "./components/map/MapWindow";
 import { ComponentWindow } from "./components/window/ComponentWindow";
 import { store, useStore } from "./store";
@@ -60,6 +61,7 @@ export function App() {
         <ComponentWindow />
         <MapWindow />
         <ColormapWindow />
+        <LayerWindow />
         <Tip />
         <Toast />
       </div>

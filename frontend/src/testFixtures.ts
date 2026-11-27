@@ -12,15 +12,16 @@ function param(
   group: string,
   inputs: PortView[],
   outputs: PortView[],
+  category = "Params",
 ): ComponentEntry {
   return {
     ref,
     version: "",
     origin: "param",
     name,
-    category: "Params",
+    category,
     group,
-    icon: ref === "param/map" ? "gis:map" : null,
+    icon: ref === "param/map" ? "gis:map" : ref === "param/layer" ? "gis:layers" : null,
     description: "",
     inputs,
     outputs,
@@ -39,7 +40,22 @@ export const PARAM_ENTRIES: ComponentEntry[] = [
   param("param/color", "Color Swatch", "Style", [], [port("value", "Color", { like: null })]),
   param("param/colormap", "Colormap", "Style", [], [port("value", "Colormap", { like: null })]),
   param("param/panel", "Panel", "Inspect", [port("data", "Any")], [port("data", "Any", { like: "data" })]),
-  param("param/map", "Map Viewer", "Map", [port("layers", "Any", { access: "list" })], []),
+  param(
+    "param/layer",
+    "Map Layer",
+    "Style",
+    [
+      port("data", "Raster", { types: ["Raster", "Vector"] }),
+      port("colormap", "Colormap"),
+      port("color", "Color"),
+      port("opacity", "Number"),
+      port("bands", "Text"),
+      port("name", "Text"),
+    ],
+    [port("layer", "Layer", { like: null })],
+    "Display",
+  ),
+  param("param/map", "Map Viewer", "Map", [port("layers", "Any", { access: "list" })], [], "Display"),
 ];
 
 export function paramEntry(ref: string): ComponentEntry {

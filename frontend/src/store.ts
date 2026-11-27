@@ -75,6 +75,8 @@ export interface AppState {
   mapNode: string | null;
   /** The Colormap node whose editor window is open (change 03, section 2). */
   colormapNode: string | null;
+  /** The Map Layer whose style window is open (change 03, section 3). */
+  layerNode: string | null;
   /** The named colormap ramps (`GET /api/colormaps`), loaded when a Colormap node needs them. */
   ramps: NamedRamps | null;
   /** The user's theme setting (`GET /api/settings`, change 02). */
@@ -110,6 +112,7 @@ export const initialState: AppState = {
   windowNode: null,
   mapNode: null,
   colormapNode: null,
+  layerNode: null,
   ramps: null,
   theme: "system",
 };
@@ -265,10 +268,13 @@ export class Store {
         windowNode: null,
         mapNode: null,
         colormapNode: null,
+        layerNode: null,
       });
       void this.refreshGraph();
     } else if (ev.type === "node_changed") {
       void this.refreshGraph(); // edited in VS Code
+    } else if (ev.type === "map_changed") {
+      void this.refreshGraph(); // the Map Layer's `layer` (also when another page edited it)
     }
   }
 
@@ -294,11 +300,13 @@ export class Store {
       const open = this.state.windowNode;
       const map = this.state.mapNode;
       const cm = this.state.colormapNode;
+      const layer = this.state.layerNode;
       this.set({
         graph,
         windowNode: open && graph.nodes[open] ? open : null,
         mapNode: map && graph.nodes[map] ? map : null,
         colormapNode: cm && graph.nodes[cm] ? cm : null,
+        layerNode: layer && graph.nodes[layer] ? layer : null,
       });
       await this.loadResults();
     } catch (e) {
@@ -426,6 +434,16 @@ export class Store {
     this.set({ colormapNode: null });
   }
 
+  // ── Map Layer window (change 03, section 3) ──
+  openLayer(id: string): void {
+    this.set({ layerNode: id });
+    void this.loadRamps();
+  }
+
+  closeLayer(): void {
+    this.set({ layerNode: null });
+  }
+
   /** Test: run this component only, using cached inputs. */
   async test(id: string): Promise<void> {
     try {
@@ -538,9 +556,15 @@ export class Store {
   }
 
   async patchNode(id: string, patch: NodePatch): Promise<void> {
+    await this.tryPatchNode(id, patch);
+  }
+
+  /** One edit (one undo step); false when the server refused it (a toast says why). */
+  async tryPatchNode(id: string, patch: NodePatch): Promise<boolean> {
     const label = this.changeLabel(id, patch);
-    await this.mutate(() => this.api.patchNode(id, patch));
+    const ok = await this.mutate(() => this.api.patchNode(id, patch).then(() => true));
     if (label) this.set({ lastChange: label });
+    return ok === true;
   }
 
   /** Move nodes locally at once, then tell the server (one undo step). */

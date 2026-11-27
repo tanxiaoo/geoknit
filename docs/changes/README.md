@@ -108,6 +108,11 @@ the code. They are fixed like the decisions above.
 - 01 Q2: Panel's pass-through output becomes `{like: data}`
   (Grasshopper-style). It takes the type of its input, `like:` chains resolve
   through Panels, and only an unwired Panel stays `Any`.
+- 01 Q3 (27 Nov 2026, while building): option (b). The default `types` of
+  `ports:` offers `Any` for inputs only, so the Python component keeps `Any`
+  inputs.
+- 01 Q4 (27 Nov 2026): the export writes `INPUTS = {…}` as the last line of
+  the settings block, only where the code uses it.
 - 03 Q1: as proposed. Wires into Map Layer style inputs don't carry
   out-of-date, and Map Layer and Map Viewer never need a Run.
 - 04 Q1: option (c). No XLSX; Read Table supports CSV/TSV and Parquet only.

@@ -62,8 +62,20 @@ export interface NodeView {
   category?: string | null;
   icon?: string | null;
   settings?: SettingView[];
+  /** The header's `ports:` key; `null` when the ports cannot be edited (SPEC 4). */
+  editable_ports?: EditablePorts | null;
   /** Map Viewer: saved basemap and per-layer styles (SPEC 8). */
   map?: MapSettings;
+}
+
+/** Which sides of a component the Settings tab edits, and the types it offers. */
+export interface EditablePorts {
+  inputs: boolean;
+  outputs: boolean;
+  /** The first is a new port's type. */
+  types: PortType[];
+  /** The types offered for inputs: `types`, plus `Any` when the header lists no types. */
+  input_types?: PortType[];
 }
 
 export interface WireJson {
@@ -119,6 +131,7 @@ export interface ComponentEntry {
   outputs: PortView[];
   requires: string[];
   settings: SettingView[];
+  editable_ports?: EditablePorts | null;
 }
 
 export interface FileNode {

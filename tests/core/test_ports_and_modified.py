@@ -11,6 +11,7 @@ PY = """\
 # geoknit: component
 # name: Python
 # category: Script
+# ports: {inputs: editable, outputs: editable}
 # inputs:
 #   text: Text
 # outputs:

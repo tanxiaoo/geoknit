@@ -176,6 +176,7 @@ describe("component window", () => {
         id: "n3",
         title: "Python",
         category: "Script",
+        editable_ports: { inputs: true, outputs: true, types: ["Number", "Text", "Raster"] },
         settings: [],
         inputs: [{ name: "raster", type: "Raster", access: "item" }],
         outputs: [{ name: "out", type: "Text", access: "item" }],
@@ -199,6 +200,34 @@ describe("component window", () => {
     });
     fireEvent.click(screen.getByTestId("port-remove-raster"));
     expect(patch.mock.lastCall?.[1].ports?.inputs).toEqual([]);
+  });
+
+  test("the header's ports: key, not the category, makes ports editable", () => {
+    const patch = open(
+      rf({
+        id: "n4",
+        title: "Raster Calculator",
+        category: "Raster",
+        editable_ports: { inputs: true, outputs: false, types: ["Raster", "Number"] },
+        settings: [],
+        inputs: [{ name: "a", type: "Raster", access: "item" }],
+        outputs: [{ name: "result", type: "Raster", access: "item" }],
+      }),
+    );
+    const options = [...screen.getByTestId("port-type-a").querySelectorAll("option")];
+    expect(options.map((o) => o.textContent)).toEqual(["Raster", "Number"]);
+    expect(screen.queryByTestId("add-output")).toBeNull();
+    fireEvent.click(screen.getByTestId("add-input"));
+    expect(patch.mock.lastCall?.[1].ports?.inputs[1]).toMatchObject({
+      name: "x1",
+      type: "Raster",
+    });
+  });
+
+  test("a Script component without ports: has fixed ports", () => {
+    open(rf({ id: "n5", category: "Script", editable_ports: null }));
+    expect(screen.queryByTestId("add-input")).toBeNull();
+    expect(screen.queryByTestId("port-type-table")).toBeNull();
   });
 
   test("Output shows the log and the traceback", () => {

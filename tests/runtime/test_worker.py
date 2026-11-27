@@ -436,3 +436,12 @@ def test_out_receives_printed_text_in_the_worker(tmp_path: Path) -> None:
     w.handle(p.RunNode("n1", src, {}, "k1"))
     assert isinstance(sent[-1], p.Done), sent
     assert w.memory["k1.out"] == "hello\n"
+
+
+def test_worker_sets_the_inputs_dict(make_executor: MakeExecutor) -> None:
+    from tests.core.test_editable_ports import EXPECTED, _inputs_graph
+
+    g, node, panel = _inputs_graph()
+    ex = make_executor(g)
+    assert ex.run().ok, ex.errors
+    assert ex.summaries[panel]["data"] == EXPECTED

@@ -51,6 +51,7 @@ async function setEditorText(page: Page, text: string): Promise<void> {
 const BROKEN = `# geoknit: component
 # name: Python
 # category: Script
+# ports: {inputs: editable, outputs: editable}
 # outputs:
 #   out: Text
 
@@ -120,7 +121,7 @@ test.describe.serial("component window", () => {
     await page.getByTestId("window-test").click();
 
     const output = page.getByTestId("output");
-    await expect(page.getByTestId("output-error")).toContainText("line 11");
+    await expect(page.getByTestId("output-error")).toContainText("line 12");
     await expect(page.getByTestId("output-error")).toContainText("ValueError: broken on purpose");
     await expect(output).toContainText("before the error");
     await expect(page.getByTestId("output-state")).toContainText("Failed");

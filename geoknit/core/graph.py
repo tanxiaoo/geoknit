@@ -246,24 +246,33 @@ class Graph:
     def set_ports(
         self,
         node_id: str,
-        inputs: list[dict[str, Any]],
-        outputs: list[dict[str, Any]],
+        inputs: list[dict[str, Any]] | None,
+        outputs: list[dict[str, Any]] | None,
     ) -> None:
-        """Rewrite the node's declared ports (Python component window, SPEC 4).
+        """Rewrite the node's declared ports (component window, SPEC 4).
 
-        A port dict may carry ``was``: its old name. Wires on a renamed port
-        follow it; wires on removed ports, or ports whose type no longer fits,
-        are dropped.
+        Only the sides the header's ``ports:`` key makes editable may change, and
+        only to its ``types``; a side given as ``None`` stays as it is. A port dict
+        may carry ``was``: its old name. Wires on a renamed port follow it; wires on
+        removed ports, or ports whose type no longer fits, are dropped.
         """
         node = self.node(node_id)
         if node.is_param or node.source is None:
             raise GraphError(f"{node.title} has no ports to edit")
-        if node.parse_error is not None:
+        if node.parse_error is not None or node.spec is None:
             raise GraphError(f"fix the code first: {node.parse_error}")
+        old = node.spec
+        if inputs is None:
+            inputs = [_port_dict(p) for p in old.inputs.values()]
+        if outputs is None:
+            outputs = [_port_dict(p) for p in old.outputs.values()]
         try:
             new_source = set_ports(node.source, inputs, outputs)
-        except ValueError as exc:
+            new = parse_component(new_source)
+        except (ValueError, ComponentParseError) as exc:
             raise GraphError(str(exc)) from None
+        for side, sent in (("inputs", inputs), ("outputs", outputs)):
+            _check_port_edit(old, new, side, sent)
         renamed_in = {str(p["was"]): str(p["name"]) for p in inputs if p.get("was")}
         renamed_out = {str(p["was"]): str(p["name"]) for p in outputs if p.get("was")}
         node.set_source(new_source)
@@ -569,3 +578,51 @@ class Graph:
 
 def _clamp(value: float, lo: float, hi: float) -> float:
     return lo if value < lo else hi if value > hi else value
+
+
+# ── port edits (SPEC 4 "Ports of a component with editable ports") ──
+
+
+def _port_dict(port: Port) -> dict[str, Any]:
+    """A declared port as ``set_ports`` takes it, written back unchanged."""
+    return {
+        "name": port.name,
+        "type": port.type,
+        "types": list(port.types),
+        "access": port.access,
+        "file": port.file,
+        "like": port.like,
+    }
+
+
+def _port_key(port: Port) -> tuple[Any, ...]:
+    """What a port declares (a ``like:`` output's types follow its input)."""
+    return (port.name, port.access, port.file, port.like, None if port.like else port.types)
+
+
+def _either(names: Iterable[str]) -> str:
+    """``[Raster, Number, Text]`` → ``Raster, Number or Text``."""
+    listed = list(names)
+    return listed[0] if len(listed) == 1 else f"{', '.join(listed[:-1])} or {listed[-1]}"
+
+
+def _check_port_edit(
+    old: ComponentSpec, new: ComponentSpec, side: str, sent: list[dict[str, Any]]
+) -> None:
+    """Refuse a change the header's ``ports:`` key does not allow."""
+    before: dict[str, Port] = getattr(old, side)
+    after: dict[str, Port] = getattr(new, side)
+    editing = old.ports
+    if editing is None or not editing.editable(side):
+        if [_port_key(p) for p in before.values()] != [_port_key(p) for p in after.values()]:
+            raise GraphError(f"the {side} of {old.name} cannot be edited")
+        return
+    was = {str(p.get("name")): str(p.get("was") or p.get("name")) for p in sent}
+    allowed = editing.types_for(side)
+    for port in after.values():
+        if port.like or set(port.types) <= set(allowed):
+            continue
+        kept = before.get(was.get(port.name, port.name))
+        if kept is not None and kept.types == port.types:
+            continue  # a port the header declared outside ``types`` may stay as it is
+        raise GraphError(f"{old.name} {side} are {_either(allowed)}")

@@ -55,15 +55,21 @@ class NodeCreate(BaseModel):
 
 class PortBody(BaseModel):
     name: str
-    type: str = Field(description="Number, Text, Raster, Vector, Table, Model or Any")
+    type: str = Field(description="a data type such as Number or Raster, or Any")
+    types: list[str] | None = Field(
+        default=None, description="an input's types when it accepts several (`type` first)"
+    )
+    like: str | None = Field(default=None, description="an output that takes an input's type")
     access: Literal["item", "list"] = "item"
     file: Literal["write"] | None = None
     was: str | None = Field(default=None, description="old name, when renaming (wires follow)")
 
 
 class PortsBody(BaseModel):
-    inputs: list[PortBody] = Field(default_factory=list)
-    outputs: list[PortBody] = Field(default_factory=list)
+    """A side that is left out stays as it is."""
+
+    inputs: list[PortBody] | None = None
+    outputs: list[PortBody] | None = None
 
 
 class NodePatch(BaseModel):
@@ -72,7 +78,8 @@ class NodePatch(BaseModel):
     settings: dict[str, Any] | None = None
     source: str | None = None
     ports: PortsBody | None = Field(
-        default=None, description="rewrite the header's inputs and outputs (Python component)"
+        default=None,
+        description="rewrite the header's inputs and outputs (components with `ports:`)",
     )
     position: list[float] | None = None
     display: Literal["default", "text", "icon"] | None = None

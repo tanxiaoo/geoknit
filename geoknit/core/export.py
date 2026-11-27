@@ -22,7 +22,7 @@ from typing import Any
 
 from geoknit import __version__
 from geoknit.core import types
-from geoknit.core.component import PRINT_PORT, ComponentSpec
+from geoknit.core.component import INPUTS_NAME, PRINT_PORT, ComponentSpec
 from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
 from geoknit.core.workflow import relativize
 
@@ -173,6 +173,13 @@ def _rewrite_imports(code: str, where: str) -> tuple[str, _Imports]:
     for first, last, new in sorted(edits, reverse=True):
         lines[first : last + 1] = new
     return "".join(lines), found
+
+
+def _uses_name(code: str, name: str) -> bool:
+    """Whether the code reads the variable ``name``."""
+    with contextlib.suppress(SyntaxError):
+        return any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(ast.parse(code)))
+    return False
 
 
 def _vendor_source(module: str) -> tuple[str, set[str]]:
@@ -327,6 +334,10 @@ class _Exporter:
                 f"{where} imports {module}: the script still needs GeoKnit installed"
             )
 
+        if _uses_name(code, INPUTS_NAME):
+            # GeoKnit sets INPUTS before the code: every input, wired or from its setting.
+            pairs = ", ".join(f'"{n}": {n}' for n in spec.inputs)
+            settings.append(f"{INPUTS_NAME} = {{{pairs}}}\n")
         body = "# --- settings ---\n" + "".join(settings) + "# --- code ---\n" + code
         outputs = list(spec.outputs)
         prints = PRINT_PORT in spec.outputs and spec.outputs[PRINT_PORT].type == types.TEXT

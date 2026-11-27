@@ -88,12 +88,12 @@ touches.
 
 ## Step 4: Editable ports for any component
 
-- [ ] Header key `ports: {inputs|outputs: editable, types: [...]}`
-- [ ] `Graph.set_ports` refuses edits the header does not allow
-- [ ] `INPUTS` dict in the namespace (worker, in-process executor, export)
-- [ ] Python component switched to the header key; the frontend
+- [x] Header key `ports: {inputs|outputs: editable, types: [...]}`
+- [x] `Graph.set_ports` refuses edits the header does not allow
+- [x] `INPUTS` dict in the namespace (worker, in-process executor, export)
+- [x] Python component switched to the header key; the frontend
       `category === "Script"` check removed
-- [ ] Settings tab: port editor shown for any component with editable
+- [x] Settings tab: port editor shown for any component with editable
       ports, limited to `types`
 
 **Done when:**

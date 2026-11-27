@@ -176,6 +176,7 @@ class Registry:
                         for p in spec.outputs.values()
                     ],
                     "requires": list(spec.requires),
+                    "editable_ports": spec.ports.as_dict() if spec.ports else None,
                 }
             )
         return out

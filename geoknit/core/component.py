@@ -39,6 +39,9 @@ CODE_MARK = "# --- code ---"
 PRINT_PORT = "out"
 """A Text output with this name that the code does not set receives everything printed."""
 
+INPUTS_NAME = "INPUTS"
+"""The dict of input name → value set before the code runs; reserved as a port or setting name."""
+
 LogFn = Callable[[str], None]
 
 
@@ -79,6 +82,44 @@ class Port:
 
 
 FILE_ROLES = ("write",)
+
+EDITABLE = "editable"
+
+
+@dataclass(frozen=True)
+class EditablePorts:
+    """The header's ``ports:`` key: which sides the Settings tab can edit (SPEC 4)."""
+
+    inputs: bool = False
+    outputs: bool = False
+    types: tuple[str, ...] = ()
+    """The types offered for edited ports; the first is a new port's type."""
+    any_inputs: bool = False
+    """Inputs may also be ``Any``: true when the header lists no ``types``."""
+
+    def editable(self, side: str) -> bool:
+        """``side`` is ``inputs`` or ``outputs``."""
+        return self.inputs if side == "inputs" else self.outputs
+
+    def types_for(self, side: str) -> tuple[str, ...]:
+        """The types a port on ``side`` may have (``Any`` only for inputs, by default)."""
+        if side == "inputs" and self.any_inputs and types.ANY not in self.types:
+            return (*self.types, types.ANY)
+        return self.types
+
+    def as_dict(self) -> dict[str, Any]:
+        """``{inputs, outputs, types, input_types}`` for the API."""
+        return {
+            "inputs": self.inputs,
+            "outputs": self.outputs,
+            "types": list(self.types),
+            "input_types": list(self.types_for("inputs")),
+        }
+
+
+DEFAULT_EDITABLE_TYPES: tuple[str, ...] = tuple(
+    t for t in types.PORT_TYPES if t not in (types.LAYER, types.ANY)
+)
 
 
 @dataclass(frozen=True)
@@ -122,6 +163,8 @@ class ComponentSpec:
     header: dict[str, Any]
     settings: dict[str, Setting]
     blocks: Blocks
+    ports: EditablePorts | None = None
+    """``ports: {inputs: editable, ...}``; ``None``: the ports cannot be edited."""
 
     @property
     def settings_values(self) -> dict[str, Any]:
@@ -200,6 +243,14 @@ def parse_component(source: str) -> ComponentSpec:
         raise ComponentParseError(
             f"ports used as both input and output: {', '.join(sorted(clash))}"
         )
+    if INPUTS_NAME in inputs or INPUTS_NAME in outputs:
+        raise ComponentParseError(f'"{INPUTS_NAME}" is reserved and cannot name a port')
+    if INPUTS_NAME in settings:
+        raise ComponentParseError(
+            f'settings block: "{INPUTS_NAME}" is reserved and cannot name a setting',
+            settings[INPUTS_NAME].line,
+        )
+    editable = _parse_editable(header.get("ports"))
 
     requires = header.get("requires") or []
     if not isinstance(requires, list) or not all(isinstance(r, str) for r in requires):
@@ -221,6 +272,50 @@ def parse_component(source: str) -> ComponentSpec:
         header=header,
         settings=settings,
         blocks=blocks,
+        ports=editable,
+    )
+
+
+def _parse_editable(raw: object) -> EditablePorts | None:
+    """``ports: {inputs: editable, outputs: editable, types: [Raster, Number]}``."""
+    if raw is None:
+        return None
+    usage = "ports must look like {inputs: editable, outputs: editable, types: [Raster, Number]}"
+    if not isinstance(raw, dict):
+        raise ComponentParseError(usage)
+    unknown = [str(k) for k in raw if k not in ("inputs", "outputs", "types")]
+    if unknown:
+        raise ComponentParseError(f'ports: unknown key "{unknown[0]}" ({usage})')
+    sides: dict[str, bool] = {}
+    for side in ("inputs", "outputs"):
+        value = raw.get(side)
+        if value is not None and value != EDITABLE:
+            raise ComponentParseError(f'ports: {side} can only be "{EDITABLE}", not "{value}"')
+        sides[side] = value == EDITABLE
+    if not any(sides.values()):
+        raise ComponentParseError(f"ports: needs inputs: {EDITABLE} or outputs: {EDITABLE}")
+    listed = raw.get("types")
+    if listed is None:
+        port_types = DEFAULT_EDITABLE_TYPES
+    else:
+        if isinstance(listed, str):
+            listed = [listed]
+        if not isinstance(listed, list) or not listed:
+            raise ComponentParseError("ports: types must be a list such as [Raster, Number]")
+        for t in listed:
+            if t not in types.PORT_TYPES:
+                raise ComponentParseError(
+                    f'ports: unknown type "{t}" (use one of {", ".join(types.PORT_TYPES)})'
+                )
+        dup = next((t for t in listed if listed.count(t) > 1), None)
+        if dup is not None:
+            raise ComponentParseError(f'ports: types lists "{dup}" twice')
+        port_types = tuple(str(t) for t in listed)
+    return EditablePorts(
+        inputs=sides["inputs"],
+        outputs=sides["outputs"],
+        types=port_types,
+        any_inputs=listed is None,
     )
 
 
@@ -586,6 +681,8 @@ def run_component(
             if missing:
                 result.error = f'input "{missing[0]}" is not connected'
                 return result
+            # Wired value or setting default, in header order (SPEC 4).
+            namespace[INPUTS_NAME] = {n: namespace[n] for n in spec.inputs}
             exec(_compile_block(spec, "code", filename), namespace)
         except BaseException as exc:  # noqa: BLE001  (user code: report everything)
             if isinstance(exc, KeyboardInterrupt):

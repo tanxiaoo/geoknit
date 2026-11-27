@@ -388,6 +388,7 @@ class Session:
                 category=spec.category if spec else None,
                 icon=spec.icon if spec else None,
                 settings=[_setting_view(s) for s in spec.settings.values()] if spec else [],
+                editable_ports=spec.ports.as_dict() if spec and spec.ports else None,
             )
         return view
 
@@ -481,7 +482,12 @@ class Session:
             g.set_source(node_id, changes["source"])
         if changes.get("ports") is not None:
             ports = changes["ports"]
-            g.set_ports(node_id, list(ports.get("inputs", [])), list(ports.get("outputs", [])))
+            ins, outs = ports.get("inputs"), ports.get("outputs")
+            g.set_ports(
+                node_id,
+                None if ins is None else list(ins),
+                None if outs is None else list(outs),
+            )
         for name, value in (changes.get("settings") or {}).items():
             g.set_setting(node_id, name, value)
         slider = {k: changes[k] for k in ("min", "max", "step") if k in changes}

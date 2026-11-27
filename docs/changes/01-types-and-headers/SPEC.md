@@ -5,7 +5,15 @@ sections 3, 4, 5, 6, 7, 8, 9, 10
 
 ## Questions for Xiao
 
-None open. Answered on 26 Nov 2026 (`docs/changes/README.md`, "Decisions on
+None open. Answered on 27 Nov 2026 (raised while building step 4):
+
+3. The default `types` of `ports:` offers `Any` for inputs only, so the
+   Python component keeps `Any` inputs (option b; section 6).
+4. The export writes `INPUTS = {…}` as the last line of the settings block,
+   only in functions whose code uses it, so unwired inputs already hold their
+   setting values (section 6).
+
+Answered on 26 Nov 2026 (`docs/changes/README.md`, "Decisions on
 the review questions"):
 
 1. Components see their inputs through an `INPUTS` dict (section 6).
@@ -306,7 +314,9 @@ types. New header key:
 
 - `inputs: editable` makes the inputs editable in the Settings tab as for
   Script components; `types` limits the types offered (default: every type
-  except Layer and Any). `outputs: editable` is allowed as well.
+  except Layer and Any, and inputs may also be `Any`; Q3, answered 27 Nov
+  2026). `outputs: editable` is allowed as well. The API sends the input
+  side's list as `input_types`.
 - The server enforces it: `set_ports` refuses a change to a side that is not
   editable ("the inputs of Reclassify cannot be edited") and a type outside
   `types` ("Raster Calculator inputs are Raster or Number"). A component
@@ -321,13 +331,56 @@ types. New header key:
   default), in header order. It is set for every component, and the format
   docs reserve the name. Expression, Format and Raster Calculator pass it to
   `safe_eval` / `str.format`. The export defines
-  `INPUTS = {"a": a, "b": b}` at the top of each function body. The name is
+  `INPUTS = {"a": a, "b": b}` as the last line of the settings block, only in
+  functions whose code uses the name (Q4, answered 27 Nov 2026). The name is
   reserved: a port or setting called `INPUTS` is a header parse error.
 - The Python component's header gets `ports: {inputs: editable, outputs: editable}`
   so the behaviour has one rule instead of a Script special case. "Script
   component" in SPEC 4 becomes "a component with editable ports". A
   component saved from the Python component keeps the line, so it stays
   editable whatever its category.
+
+Details settled while building step 4:
+
+- `ports:` takes the keys `inputs`, `outputs` (value `editable` only) and
+  `types` (a list of port types, or one name). At least one side must be
+  editable; an unknown key or type, a type listed twice, or another value is
+  a header parse error. Listing `Any` or `Layer` in `types` explicitly is
+  allowed; only the default leaves them out.
+- API: component nodes in `GET /api/graph` (and `PATCH` replies) and entries
+  of `GET /api/components` carry `editable_ports: {inputs, outputs, types}`,
+  or `null` without `ports:`.
+- `PATCH /api/nodes/{id}` `ports`: a side left out stays as it is
+  (`Graph.set_ports(node, inputs | None, outputs | None)`). Ports in the
+  body also take `types` and `like`, so a side sent back unchanged keeps
+  its union types and `like:` outputs.
+- A side that is not editable may be sent, but what it declares (names,
+  order, types, `access`, `file`, `like`) must not change; otherwise
+  `the inputs of Reclassify cannot be edited` (`400`). The same applies to
+  both sides of a component without `ports:`.
+- On an editable side, every port's types must be in `types`:
+  `Raster Calculator inputs are Raster or Number` (three or more:
+  `A, B or C`). A port the header already declares outside `types` may stay,
+  also renamed, as long as its type does not change. `like:` outputs are not
+  checked against `types`. `access` and `file` stay editable as before.
+- `INPUTS` is set after the settings block and the wired values, so an
+  unwired input holds its setting's value. A port named `INPUTS`:
+  `"INPUTS" is reserved and cannot name a port`; a setting named `INPUTS`:
+  the same for a setting, with its line number.
+- Export: `INPUTS = {"a": a, "b": b}` is written only in functions whose code
+  reads the name `INPUTS`, as the last line of the settings block (after the
+  settings, so unwired inputs have their values), so exports of components
+  that do not use it are unchanged.
+- The Python component's default `types` leave out `Any`, so its inputs can
+  no longer be made `Any` from the Settings tab (before this change they
+  could); a port already declared `Any` stays. A Python node whose saved
+  source predates the `ports:` line has fixed ports until the line is added
+  in its code.
+- Frontend: the Settings tab shows the inputs editor when
+  `editable_ports.inputs`, the outputs section when `editable_ports.outputs`;
+  the type list offers `types` (plus the port's own type when it is outside
+  them); a new port gets the first of `types`; picking a type for a union
+  input replaces its types.
 
 ## 7. Ribbon groups and layout (SPEC 4, 7, 8, 9)
 

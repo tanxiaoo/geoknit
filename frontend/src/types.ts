@@ -16,9 +16,6 @@ export const DATA_TYPES: Exclude<PortType, "Any">[] = [
   "Layer",
 ];
 
-/** Types offered by the port editor: Layer comes only from Map Layer (change 03). */
-export const EDITABLE_PORT_TYPES = DATA_TYPES.filter((t) => t !== "Layer");
-
 export const PORT_COLOURS: Record<PortType, string> = {
   Number: "#64748B",
   Text: "#A16207",

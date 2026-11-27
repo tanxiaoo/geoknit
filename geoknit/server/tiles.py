@@ -62,7 +62,9 @@ COLORMAPS = (
     "spectral",
     "blues",
 )
-BASEMAPS = ("light", "none")
+# "auto" follows the UI theme (light or dark) and is the default (SPEC 8)
+BASEMAPS = ("auto", "light", "dark", "none")
+DEFAULT_BASEMAP = "auto"
 PALETTE = (
     "#1f77b4",
     "#ff7f0e",

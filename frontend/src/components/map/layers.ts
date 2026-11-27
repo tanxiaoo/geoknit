@@ -1,7 +1,8 @@
 // Map Viewer logic without MapLibre (SPEC 8): styles, tile URLs, legends, bounds.
 
-import type { LayerStyle, MapClass, MapLayer, RasterStats } from "../../apiTypes";
+import type { Basemap, LayerStyle, MapClass, MapLayer, RasterStats } from "../../apiTypes";
 import { DEFAULT_VECTOR_COLOUR } from "../../palettes";
+import type { Theme } from "../../theme";
 
 export const CATEGORICAL = "categorical";
 
@@ -20,6 +21,33 @@ export function effectiveStyle(layer: MapLayer, saved?: Partial<LayerStyle>): La
   const defaults = layer.raster?.default_style ?? layer.vector?.default_style ?? {};
   return { ...STYLE_DEFAULTS, ...defaults, ...(saved ?? {}) };
 }
+
+/** The basemap drawn: `auto` follows the theme. */
+export type ShownBasemap = "light" | "dark" | "none";
+
+export function resolveBasemap(basemap: Basemap, theme: Theme): ShownBasemap {
+  return basemap === "auto" ? theme : basemap;
+}
+
+/** MapLibre raster paint of the OpenStreetMap basemap. Both use the same tiles: light is
+ * greyed, dark inverts the brightness and turns the hues back (no CSS filter, which would
+ * also recolour the data layers). Every property is set in both, so a switch resets it. */
+export const BASEMAP_PAINT: Record<"light" | "dark", Record<string, number>> = {
+  light: {
+    "raster-saturation": -0.85,
+    "raster-brightness-min": 0.25,
+    "raster-brightness-max": 1,
+    "raster-contrast": -0.15,
+    "raster-hue-rotate": 0,
+  },
+  dark: {
+    "raster-saturation": -0.7,
+    "raster-brightness-min": 1,
+    "raster-brightness-max": 0,
+    "raster-contrast": -0.15,
+    "raster-hue-rotate": 180,
+  },
+};
 
 export const isRgb = (style: LayerStyle): boolean => style.bands.length === 3;
 

@@ -182,7 +182,12 @@ export const strings = {
   mapOpenHint: "Double-click to open the map",
   layers: "Layers",
   basemap: "Basemap",
-  basemapNames: { light: "Light (OpenStreetMap)", none: "None" } as Record<string, string>,
+  basemapNames: {
+    auto: "Auto (follows the theme)",
+    light: "Light (OpenStreetMap)",
+    dark: "Dark (OpenStreetMap)",
+    none: "None",
+  } as Record<string, string>,
   basemapAttribution: "© OpenStreetMap contributors",
   noLayers: "Wire a Raster or Vector into Map Viewer › layers.",
   loadingMap: "Loading the map…",

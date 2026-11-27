@@ -317,7 +317,8 @@ export interface NodePatch {
 
 // ── Map Viewer (SPEC 8, 9) ──
 
-export type Basemap = "light" | "none";
+/** `auto` (the default) follows the theme. */
+export type Basemap = "auto" | "light" | "dark" | "none";
 
 /** A layer's look; `color` is for vectors, the rest for rasters. */
 export interface LayerStyle {

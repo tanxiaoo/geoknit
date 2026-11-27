@@ -3,10 +3,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MlMap, Marker } from "maplibre-gl";
-import type { Basemap } from "../../apiTypes";
 import { strings } from "../../strings";
 import { themeColor, useTheme } from "../../theme";
-import type { RenderLayer } from "./layers";
+import { BASEMAP_PAINT, type RenderLayer, type ShownBasemap } from "./layers";
 
 type MapLibre = typeof import("maplibre-gl");
 
@@ -16,7 +15,8 @@ export interface VectorHit {
 }
 
 interface Props {
-  basemap: Basemap;
+  /** Already resolved: `auto` is the theme's basemap. */
+  basemap: ShownBasemap;
   layers: RenderLayer[];
   /** Fit the view to these bounds whenever ``fitKey`` changes. */
   fitBounds: [number, number, number, number] | null;
@@ -31,7 +31,7 @@ declare global {
 }
 
 // OpenStreetMap's own tiles: no API key, attribution shown (tile usage policy:
-// https://operations.osmfoundation.org/policies/tiles/). Greyed below for a light map.
+// https://operations.osmfoundation.org/policies/tiles/). Greyed or inverted by BASEMAP_PAINT.
 const BASEMAP_TILES = ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"];
 const BASEMAP = "gk-basemap";
 const PREFIX = "gk-layer-";
@@ -53,9 +53,9 @@ const LINE = [
 const POINT = ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false];
 
 /** Bring the map in line with ``layers`` (top first) and ``basemap``; ``urls`` remembers sources. */
-function sync(map: MlMap, layers: RenderLayer[], basemap: Basemap, urls: Map<string, string>) {
+function sync(map: MlMap, layers: RenderLayer[], basemap: ShownBasemap, urls: Map<string, string>) {
   // the basemap is added or removed, so "none" never contacts the tile service
-  if (basemap === "light" && !map.getSource(BASEMAP)) {
+  if (basemap !== "none" && !map.getSource(BASEMAP)) {
     map.addSource(BASEMAP, {
       type: "raster",
       tiles: BASEMAP_TILES,
@@ -67,15 +67,16 @@ function sync(map: MlMap, layers: RenderLayer[], basemap: Basemap, urls: Map<str
       id: BASEMAP,
       type: "raster",
       source: BASEMAP,
-      paint: {
-        "raster-saturation": -0.85,
-        "raster-brightness-min": 0.25,
-        "raster-contrast": -0.15,
-      },
     });
   } else if (basemap === "none" && map.getSource(BASEMAP)) {
     map.removeLayer(BASEMAP);
     map.removeSource(BASEMAP);
+  }
+  if (basemap !== "none") {
+    // light or dark: the same tiles, only the paint changes (live with the theme)
+    for (const [name, value] of Object.entries(BASEMAP_PAINT[basemap])) {
+      map.setPaintProperty(BASEMAP, name, value);
+    }
   }
 
   const wanted = new Set(layers.map((l) => sourceId(l.id)));

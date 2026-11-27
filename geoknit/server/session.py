@@ -956,7 +956,7 @@ class Session:
                 layer.update(status="error", message=exc.message)
             layers.append(layer)
         return {
-            "basemap": settings.get("basemap", "light"),
+            "basemap": settings.get("basemap", tiles.DEFAULT_BASEMAP),
             "layers": layers,
             "basemaps": list(tiles.BASEMAPS),
             "colormaps": tiles.colormap_stops(),

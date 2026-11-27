@@ -1710,6 +1710,44 @@ pre.gk-output-error {
   position: absolute;
   inset: 0;
 }
+/* MapLibre's controls through theme tokens (its CSS is white only). Prefixed with
+ * .gk-map-canvas to win over maplibre-gl.css, which loads after this file. */
+.gk-map-canvas .maplibregl-ctrl-group {
+  background: var(--gk-map-ctrl-bg);
+}
+.gk-map-canvas .maplibregl-ctrl-group:not(:empty) {
+  box-shadow: 0 0 0 2px var(--gk-map-ctrl-ring);
+}
+.gk-map-canvas .maplibregl-ctrl-group button + button {
+  border-top-color: var(--gk-map-ctrl-border);
+}
+@media (hover: hover) {
+  .gk-map-canvas .maplibregl-ctrl button:not(:disabled):hover {
+    background-color: var(--gk-map-ctrl-hover);
+  }
+}
+.gk-map-canvas .maplibregl-ctrl button .maplibregl-ctrl-icon,
+.gk-map-canvas .maplibregl-ctrl-attrib-button {
+  filter: var(--gk-map-ctrl-icon-filter);
+}
+.gk-map-canvas .maplibregl-ctrl-scale {
+  background-color: var(--gk-map-scale-bg);
+  border-color: var(--gk-map-scale-ink);
+  color: var(--gk-map-scale-ink);
+}
+.gk-map-canvas .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  background-color: var(--gk-map-attrib-bg);
+  color: var(--gk-map-attrib-ink);
+}
+.gk-map-canvas .maplibregl-ctrl.maplibregl-ctrl-attrib.maplibregl-compact {
+  background-color: var(--gk-map-ctrl-bg);
+}
+.gk-map-canvas .maplibregl-ctrl-attrib-button {
+  background-color: var(--gk-map-attrib-button-bg);
+}
+.gk-map-canvas .maplibregl-ctrl-attrib a {
+  color: var(--gk-map-attrib-link);
+}
 .gk-map-overlay {
   position: absolute;
   inset: 0;

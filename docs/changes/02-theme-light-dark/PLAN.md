@@ -60,10 +60,10 @@ after change 01 step 5).
 
 ## Step 4: Map Viewer basemap
 
-- [ ] Basemap `auto` (default) | `light` | `dark` | `none` in `tiles.BASEMAPS`,
+- [x] Basemap `auto` (default) | `light` | `dark` | `none` in `tiles.BASEMAPS`,
       `merge_settings`, `map_view` and the map window; dark through MapLibre
       paint properties
-- [ ] A saved `light` stays `light`; no key means `auto`
+- [x] A saved `light` stays `light`; no key means `auto`
 
 **Done when:**
 - vitest (`MapWindow.test.tsx`): `auto` gives the dark basemap paint in dark

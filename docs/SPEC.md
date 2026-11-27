@@ -78,18 +78,22 @@ Worker process                    imports geo libraries, runs components,
 
 ## 3. Data types
 
-| Type   | Python object | Port colour | Panel summary (`describe()`) |
+| Type   | Python object | Port colour (light / dark) | Panel summary (`describe()`) |
 |--------|---------------|-------------|-------------------------------|
-| Number | `int` or `float` (not `bool`) | `#64748B` | the value |
-| Text   | `str` | `#A16207` | the value (multi-line allowed) |
-| Boolean | `bool` | `#0369A1` | `True` / `False` |
-| Raster | `xarray.DataArray` opened with rioxarray, dims `(band, y, x)`, lazy (dask-backed) | `#0B7A7C` | bands, band names, width × height, resolution, dtype, CRS, nodata |
-| Vector | `geopandas.GeoDataFrame` | `#C2410C` | feature count, geometry type, CRS, columns |
-| Table  | `pandas.DataFrame` (not geographic) | `#7C3AED` | rows, columns, first 5 rows |
-| Model  | `geoknit.types.ModelBundle` | `#BE185D` | estimator type, task, target, feature names, parameters |
-| Color  | `geoknit.types.Color` | `#4D7C0F` | `Color #0B7A7C` |
-| Colormap | `geoknit.types.Colormap` | `#4338CA` | kind, name, min/max or number of classes (`Colormap · continuous · viridis · 2–98 % stretch`) |
-| Layer  | a map layer from Map Layer to Map Viewer (change 03) | `#A21CAF` | layer name, source type, style |
+| Number | `int` or `float` (not `bool`) | `#64748B` / `#94A3B8` | the value |
+| Text   | `str` | `#A16207` / `#FBBF24` | the value (multi-line allowed) |
+| Boolean | `bool` | `#0369A1` / `#38BDF8` | `True` / `False` |
+| Raster | `xarray.DataArray` opened with rioxarray, dims `(band, y, x)`, lazy (dask-backed) | `#0B7A7C` / `#2DD4BF` | bands, band names, width × height, resolution, dtype, CRS, nodata |
+| Vector | `geopandas.GeoDataFrame` | `#C2410C` / `#FB923C` | feature count, geometry type, CRS, columns |
+| Table  | `pandas.DataFrame` (not geographic) | `#7C3AED` / `#A78BFA` | rows, columns, first 5 rows |
+| Model  | `geoknit.types.ModelBundle` | `#BE185D` / `#F472B6` | estimator type, task, target, feature names, parameters |
+| Color  | `geoknit.types.Color` | `#4D7C0F` / `#A3E635` | `Color #0B7A7C` |
+| Colormap | `geoknit.types.Colormap` | `#4338CA` / `#818CF8` | kind, name, min/max or number of classes (`Colormap · continuous · viridis · 2–98 % stretch`) |
+| Layer  | a map layer from Map Layer to Map Viewer (change 03) | `#A21CAF` / `#E879F9` | layer name, source type, style |
+
+The port colours are the `--gk-type-<name>` tokens of the frontend theme
+(section 8, "Theme"): the dark theme uses lighter shades of the same hues, so
+wires stay visible on a dark canvas.
 
 `geoknit.types` here means `geoknit/core/types.py`. `DATA_TYPES` (Python, and
 `frontend/src/types.ts`) lists these ten types; Layer is only a name until
@@ -865,10 +869,13 @@ Earth Engine once, outside GeoKnit.
 
 Layout, top to bottom and left to right. The design mockups are in
 `docs/ui/`: `01-main.png` (canvas, names), `02-icon-mode.png` (canvas,
-icons), `03`–`06` (component window), `07` (Map Viewer).
+icons), `03`–`06` (component window), `07` (Map Viewer). They are drawn in the
+light theme and are not made from the app; the app's own screenshots are in
+`docs/img/milan/` (section 12).
 
 - **Top bar**: GeoKnit logo, workflow file name and save state, worker
-  status, Export .py, Stop, Run.
+  status, the theme button (Lucide `sun-moon`, "Theme" below), Export .py,
+  Stop, Run. The top bar is navy in both themes.
 - **Ribbon**: one tab per category, in the order of section 4 ("Ribbon tabs
   and groups"); inside a tab the components sit in labelled groups,
   Grasshopper style; search box. The ribbon is built entirely from
@@ -890,7 +897,8 @@ icons), `03`–`06` (component window), `07` (Map Viewer).
   Maths, Sets, Script and pack categories `#475569`; Table `#7C3AED`; Vector
   `#C2410C`; Raster `#0B7A7C`; Sampling `#B45309`; Model `#BE185D`;
   Validation `#15803D`; Display `#A21CAF`. A category that is no tab (an
-  inline component's own category) is `#475569`.
+  inline component's own category) is `#475569`. The strips have the same
+  colours in both themes, with white text.
 - **Ports**: a union input's dot is drawn in the first listed type's colour
   with a thin ring of the second; the hover summary names all types. Output
   colours and drag checks follow `resolved_types` (`GET /api/graph`, the
@@ -1069,8 +1077,8 @@ A Panel shows what passes through it, by type:
 
 ### Map Viewer
 
-Map Viewer window: MapLibre map with a light basemap, a layer list from the
-wired inputs, per-layer colormap / min / max / band(s) / opacity, a legend,
+Map Viewer window: MapLibre map with an OpenStreetMap basemap (light or
+dark, following the theme by default), a layer list from the wired inputs, per-layer colormap / min / max / band(s) / opacity, a legend,
 and click-to-inspect pixel values of every layer.
 
 - **Node and window**: the canvas node shows its `layers` input and how many
@@ -1117,13 +1125,107 @@ and click-to-inspect pixel values of every layer.
 - **Inspect**: a click returns every band of every raster layer at that
   point: the pixel the point falls in, as Extract Values reads it. Vector
   attributes come from the GeoJSON the window already has.
-- **Styles** (basemap `light` | `none`, per-layer `colormap`, `bands`, `min`,
-  `max`, `opacity`, `visible`, and `color` for vectors) are saved in the
-  workflow under the node's `map` key. Each change is one undo step and never
-  makes anything out of date. The `light` basemap is OpenStreetMap's own
-  raster tiles (`tile.openstreetmap.org`, no API key, attribution shown),
-  greyed in the map so the layers stand out; it needs the internet. `none`
-  works offline and never contacts the tile server.
+- **Styles** (basemap `auto` | `light` | `dark` | `none`, per-layer
+  `colormap`, `bands`, `min`, `max`, `opacity`, `visible`, and `color` for
+  vectors) are saved in the workflow under the node's `map` key. Each change
+  is one undo step and never makes anything out of date.
+- **Basemap**: `auto` is the default (also for a map saved without a
+  `basemap` key) and shows `light` or `dark` after the current theme,
+  switching live when the theme changes; a saved `light` or `dark` stays as
+  it is. `light` and `dark` are both OpenStreetMap's own raster tiles
+  (`tile.openstreetmap.org`, no API key, attribution shown), recoloured with
+  MapLibre raster paint properties (`BASEMAP_PAINT` in
+  `components/map/layers.ts`): `light` is greyed (`raster-saturation` -0.85,
+  `raster-brightness-min` 0.25, `raster-contrast` -0.15) so the layers stand
+  out; `dark` inverts the brightness (`raster-brightness-min` 1,
+  `raster-brightness-max` 0), turns the hues back (`raster-hue-rotate` 180)
+  and lowers the saturation (-0.7). No CSS filter is used, because it would
+  also recolour the data layers drawn on the same canvas. Both need the
+  internet. `none` works offline, never contacts the tile server, and shows
+  the `map-bg` colour of the theme.
+- **Colours and the theme**: layers are never recoloured by the theme (a
+  colormap or class palette means the same colours in both themes, and a
+  vector's default colour is `PALETTE[3]`, `#d62728`, in both). The map
+  background for basemap `none`, the click marker, the point outline and the
+  MapLibre controls (zoom buttons, scale bar, attribution) are UI and follow
+  the theme: their colours are `--gk-map-…` tokens, read with `themeColor()`
+  for MapLibre paint properties and the marker, and applied to the controls
+  by `styles.css`.
+
+### Theme
+
+GeoKnit has a light and a dark theme. The theme belongs to the user, not the
+workflow: opening a colleague's `.geoknit` file never changes it.
+
+- **Setting** `theme`: `system` (default) | `light` | `dark`. `system`
+  follows the browser's `prefers-color-scheme`, live when the OS switches. It
+  is stored in `settings.json` next to `trusted.json` (section 12) and
+  changed with `PATCH /api/settings` (section 9).
+- **Top bar**: one button (Lucide `sun-moon`) cycles System → Light → Dark;
+  its tooltip names the current choice.
+- **No flash before the first paint**: the server answers `/` and
+  `/index.html` itself (ahead of the static files) and writes the saved
+  choice on the page as `<html data-theme-setting="…">`. A small inline
+  script in `frontend/index.html` turns it into `data-theme="light|dark"`
+  before any CSS applies, resolving `system` with
+  `matchMedia("(prefers-color-scheme: dark)")`. Under `npm run dev` the
+  attribute is missing: the script falls back to `system` and the app applies
+  the saved choice once `GET /api/settings` answers.
+- **Tokens**: every UI colour is a CSS custom property `--gk-…` in
+  `frontend/src/theme.css`, with one block per theme
+  (`:root[data-theme="light"]`, `:root[data-theme="dark"]`; the light values
+  also apply without the attribute). No other `.css`, `.ts`, `.tsx` or `.svg`
+  file under `frontend/src` holds a colour literal (hex, a colour function,
+  a named colour), except test files, the vendored icon SVGs and
+  `frontend/src/palettes.ts`, the one home of data colours (class palette,
+  vector colour choices), which mean the same in both themes. A vitest test
+  (`colourLiterals.test.ts`) fails on any other literal. TypeScript uses
+  `var(--gk-…)` where CSS accepts it; MapLibre paint properties get a value
+  from `themeColor(token)` (`frontend/src/theme.ts`, read with
+  `getComputedStyle`), read again when the theme changes (`useTheme()`).
+- **Token groups**: surfaces (`app-bg`, `panel-bg`, `canvas-bg`,
+  `canvas-grid`, `node-bg`, `node-border`, `topbar-bg`, `field-bg`,
+  `map-bg`, …); text (`ink`, `muted`, `on-strip`, `on-type`, …); states
+  (`out-of-date`, `error`, `selected`, `running`); Panel note
+  (`panel-note-bg`, `panel-note-ink`, `panel-note-border`); one per data type
+  (`type-number`, …, section 3) and the category strip of a category that is
+  no tab (`cat-other`); wires (`wire-width`, `wire-faded-opacity`); Map
+  Viewer UI (`map-marker`, `map-point-outline`, `map-ctrl-…`, `map-scale-…`,
+  `map-attrib-…`).
+- **Palettes** (surfaces, text and states; the type colours are in
+  section 3):
+
+  | Token | Light | Dark |
+  |-------|-------|------|
+  | app-bg / panel-bg | `#FFFFFF` / `#F8FAFC` | `#0B1220` / `#111827` |
+  | canvas-bg | `#E5E8EC` | `#111827` |
+  | canvas-grid | `#D4D8DE` | `#1F2937` |
+  | node-bg | `#EEF0F3` | `#1E293B` |
+  | node-border | `#64748B` | `#475569` |
+  | ink / muted | `#0F172A` / `#64748B` | `#E5E7EB` / `#94A3B8` |
+  | panel-note-bg / ink | `#FEF6C7` / `#0F172A` | `#3B3416` / `#FDE68A` |
+  | out-of-date / error / selected | `#D97706` / `#DC2626` / `#16A34A` | `#F59E0B` / `#F87171` / `#4ADE80` |
+  | map-bg | `#F1F3F4` | `#1F2937` |
+
+- **Contrast** (vitest, WCAG contrast ratio): every type colour against
+  `canvas-bg` and `node-bg` of its theme ≥ 3:1; `ink` ≥ 4.5:1 and `muted`
+  ≥ 3:1 against `panel-bg`, `node-bg` and `panel-note-bg`; `on-strip`
+  (white) against every category strip colour ≥ 4.5:1. Both theme blocks
+  must define the same tokens.
+- **Parts that are not plain CSS**: Monaco (Code tab) uses `vs` in light and
+  `vs-dark` in dark, switched live (`monaco.editor.setTheme`); the Map Viewer
+  basemap and map UI colours are described under "Map Viewer". Icons use
+  `currentColor` and follow the text colour. Native form controls
+  (scrollbars, checkboxes, range sliders, select menus) follow the theme
+  through `color-scheme` in each theme block; text fields and selects take
+  their background from `field-bg`.
+- **Fills with text on them**: white stays on the category strips, primary
+  buttons and toasts. Where a fill is a light colour in dark (a type colour
+  behind a badge, the slider value, the banner buttons) the text has its own
+  token (`on-type`, `slider-ink`, `banner-button-ink`): dark ink in the dark
+  theme, white in light. The Panel keeps its sticky-note look in dark with a
+  muted yellow.
+- Not themed: exported scripts and written files (they carry no UI colours).
 
 ### Interactions and editing
 
@@ -1199,6 +1301,8 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | POST | `/api/workflow/save`, `/api/workflow/open` | file operations |
 | POST | `/api/workflow/trust` | trust the open workflow (section 11) |
 | POST | `/api/workflow/recover` | `{restore}`: restore or discard the autosave (section 8) |
+| GET | `/api/settings` | the user's settings: `{theme}` (section 8, "Theme") |
+| PATCH | `/api/settings` | change them: `{theme: system \| light \| dark}` |
 | POST | `/api/export/py` | Export .py `{path?, overwrite?}`: the script, written into the project if `path` (section 10) |
 | GET | `/api/map/{id}` | Map Viewer layers: status, bounds, bands, statistics, style (section 8) |
 | GET | `/api/map/{id}/inspect?lon&lat` | band values of every raster layer at a point |
@@ -1206,6 +1310,7 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/tiles/{key}/{z}/{x}/{y}.png?bands&colormap&min&max` | raster tiles for Map Viewer (rio-tiler) |
 | GET | `/api/vector/{key}.geojson` | vector layer in EPSG:4326, max 50 000 features; total in `X-GeoKnit-Features` |
 | WS | `/ws` | events: node state changes, log lines, run finished |
+| GET | `/`, `/index.html` | the app, with the saved theme on `<html data-theme-setting>` |
 
 The server binds to `127.0.0.1` only.
 
@@ -1312,6 +1417,15 @@ Details:
     name (`Point`, `LineString`, …; a missing geometry `null`); `Decimal` →
     number; anything else → its `str()`. Text cells longer than 1000
     characters are cut and end in `…`.
+- `GET /api/map/{id}` answers `{basemap, basemaps, layers, colormaps,
+  max_features}`; `basemap` is the saved one or `auto`, and `basemaps` lists
+  `auto`, `light`, `dark`, `none`. A Map Viewer `map` patch with another
+  basemap answers `400` (`basemap is one of auto, light, dark, none`).
+- `/api/settings` belongs to the user, not the workflow: a change is not part
+  of undo, never makes anything out of date, and is allowed during a run and
+  on a read-only workflow. A theme other than `system`, `light`, `dark`
+  answers `422` (like any invalid request body) and `null` answers `400`;
+  nothing is written.
 - `{key}` in the map routes is a port key `<node key>.<port>` from
   `GET /api/map/{id}`; a key that is not in the disk cache answers `404`.
 - `POST /api/run` starts the run in the background and answers `202
@@ -1458,6 +1572,16 @@ created or saved on this machine (its content hash is not in
 - Geo stack from wheels only: rasterio, pyogrio, shapely, pyproj, geopandas,
   rioxarray. Never import `osgeo`. The worker ignores a system
   `PROJ_LIB` / `PROJ_DATA` / `GDAL_DATA` (section 6, "Worker protocol").
+- The user's own files are `trusted.json` (section 11), `autosave/`
+  (section 8) and `settings.json` (`{"theme": "system"}`, section 8
+  "Theme"), together in `~/.geoknit/`, or in the folder of
+  `GEOKNIT_TRUST_FILE` / `create_app(trust_file=…)` (the tests use this). A
+  missing or unreadable `settings.json` means the defaults; keys GeoKnit does
+  not know are kept and written back.
+- Screenshots: `docs/img/milan/` is made from the app by `npm run
+  screenshots` (`frontend/docs-shots/milan.spec.ts`, on the real Milan data),
+  in the light theme plus `01-opened-dark.png` and `06-map-viewer-dark.png`;
+  the README shows the main canvas in both themes side by side.
 - A component can declare `requires`; if a package is missing, GeoKnit offers
   to `pip install` it into its own environment.
 - License: Apache-2.0.

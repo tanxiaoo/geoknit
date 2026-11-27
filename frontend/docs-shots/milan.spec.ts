@@ -1,5 +1,8 @@
 // Screenshots for docs/milan-walkthrough.md, on a scratch copy of the Milan example
 // (serve_milan.py). They are written to docs/img/milan/; run again after UI changes.
+// A dark pass (change 02) writes 01-opened-dark.png and 06-map-viewer-dark.png; the theme
+// is set through the API (the settings file is private to the run, see serve_milan.py)
+// and set back to `system` (light here: colorScheme in the config) afterwards.
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,6 +57,15 @@ async function zoomLeftOf(page: Page, target: Locator, percent: number): Promise
   }
 }
 
+/** Save the theme setting and reload the page in it. */
+async function setTheme(page: Page, theme: "system" | "dark"): Promise<void> {
+  await api(page, "PATCH", "/api/settings", { theme });
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", theme === "dark" ? "dark" : "light");
+  await expect(page.getByTestId("worker-status")).toContainText("idle");
+  await collapseAssistant(page);
+}
+
 const node = (page: Page, id: string) => page.locator(`.react-flow__node[data-id="${id}"]`);
 
 /** A screenshot of `boxes` together, with a margin, clipped to the viewport. */
@@ -81,12 +93,18 @@ test.describe.serial("Milan walkthrough", () => {
   });
 
   test.afterAll(async () => {
+    await api(page, "PATCH", "/api/settings", { theme: "system" });
     await page.close();
   });
 
   test("the workflow before running", async () => {
     await page.getByTestId("fit").click();
     await page.screenshot({ path: shot("01-opened.png") });
+    await setTheme(page, "dark");
+    await page.getByTestId("fit").click();
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: shot("01-opened-dark.png") });
+    await setTheme(page, "system");
   });
 
   test("after Run: the canvas and the metrics Panel", async () => {
@@ -112,6 +130,18 @@ test.describe.serial("Milan walkthrough", () => {
     await expect(win).toHaveCount(0);
   });
 
+  /** Open the Map Viewer and wait for its layers and tiles. */
+  async function openMap(id: string): Promise<Locator> {
+    await page.getByTestId(`node-${id}`).dblclick();
+    const win = page.getByTestId("map-window");
+    await expect(win).toBeVisible();
+    await expect(page.getByTestId("layer-n17.map")).toHaveAttribute("data-status", "ready");
+    await expect(page.getByTestId("map-canvas")).toHaveAttribute("data-ready", "true");
+    await page.waitForTimeout(4_000); // basemap and raster tiles
+    await page.waitForFunction(() => !!window.__geoknitMap?.loaded(), null, { timeout: 30_000 });
+    return win;
+  }
+
   test("a Map Viewer with the predicted map and the test points", async () => {
     const viewer = (await api(page, "POST", "/api/nodes", {
       component: "param/map",
@@ -122,13 +152,15 @@ test.describe.serial("Milan walkthrough", () => {
     await page.reload();
     await collapseAssistant(page);
     await runAndWait(page); // everything else comes from the cache
-    await page.getByTestId(`node-${viewer.id}`).dblclick();
-    await expect(page.getByTestId("map-window")).toBeVisible();
-    await expect(page.getByTestId("layer-n17.map")).toHaveAttribute("data-status", "ready");
-    await expect(page.getByTestId("map-canvas")).toHaveAttribute("data-ready", "true");
-    await page.waitForTimeout(4_000); // basemap and raster tiles
-    await shotAround(page, shot("06-map-viewer.png"), [page.getByTestId("map-window")]);
+    await shotAround(page, shot("06-map-viewer.png"), [await openMap(viewer.id)]);
     await page.getByTestId("map-close").click();
+
+    // dark: basemap "auto" (the default) follows the theme
+    await setTheme(page, "dark");
+    await shotAround(page, shot("06-map-viewer-dark.png"), [await openMap(viewer.id)]);
+    await expect(page.getByTestId("map-basemap")).toHaveValue("auto");
+    await page.getByTestId("map-close").click();
+    await setTheme(page, "system");
   });
 
   test("Export .py", async () => {

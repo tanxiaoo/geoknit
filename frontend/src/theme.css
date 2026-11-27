@@ -121,6 +121,18 @@
   /* Map Viewer UI (MapLibre reads these through themeColor()) */
   --gk-map-marker: #2563eb;
   --gk-map-point-outline: #ffffff;
+  /* MapLibre controls (zoom, scale bar, attribution): light is MapLibre's own look */
+  --gk-map-ctrl-bg: #ffffff;
+  --gk-map-ctrl-border: #dddddd;
+  --gk-map-ctrl-ring: rgb(0 0 0 / 0.1);
+  --gk-map-ctrl-hover: rgb(0 0 0 / 0.05);
+  --gk-map-ctrl-icon-filter: none;
+  --gk-map-scale-bg: rgb(255 255 255 / 0.75);
+  --gk-map-scale-ink: #333333;
+  --gk-map-attrib-bg: rgb(255 255 255 / 0.5);
+  --gk-map-attrib-button-bg: rgb(255 255 255 / 0.5);
+  --gk-map-attrib-ink: #000000;
+  --gk-map-attrib-link: rgb(0 0 0 / 0.75);
 
   /* data types: ports, wires, legend (SPEC 3) */
   --gk-type-number: #64748b;
@@ -263,6 +275,18 @@
   /* Map Viewer UI (MapLibre reads these through themeColor()) */
   --gk-map-marker: #60a5fa;
   --gk-map-point-outline: #111827;
+  /* MapLibre controls: its icons are dark SVGs, inverted here */
+  --gk-map-ctrl-bg: #1e293b;
+  --gk-map-ctrl-border: #475569;
+  --gk-map-ctrl-ring: rgb(0 0 0 / 0.4);
+  --gk-map-ctrl-hover: rgb(255 255 255 / 0.08);
+  --gk-map-ctrl-icon-filter: invert(0.9);
+  --gk-map-scale-bg: rgb(17 24 39 / 0.75);
+  --gk-map-scale-ink: #e5e7eb;
+  --gk-map-attrib-bg: rgb(17 24 39 / 0.6);
+  --gk-map-attrib-button-bg: transparent; /* the icon filter would invert a fill too */
+  --gk-map-attrib-ink: #e5e7eb;
+  --gk-map-attrib-link: rgb(229 231 235 / 0.85);
 
   /* data types: ports, wires, legend (change 02 SPEC 3: lighter shades of the same hues) */
   --gk-type-number: #94a3b8;

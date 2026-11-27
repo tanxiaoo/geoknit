@@ -29,11 +29,11 @@ after change 01 step 5).
 
 ## Step 2: Dark palette and contrast tests
 
-- [ ] Dark block in `theme.css` with the SPEC tables, including the change 01
+- [x] Dark block in `theme.css` with the SPEC tables, including the change 01
       types
-- [ ] vitest contrast tests (types ≥ 3:1, ink ≥ 4.5:1, muted ≥ 3:1, strip
+- [x] vitest contrast tests (types ≥ 3:1, ink ≥ 4.5:1, muted ≥ 3:1, strip
       text ≥ 4.5:1), reading the values from `theme.css`
-- [ ] Monaco `vs-dark`, Panel dark note, icons via `currentColor`
+- [x] Monaco `vs-dark`, Panel dark note, icons via `currentColor`
 
 **Done when:**
 - contrast tests pass for both themes

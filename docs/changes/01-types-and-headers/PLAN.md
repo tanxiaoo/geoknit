@@ -165,12 +165,12 @@ touches.
 
 ## Step 8: Panel viewer
 
-- [ ] Worker `done` carries a `view` per port next to `summary` (value,
+- [x] Worker `done` carries a `view` per port next to `summary` (value,
       list of element views, first page of a Table/Vector); Params nodes
       build theirs; `GET /api/nodes/{id}/output` returns it
-- [ ] `GET /api/table/{key}?offset&limit` reading pages from the disk cache
+- [x] `GET /api/table/{key}?offset&limit` reading pages from the disk cache
       (pyarrow row groups; pickle entries memoised); geometry as type name
-- [ ] `PanelNode`: value, swatch, gradient, list rows with index, scrollable
+- [x] `PanelNode`: value, swatch, gradient, list rows with index, scrollable
       grid with index column and headers, "N rows × M columns", paging on
       scroll, "disk cache is off" note; all text in `strings.ts`
 

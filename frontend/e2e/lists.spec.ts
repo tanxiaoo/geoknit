@@ -74,9 +74,11 @@ test("a list output is a double line, refused by an item input, shown by a Panel
   await page.mouse.up();
   await expect(page.getByTestId("toast")).toHaveText(message);
 
-  // the Panel shows the list after a run
+  // the Panel shows the list after a run: one row per element with its index
   await page.getByTestId("run").click();
-  await expect(page.getByTestId(`panel-text-${panel}`)).toHaveText(
-    ["list of 3 Number", "[0] 3", "[1] 1", "[2] 2"].join("\n"),
-  );
+  await expect(page.getByTestId(`panel-header-${panel}`)).toHaveText("list of 3 Number");
+  const rows = page.getByTestId(`panel-list-${panel}`).locator("tr");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0).locator("th, td")).toHaveText(["0", "3"]);
+  await expect(rows.nth(2).locator("th, td")).toHaveText(["2", "2"]);
 });

@@ -189,7 +189,13 @@ describe("events from /ws", () => {
     expect(s.graph?.nodes.n1.state).toBe("out_of_date");
     s = reduceEvent(s, { type: "started", node: "n1" });
     expect(s.graph?.nodes.n1.state).toBe("running");
-    s = reduceEvent(s, { type: "done", node: "n1", outputs: { value: "hi" }, cached: false });
+    s = reduceEvent(s, {
+      type: "done",
+      node: "n1",
+      outputs: { value: "hi" },
+      views: {},
+      cached: false,
+    });
     expect(s.graph?.nodes.n1.state).toBe("done");
     expect(s.summaries.n1).toEqual({ value: "hi" });
     s = reduceEvent(s, { type: "error", node: "n2", traceback: "boom" });

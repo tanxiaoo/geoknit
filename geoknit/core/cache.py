@@ -418,6 +418,10 @@ JSON_TYPES = (types.NUMBER, types.TEXT, types.BOOLEAN, types.COLOR, types.COLORM
 
 LIST_INDEX = "index.json"
 
+ROW_GROUP_ROWS = 10_000
+"""Rows per Parquet row group of a Table or Vector, so a page of it (the Panel,
+change 01 section 11) reads at most a couple of groups, not the whole file."""
+
 
 def _write_list(entry: Path, port: str, items: list[Any]) -> dict[str, Any]:
     """A list output (SPEC 6): one JSON file when every element is the same simple
@@ -448,6 +452,21 @@ def _read_list(entry: Path, info: dict[str, Any]) -> list[Any]:
     return [_read_value(path.parent, item) for item in index["items"]]
 
 
+def list_element_info(entry: Path, info: dict[str, Any], i: int) -> tuple[Path, dict[str, Any]]:
+    """``(folder, info)`` of element ``i`` of a list port stored as a folder
+    (``format: "list"``); raises ``CacheMiss`` for any other port or index."""
+    if info.get("access") != "list" or info.get("format") != "list":
+        raise CacheMiss(f"element {i}: not a list stored one file per element")
+    path = entry / info["file"]
+    try:
+        items = json.loads(path.read_text(encoding="utf-8"))["items"]
+    except (OSError, ValueError, KeyError):
+        raise CacheMiss(f"element {i}") from None
+    if not 0 <= i < len(items):
+        raise CacheMiss(f"element {i}: the list has {len(items)}")
+    return path.parent, items[i]
+
+
 def _has_cog(entry: Path, info: dict[str, Any]) -> bool:
     """Whether a port (or an element of a list port) is a raster stored as a COG."""
     if info.get("access") == "list":
@@ -473,7 +492,7 @@ def _write_value(entry: Path, port: str, value: Any) -> dict[str, Any]:
     if kind in (types.VECTOR, types.TABLE):
         name = f"{port}.parquet"
         try:
-            value.to_parquet(entry / name)
+            value.to_parquet(entry / name, row_group_size=ROW_GROUP_ROWS)
             fmt = "geoparquet" if kind == types.VECTOR else "parquet"
         except Exception:  # noqa: BLE001  (Parquet refuses some dtypes)
             (entry / name).unlink(missing_ok=True)

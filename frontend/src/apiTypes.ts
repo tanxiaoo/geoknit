@@ -189,11 +189,68 @@ export interface Status {
   pid: number | null;
 }
 
+/** A table cell or index label as the server sends it (change 01, section 11): missing
+ * values are null, infinities "inf" / "-inf", dates ISO text, geometries their type name. */
+export type CellValue = string | number | boolean | null;
+
+/** A page of a Table or Vector (`GET /api/table/{key}`, and the first page of a view). */
+export interface TablePage {
+  columns: string[];
+  rows: CellValue[][];
+  index: CellValue[];
+  total_rows: number;
+  offset: number;
+  /** The geometry columns (`[]` for a Table); their cells hold the geometry type name. */
+  geometry: string[];
+}
+
+export interface ValueView {
+  kind: "value";
+  type: "Number" | "Text" | "Boolean";
+  /** A Number's NaN and infinities come as "nan", "inf", "-inf". */
+  value: number | string | boolean;
+}
+export interface ColorView {
+  kind: "color";
+  type?: "Color";
+  value: string;
+}
+export interface ColormapView {
+  kind: "colormap";
+  type?: "Colormap";
+  value: ColormapJson;
+}
+export interface SummaryView {
+  kind: "summary";
+  type: PortType | null;
+  text: string;
+}
+/** One list element: a simple value as such, anything else the first line of describe(). */
+export type ElementView = ValueView | ColorView | ColormapView | SummaryView;
+export interface ListView {
+  kind: "list";
+  /** The element type, null when the elements are of mixed types. */
+  type: PortType | null;
+  count: number;
+  /** The first 50 elements. */
+  items: ElementView[];
+}
+export type TableView = { kind: "table"; type: "Table" | "Vector" } & TablePage;
+/** What a Panel draws for a value (change 01, section 11). */
+export type PanelView = ElementView | ListView | TableView;
+
 export interface NodeOutput {
   state: NodeState | null;
   log: string[];
   error: string | null;
   outputs: Record<string, string>;
+  /** Per port, the Panel view of its value. */
+  views: Record<string, PanelView>;
+  /** Per port, its port key (what `GET /api/table/{key}` takes); a Panel's `data` is the
+   * key of the output feeding it. */
+  keys: Record<string, string | null>;
+  /** False when later table pages cannot be read (the disk cache is off). */
+  disk_cache: boolean;
 }
 
 export interface RunReport {
@@ -212,6 +269,8 @@ export type ServerEvent =
       type: "done";
       node: string;
       outputs: Record<string, string>;
+      /** Per port, the Panel view of its value (change 01, section 11). */
+      views: Record<string, PanelView>;
       cached: boolean;
     }
   | { type: "error" | "skipped"; node: string; traceback: string }

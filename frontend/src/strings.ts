@@ -69,6 +69,14 @@ export const strings = {
   textPlaceholder: "double-click to type",
   panelEmpty: "(empty)",
   panelRunToUpdate: "run to update",
+  panelTableHeader: (rows: number, columns: number) =>
+    `${rows} row${rows === 1 ? "" : "s"} × ${columns} column${columns === 1 ? "" : "s"}`,
+  panelListHeader: (count: number, type: string | null) =>
+    `list of ${count}${type ? ` ${type}` : ""}`,
+  panelNoDiskCache: "the disk cache is off: only the first 200 rows",
+  panelLoading: "loading…",
+  panelPageError: (message: string) => `could not load more rows: ${message}`,
+  panelOtherClass: "other",
   runToHere: "Run to here",
   deleteNode: "Delete",
   copy: "Copy",

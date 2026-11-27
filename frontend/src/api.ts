@@ -8,6 +8,7 @@ import type {
   MapView,
   NamedRamps,
   RasterStats,
+  TablePage,
   GraphView,
   NodeJson,
   NodeOutput,
@@ -70,6 +71,11 @@ export const api = {
   stop: () => request<unknown>("POST", "/api/stop"),
   output: (id: string) =>
     request<NodeOutput>("GET", `/api/nodes/${encodeURIComponent(id)}/output`),
+  table: (key: string, offset: number, limit: number) =>
+    request<TablePage>(
+      "GET",
+      `/api/table/${encodeURIComponent(key)}?offset=${offset}&limit=${limit}`,
+    ),
   trust: () => request<unknown>("POST", "/api/workflow/trust"),
   save: (path?: string) => request<{ path: string }>("POST", "/api/workflow/save", { path }),
   open: (path: string) => request<GraphView>("POST", "/api/workflow/open", { path }),

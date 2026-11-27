@@ -796,6 +796,123 @@ button:disabled {
   line-height: 1.45;
   white-space: pre;
 }
+/* the Panel viewer (change 01, section 11) */
+.gk-panel-view {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow: hidden;
+  white-space: normal;
+}
+.gk-panel-value {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  font: inherit;
+  white-space: pre;
+}
+.gk-panel-color,
+.gk-panel-colormap,
+.gk-panel-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gk-panel-swatch {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+.gk-panel-colormap .gk-ramp {
+  flex: 1;
+  height: 18px;
+}
+.gk-panel-inline .gk-ramp {
+  width: 60px;
+  height: 10px;
+}
+.gk-panel-classes {
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.gk-panel-classes li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gk-panel-chip {
+  flex: none;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(15 23 42 / 0.25);
+  border-radius: 2px;
+}
+.gk-panel-header {
+  flex: none;
+  color: #6b5d1f;
+}
+.gk-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  cursor: auto;
+}
+.gk-panel-grid {
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.gk-panel-list {
+  width: 100%;
+  table-layout: auto;
+}
+.gk-panel-grid th,
+.gk-panel-grid td {
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  border-bottom: 1px solid rgb(107 93 31 / 0.15);
+}
+.gk-panel-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--yellow);
+  border-bottom: 1px solid #d6c77a;
+}
+.gk-panel-grid .gk-panel-index {
+  position: sticky;
+  left: 0;
+  background: var(--yellow);
+  color: #6b5d1f;
+  font-weight: normal;
+  text-align: right;
+}
+.gk-panel-grid thead .gk-panel-index {
+  z-index: 2;
+}
+.gk-panel-list .gk-panel-index {
+  width: 1%;
+}
+.gk-panel-geom {
+  font-style: italic;
+  color: #6b5d1f;
+}
+.gk-panel-more,
+.gk-panel-note {
+  color: #6b5d1f;
+}
+.gk-panel-error {
+  color: var(--red, #b91c1c);
+  white-space: normal;
+}
 .gk-panel .gk-handle.react-flow__handle-left {
   left: -6px;
 }

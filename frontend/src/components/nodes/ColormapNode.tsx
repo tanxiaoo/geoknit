@@ -39,13 +39,13 @@ export function gradientCss(stops: [number, string][]): string {
 }
 
 /** What the strip shows: a gradient, or class chips (change 03 makes those). */
-interface StripProps {
+export interface StripProps {
   cm: ColormapJson;
   ramps: NamedRamps | null;
   testId?: string;
 }
 
-function Strip({ cm, ramps, testId }: StripProps) {
+export function Strip({ cm, ramps, testId }: StripProps) {
   if (cm.kind === "classes") {
     return (
       <span className="gk-ramp gk-ramp-classes" data-testid={testId}>

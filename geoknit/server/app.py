@@ -21,12 +21,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from geoknit import __version__
 from geoknit.components.registry import Registry
-from geoknit.core import types
+from geoknit.core import types, views
 from geoknit.core.cache import CacheMiss
 from geoknit.core.graph import GraphError
 from geoknit.core.trust import TrustStore
 from geoknit.core.workflow import WorkflowError
-from geoknit.server import tiles
+from geoknit.server import tables, tiles
 from geoknit.server.files import file_tree
 from geoknit.server.session import Session, SessionError
 
@@ -229,6 +229,10 @@ def create_app(
     async def _map_error(request: Request, exc: tiles.MapError) -> JSONResponse:
         return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
+    @app.exception_handler(tables.TableError)
+    async def _table_error(request: Request, exc: tables.TableError) -> JSONResponse:
+        return JSONResponse({"detail": exc.message}, status_code=exc.status)
+
     @app.exception_handler(CacheMiss)
     async def _cache_miss(request: Request, exc: CacheMiss) -> JSONResponse:
         return JSONResponse({"detail": "not in the cache; run first"}, status_code=404)
@@ -368,8 +372,21 @@ def create_app(
 
     @app.get("/api/nodes/{node_id}/output", tags=["run"])
     def output(node_id: str) -> dict[str, Any]:
-        """Output log, error and per-port summaries of one node."""
+        """Output log, error, and per port its summary, Panel view and port key.
+
+        ``disk_cache`` is false when later table pages cannot be read.
+        """
         return session.output(node_id)
+
+    @app.get("/api/table/{key}", tags=["run"])
+    def table(key: str, offset: int = 0, limit: int = views.PAGE_ROWS) -> dict[str, Any]:
+        """A page of a cached Table or Vector: ``{columns, rows, index, total_rows, offset,
+        geometry}``; ``limit`` at most 1000; ``<key>[i]`` names a list element.
+
+        Geometry columns hold the geometry type name. A key not in the disk
+        cache answers 404.
+        """
+        return session.table_page(key, offset, limit)
 
     # ── files ──
     @app.get("/api/files", tags=["files"])

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from geoknit.core import types
+from geoknit.core import types, views
 from geoknit.core.component import PRINT_PORT, run_component
 from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, VALUE_PARAMS, Graph, Node, param_output
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
@@ -63,13 +63,15 @@ class InProcessExecutor:
         self.on_event = on_event
         self.results: dict[str, dict[str, Any]] = {}
         self.summaries: dict[str, dict[str, str]] = {}
+        self.views: dict[str, dict[str, dict[str, Any]]] = {}
+        """Panel view of each output, per node (change 01, section 11)."""
         self.logs: dict[str, list[str]] = {}
         self.errors: dict[str, str] = {}
         graph.subscribe(self._on_change)
 
     def _on_change(self, changed: set[str], removed: set[str]) -> None:
         for n in removed:
-            for store in (self.results, self.summaries, self.logs, self.errors):
+            for store in (self.results, self.summaries, self.views, self.logs, self.errors):
                 store.pop(n, None)
 
     def _emit(self, kind: str, node_id: str, **data: Any) -> None:
@@ -130,9 +132,13 @@ class InProcessExecutor:
 
         self.results[nid] = outputs
         self.summaries[nid] = {port: types.describe(v) for port, v in outputs.items()}
+        # Params nodes (also a Panel passing its input through) get theirs here too.
+        self.views[nid] = {
+            port: views.safe_view(v, self.summaries[nid][port]) for port, v in outputs.items()
+        }
         self.solver.states[nid] = DONE
         report.ran.append(nid)
-        self._emit("done", nid, outputs=self.summaries[nid])
+        self._emit("done", nid, outputs=self.summaries[nid], views=self.views[nid])
 
     def _log(self, nid: str, line: str) -> None:
         self.logs[nid].append(line)
@@ -143,6 +149,7 @@ class InProcessExecutor:
         self.errors[nid] = message
         self.results.pop(nid, None)
         self.summaries.pop(nid, None)
+        self.views.pop(nid, None)
         (report.skipped if state == SKIPPED else report.failed).append(nid)
         self._emit("skipped" if state == SKIPPED else "error", nid, traceback=message)
 

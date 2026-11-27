@@ -12,7 +12,7 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import Any
 
-from geoknit.core import types
+from geoknit.core import types, views
 from geoknit.core.cache import (
     DEFAULT_LIMIT,
     CacheMiss,
@@ -50,17 +50,20 @@ class Worker:
         self.disk = DiskCache(cache_dir, limit_bytes) if cache_dir is not None else None
         self.memory: dict[str, Any] = {}
         self.summaries: dict[str, str] = {}
+        self.views: dict[str, dict[str, Any]] = {}
+        """Panel view of each held result, by port key (change 01, section 11)."""
 
     def handle(self, msg: p.ToWorker) -> None:
         if isinstance(msg, p.RunNode):
             self.run_node(msg)
         elif isinstance(msg, p.PutValue):
             self.memory[msg.cache_key] = msg.value
-            self.summaries[msg.cache_key] = types.describe(msg.value)
+            self._hold(msg.cache_key, msg.value)
         elif isinstance(msg, p.ClearCache):
             # Results in memory may be lazy views of cache files: drop them first.
             self.memory.clear()
             self.summaries.clear()
+            self.views.clear()
             complete = self.disk.clear() if self.disk is not None else True
             self.send(p.Cleared(complete))
 
@@ -74,9 +77,7 @@ class Worker:
         except CacheMiss:
             return False
         for port, value in outputs.items():
-            key = port_key(node_key, port)
-            self.memory[key] = value
-            self.summaries[key] = summaries.get(port) or types.describe(value)
+            self._hold(port_key(node_key, port), value, summaries.get(port))
         return True
 
     def _lookup(self, key: str, input_name: str) -> Any:
@@ -158,8 +159,7 @@ class Worker:
 
         summaries: dict[str, str] = {}
         for port, value in result.outputs.items():
-            self.memory[keys[port]] = value
-            summaries[port] = self.summaries[keys[port]] = types.describe(value)
+            summaries[port] = self._hold(keys[port], value)
         if self.disk is not None:
             try:
                 self.disk.write(
@@ -177,11 +177,21 @@ class Worker:
                     self.send(p.Log(nid, f"cache: could not reopen the result ({exc})"))
         self.send(p.Done(nid, self._described(keys), cached=False))
 
-    def _described(self, keys: dict[str, str]) -> dict[str, dict[str, str]]:
-        return {
-            port: {"cache_key": key, "summary": self.summaries.get(key, "")}
-            for port, key in keys.items()
-        }
+    def _hold(self, key: str, value: Any, summary: str | None = None) -> str:
+        """Keep ``value`` under ``key`` with its summary and Panel view; return the summary."""
+        self.memory[key] = value
+        summary = summary or types.describe(value)
+        self.summaries[key] = summary
+        self.views[key] = views.safe_view(value, summary)
+        return summary
+
+    def _described(self, keys: dict[str, str]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for port, key in keys.items():
+            summary = self.summaries.get(key, "")
+            view = self.views.get(key) or {"kind": "summary", "type": None, "text": summary}
+            out[port] = {"cache_key": key, "summary": summary, "view": view}
+        return out
 
 
 def worker_main(

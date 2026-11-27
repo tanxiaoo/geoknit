@@ -12,9 +12,11 @@ import type {
   FileNode,
   GraphView,
   NodeJson,
+  NodeOutput,
   NodePatch,
   NodeState,
   NamedRamps,
+  PanelView,
   RunReport,
   ServerEvent,
   Status,
@@ -49,6 +51,10 @@ export interface AppState {
   status: Status | null;
   connected: boolean;
   summaries: Record<string, Record<string, string>>;
+  /** Per node and port, the Panel view of the last result (change 01, section 11). */
+  views: Record<string, Record<string, PanelView>>;
+  /** Per Panel, where later table pages come from (`GET /api/nodes/{id}/output`). */
+  paging: Record<string, Paging>;
   errors: Record<string, string>;
   lastChange: string | null;
   toast: Toast | null;
@@ -70,6 +76,13 @@ export interface AppState {
   ramps: NamedRamps | null;
 }
 
+/** A Panel's table paging: the port key of the table feeding it, and whether the disk
+ * cache can serve later pages. */
+export interface Paging {
+  key: string | null;
+  diskCache: boolean;
+}
+
 export const initialState: AppState = {
   graph: null,
   components: [],
@@ -78,6 +91,8 @@ export const initialState: AppState = {
   status: null,
   connected: false,
   summaries: {},
+  views: {},
+  paging: {},
   errors: {},
   lastChange: null,
   toast: null,
@@ -160,10 +175,14 @@ export function reduceEvent(state: AppState, ev: ServerEvent): AppState {
     case "done": {
       const errors = { ...state.errors };
       delete errors[ev.node];
+      const paging = { ...state.paging };
+      delete paging[ev.node]; // a new result: fetched again when a Panel pages it
       return {
         ...state,
         graph: g ? withStates(g, { [ev.node]: "done" }) : g,
         summaries: { ...state.summaries, [ev.node]: ev.outputs },
+        views: { ...state.views, [ev.node]: ev.views ?? {} },
+        paging,
         errors,
       };
     }
@@ -171,11 +190,14 @@ export function reduceEvent(state: AppState, ev: ServerEvent): AppState {
     case "skipped": {
       const summaries = { ...state.summaries };
       delete summaries[ev.node];
+      const views = { ...state.views };
+      delete views[ev.node];
       return {
         ...state,
         graph: g ? withStates(g, { [ev.node]: ev.type === "error" ? "error" : "skipped" }) : g,
         errors: { ...state.errors, [ev.node]: ev.traceback },
         summaries,
+        views,
       };
     }
     case "run_finished":
@@ -185,6 +207,10 @@ export function reduceEvent(state: AppState, ev: ServerEvent): AppState {
     default:
       return state;
   }
+}
+
+function pagingOf(out: NodeOutput): Paging {
+  return { key: out.keys?.data ?? null, diskCache: out.disk_cache ?? true };
 }
 
 let toastId = 0;
@@ -224,6 +250,8 @@ export class Store {
     } else if (ev.type === "workflow_opened") {
       this.set({
         summaries: {},
+        views: {},
+        paging: {},
         errors: {},
         logs: {},
         lastChange: null,
@@ -290,14 +318,37 @@ export class Store {
       wanted.map((n) => this.api.output(n.id).then((o) => [n.id, o] as const, () => null)),
     );
     const summaries = { ...this.state.summaries };
+    const views = { ...this.state.views };
+    const paging = { ...this.state.paging };
     const errors = { ...this.state.errors };
     for (const r of results) {
       if (!r) continue;
       const [id, out] = r;
       if (out.error) errors[id] = out.error;
-      else summaries[id] = out.outputs;
+      else {
+        summaries[id] = out.outputs;
+        views[id] = out.views ?? {};
+        paging[id] = pagingOf(out);
+      }
     }
-    this.set({ summaries, errors });
+    this.set({ summaries, views, paging, errors });
+  }
+
+  private pagingLoading = new Map<string, Promise<void>>();
+
+  /** Where a Panel's later table pages come from: fetched once per result. */
+  loadPaging(id: string): Promise<void> {
+    if (this.state.paging[id]) return Promise.resolve();
+    let p = this.pagingLoading.get(id);
+    if (!p) {
+      p = this.api
+        .output(id)
+        .then((out) => this.set({ paging: { ...this.state.paging, [id]: pagingOf(out) } }))
+        .catch(() => undefined)
+        .finally(() => this.pagingLoading.delete(id));
+      this.pagingLoading.set(id, p);
+    }
+    return p;
   }
 
   /** The Output of one node (log and error), for the component window. */

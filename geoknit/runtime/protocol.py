@@ -72,10 +72,13 @@ class Log:
 
 @dataclass(frozen=True)
 class Done:
-    """``outputs`` maps each port to ``{"cache_key": ..., "summary": ...}``."""
+    """``outputs`` maps each port to ``{"cache_key": ..., "summary": ..., "view": ...}``.
+
+    ``view`` is the Panel view of the value (``geoknit.core.views``).
+    """
 
     node_id: str
-    outputs: dict[str, dict[str, str]] = field(default_factory=dict)
+    outputs: dict[str, dict[str, Any]] = field(default_factory=dict)
     cached: bool = False
 
 

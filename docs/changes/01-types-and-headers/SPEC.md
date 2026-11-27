@@ -792,6 +792,102 @@ sends with `done`. It becomes a viewer that depends on the type:
 - `geoknit run` and the export keep printing the `describe()` text (SPEC 10);
   only the canvas changes.
 
+Details settled while building step 8 (backend):
+
+- **Views** are built by `geoknit/core/views.py` (`view(value)`), in the
+  worker next to `describe()` (also for results read back from the disk
+  cache and for `put_value` values), in `_finish_param` and in the
+  in-process executor. A Panel's view is the view of the value passing
+  through (an unwired Panel: the `None` summary view). A view that fails to
+  build becomes a summary view; it never fails a run. `kind` says the shape:
+  - `{kind: "value", type: "Number" | "Text" | "Boolean", value}`;
+  - `{kind: "color", type: "Color", value: "#RRGGBB[AA]"}`;
+  - `{kind: "colormap", type: "Colormap", value: <Colormap JSON>}` (as in
+    the workflow file; a named ramp's stops come from `GET /api/colormaps`);
+  - `{kind: "list", type: <element type, or null when mixed>, count,
+    items: [<element view>, …]}`, the first 50 elements. An element view is
+    a `value` / `color` / `colormap` view as above, otherwise
+    `{kind: "summary", type, text}` with the first line of its `describe()`
+    (also for a Table or Vector element: no grid inside a list);
+  - `{kind: "table", type: "Table" | "Vector", columns, rows, index,
+    total_rows, offset, geometry}`: the first page (200 rows) in the page
+    shape below;
+  - `{kind: "summary", type: <type or null>, text: <describe()>}` for Raster,
+    Model and anything else.
+- **Where views travel.** The worker's `done` carries
+  `{cache_key, summary, view}` per port. The `done` event on `/ws` gains
+  `views: {port: view}` next to `outputs: {port: summary}` (`outputs` keeps
+  its shape). `GET /api/nodes/{id}/output` answers `{state, log, error,
+  outputs: {port: summary}, views: {port: view}, keys: {port: port key or
+  null}, disk_cache: bool}`. `keys` is what `/api/table/{key}` takes; a
+  Panel's `data` key is the key of the output feeding it.
+- **`GET /api/table/{key}?offset=0&limit=200`** (tag `run`) →
+  `{columns, rows, index, total_rows, offset, geometry}`: `columns` the
+  column names (geometry columns included, in frame order), `rows` one array
+  per row in column order, `index` the index labels of those rows (a
+  RangeIndex continues from `offset`), `total_rows` the table's length,
+  `offset` as asked, `geometry` the names of the geometry columns (`[]` for a
+  Table). `offset` past the end gives `rows: []`. `limit` 0–1000 and
+  `offset` ≥ 0, otherwise `400`. `404` for: a key that is not a port key, a
+  key not in the disk cache (`not in the cache; run first`), a list element
+  out of range or of a list stored as one JSON file, a port that is not a
+  Table or Vector (also a whole list), and any key when the disk cache is off
+  (`the disk cache is off: …`).
+- **The disk cache is off** when `disk_cache` is false in the output reply
+  (the server always runs with it today; `geoknit run --no-cache` has no
+  Panel). The Panel then shows the view's first page with the note "the disk
+  cache is off: only the first 200 rows". A `404` while paging (an entry
+  evicted since) is shown as an error in the grid, not as that note.
+- **Reading pages.** The cache now writes Tables and Vectors with Parquet
+  row groups of 10 000 rows (`ROW_GROUP_ROWS`; same layout and format
+  number, old entries still read), and a page reads only the row groups it
+  overlaps (`pyarrow.parquet.ParquetFile.read_row_groups`, the file opened
+  and closed per request so Windows can delete it). GeoParquet WKB geometry
+  is decoded with shapely only to get its type name. A pickle fallback entry
+  is loaded once and memoised (the last 4, by path). This lives in
+  `geoknit/server/tables.py`; pandas, pyarrow and shapely are imported on the
+  first page request.
+- **JSON-safe values.** Cells and index labels: `None`, NaN, `NaT`, `pd.NA`
+  → `null`; booleans (also `numpy.bool_`) and integers (also numpy ints) as
+  they are; finite floats as numbers, infinities as `"inf"` / `"-inf"`;
+  dates, times and timestamps → ISO 8601 text (`2026-01-02T03:04:05`, with
+  the offset when time-zoned); `bytes` → `"<N bytes>"`; a shapely geometry →
+  its type name (`Point`, `LineString`, …; a missing geometry `null`);
+  `Decimal` → number; anything else → its `str()`. Text cells longer than
+  1000 characters are cut and end in `…`. A Number *value* view sends NaN
+  and infinities as `"nan"`, `"inf"`, `"-inf"`, as `describe()` prints them.
+
+Details settled while building step 8 (frontend):
+
+- **Where the Panel gets its view.** The store keeps `views` per node and
+  port (from `done` events and from `GET /api/nodes/{id}/output` after a
+  reload). A Panel that is wired and `done` draws `views[id].data`
+  (`components/nodes/PanelView.tsx`); otherwise it shows "(empty)", "run to
+  update" or the error as before, and a result without a view falls back to
+  the `describe()` text.
+- **Simple values.** Number and Text as sent (so NaN shows `nan`); a Boolean
+  as `True` / `False`, like the Toggle. A Colormap's classes: one row per
+  class, a chip and its label (the class value when the label is empty), and
+  a last chip labelled `other` when the colormap has an `other` colour.
+- **Lists** show the header line `list of N Type` (as `describe()`'s first
+  line; `list of N` when mixed), then one row per element: its index and its
+  one-line view (a Color: a small chip and the hex; a Colormap: a small strip
+  and its name), and `… N more` past the first 50.
+- **The grid.** Missing cells are blank, booleans `True` / `False`,
+  geometry cells in italics. Column widths are set once per result in
+  characters (monospace) from the header and the first page, between 3 and
+  32 characters; longer text is cut with `…` and shown whole on hover. The
+  header row and the index column stay in view while scrolling. Later pages
+  are 200 rows, asked for when the grid is within 120 px of its end (also
+  right after a page arrives, so a Panel taller than its rows fills itself).
+- **The paging key** (`keys.data`) and `disk_cache` come from
+  `GET /api/nodes/{id}/output`, fetched once per result when a Panel shows a
+  table (the `done` event does not carry them).
+- **The disk-cache note** shows under the grid only when the table has more
+  rows than the first page. A failed page shows `could not load more rows:
+  <detail>` at the end of the grid, and the Panel stops paging until the
+  next result.
+
 ---
 
 ## Not in this change

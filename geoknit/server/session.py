@@ -57,7 +57,7 @@ from geoknit.core.workflow import (
     node_from_dict,
 )
 from geoknit.runtime.client import WorkerExecutor
-from geoknit.server import tiles
+from geoknit.server import tables, tiles
 from geoknit.server.editor import EditorError, ExternalEditors, slugify
 from geoknit.server.events import Broadcaster
 
@@ -460,14 +460,28 @@ class Session:
         return path
 
     def output(self, node_id: str) -> dict[str, Any]:
+        """State, log, error, and per port: the summary, the Panel view and the
+        port key (for ``GET /api/table/{key}``); ``disk_cache`` says whether later
+        table pages can be read (change 01, section 11)."""
         self._node(node_id)
         ex = self.executor
+        summaries = dict(ex.summaries.get(node_id, {}))
         return {
             "state": self.solver.states.get(node_id),
             "log": list(ex.logs.get(node_id, [])),
             "error": ex.errors.get(node_id),
-            "outputs": dict(ex.summaries.get(node_id, {})),
+            "outputs": summaries,
+            "views": dict(ex.views.get(node_id, {})),
+            "keys": {port: ex.done_port_key(node_id, port) for port in summaries},
+            "disk_cache": ex.cache_dir is not None,
         }
+
+    def table_page(self, key: str, offset: int, limit: int) -> dict[str, Any]:
+        """A page of a cached Table or Vector (``GET /api/table/{key}``)."""
+        folder = self.executor.cache_dir
+        if folder is None:
+            raise NotFound("the disk cache is off: only the first page of a table is shown")
+        return tables.table_page(DiskCache(folder), key, offset, limit)
 
     # ── edits ──
     def add_node(

@@ -1,7 +1,7 @@
 """Runs a graph through the worker process (SPEC 6).
 
 ``WorkerExecutor`` has the same surface as ``geoknit.core.executor.InProcessExecutor``
-(``run``, ``summaries``, ``logs``, ``errors``, ``solver``, events) but sends each
+(``run``, ``summaries``, ``views``, ``logs``, ``errors``, ``solver``, events) but sends each
 component to a spawned worker, keyed by cache keys, and can ``stop()`` a run
 from another thread.
 """
@@ -16,7 +16,7 @@ from multiprocessing.process import BaseProcess
 from pathlib import Path
 from typing import Any
 
-from geoknit.core import types
+from geoknit.core import types, views
 from geoknit.core.cache import DEFAULT_LIMIT, GraphKeys, compute_keys
 from geoknit.core.executor import Event, EventFn, RunReport
 from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, VALUE_PARAMS, Graph, Node, param_output
@@ -66,6 +66,8 @@ class WorkerExecutor:
         self.cache_limit = cache_limit
         self.on_event = on_event
         self.summaries: dict[str, dict[str, str]] = {}
+        self.views: dict[str, dict[str, dict[str, Any]]] = {}
+        """Panel view of each output, per node (change 01, section 11)."""
         self.logs: dict[str, list[str]] = {}
         self.errors: dict[str, str] = {}
         self._done_ports: dict[str, dict[str, str]] = {}
@@ -150,7 +152,7 @@ class WorkerExecutor:
             graph.subscribe(self._on_change)
         self.graph = graph
         self.solver = solver or Solver(graph)
-        for store in (self.summaries, self.logs, self.errors, self._done_ports):
+        for store in (self.summaries, self.views, self.logs, self.errors, self._done_ports):
             store.clear()
         self.solver.invalidate(set(graph.nodes))  # results here belong to the old setup
         if base_dir != self.base_dir:
@@ -244,7 +246,7 @@ class WorkerExecutor:
     # ── graph changes ──
     def _on_change(self, changed: set[str], removed: set[str]) -> None:
         for n in removed:
-            for store in (self.summaries, self.logs, self.errors, self._done_ports):
+            for store in (self.summaries, self.views, self.logs, self.errors, self._done_ports):
                 store.pop(n, None)
 
     def done_port_key(self, node_id: str, port: str) -> str | None:
@@ -351,10 +353,17 @@ class WorkerExecutor:
                     self._emit("log", nid, line=msg.line)
                 elif isinstance(msg, p.Done):
                     self.summaries[nid] = {port: o["summary"] for port, o in msg.outputs.items()}
+                    self.views[nid] = {port: o["view"] for port, o in msg.outputs.items()}
                     self.solver.states[nid] = DONE
                     self._done_ports[nid] = dict(keys.ports[nid])
                     (report.cached if msg.cached else report.ran).append(nid)
-                    self._emit("done", nid, outputs=self.summaries[nid], cached=msg.cached)
+                    self._emit(
+                        "done",
+                        nid,
+                        outputs=self.summaries[nid],
+                        views=self.views[nid],
+                        cached=msg.cached,
+                    )
                     return True
                 elif isinstance(msg, p.Error):
                     self._finish_error(nid, msg.traceback, ERROR, report)
@@ -378,28 +387,35 @@ class WorkerExecutor:
     def _finish_param(self, node: Node, keys: GraphKeys, report: RunReport) -> None:
         nid = node.id
         if node.component in VALUE_PARAMS:
-            summary = types.describe(param_output(node))
+            value = param_output(node)
+            summary = types.describe(value)
             self.summaries[nid] = {"value": summary}
+            self.views[nid] = {"value": views.safe_view(value, summary)}
         elif node.component == PARAM_MAP:
             self.summaries[nid] = {}
+            self.views[nid] = {}
         else:
             assert node.component == PARAM_PANEL
             wires = self.graph.wires_into(nid, "data")
-            upstream = (
-                self.summaries.get(wires[0].src, {}).get(wires[0].src_port) if wires else None
-            )
-            self.summaries[nid] = {
-                "data": upstream if upstream is not None else types.describe(None)
-            }
+            src, port = (wires[0].src, wires[0].src_port) if wires else ("", "")
+            upstream = self.summaries.get(src, {}).get(port)
+            if upstream is None:
+                upstream = types.describe(None)
+                view = views.safe_view(None, upstream)
+            else:  # the view of the value passing through
+                view = self.views.get(src, {}).get(port) or views.safe_view(None, upstream)
+            self.summaries[nid] = {"data": upstream}
+            self.views[nid] = {"data": view}
         self.solver.states[nid] = DONE
         self._done_ports[nid] = dict(keys.ports[nid])
         report.ran.append(nid)
-        self._emit("done", nid, outputs=self.summaries[nid], cached=False)
+        self._emit("done", nid, outputs=self.summaries[nid], views=self.views[nid], cached=False)
 
     def _finish_error(self, nid: str, message: str, state: str, report: RunReport) -> None:
         self.solver.states[nid] = state
         self.errors[nid] = message
         self.summaries.pop(nid, None)
+        self.views.pop(nid, None)
         self._done_ports.pop(nid, None)
         (report.skipped if state == SKIPPED else report.failed).append(nid)
         self._emit("skipped" if state == SKIPPED else "error", nid, traceback=message)

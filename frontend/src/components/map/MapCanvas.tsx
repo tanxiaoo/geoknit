@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MlMap, Marker } from "maplibre-gl";
 import type { Basemap } from "../../apiTypes";
 import { strings } from "../../strings";
+import { themeColor } from "../../theme";
 import type { RenderLayer } from "./layers";
 
 type MapLibre = typeof import("maplibre-gl");
@@ -136,7 +137,7 @@ function sync(map: MlMap, layers: RenderLayer[], basemap: Basemap, urls: Map<str
       map.setPaintProperty(circle, "circle-color", l.colour);
       map.setPaintProperty(circle, "circle-opacity", l.opacity);
       map.setPaintProperty(circle, "circle-radius", 4);
-      map.setPaintProperty(circle, "circle-stroke-color", "#ffffff");
+      map.setPaintProperty(circle, "circle-stroke-color", themeColor("map-point-outline"));
       map.setPaintProperty(circle, "circle-stroke-width", 1);
       for (const part of [fill, line, circle]) map.setLayoutProperty(part, "visibility", visibility);
     }
@@ -173,7 +174,7 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
           style: {
             version: 8,
             sources: {},
-            layers: [{ id: "gk-background", type: "background", paint: { "background-color": "#f1f3f4" } }],
+            layers: [{ id: "gk-background", type: "background", paint: { "background-color": themeColor("map-bg") } }],
           },
           center: [0, 20],
           zoom: 1,
@@ -192,7 +193,7 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
               properties: { ...f.properties },
             }));
           marker.current?.remove();
-          marker.current = new maplibre.Marker({ color: "#2563eb", scale: 0.7 })
+          marker.current = new maplibre.Marker({ color: themeColor("map-marker"), scale: 0.7 })
             .setLngLat(e.lngLat)
             .addTo(map);
           inspect.current(e.lngLat.lng, e.lngLat.lat, hits);

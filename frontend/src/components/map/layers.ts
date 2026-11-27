@@ -1,6 +1,7 @@
 // Map Viewer logic without MapLibre (SPEC 8): styles, tile URLs, legends, bounds.
 
 import type { LayerStyle, MapClass, MapLayer, RasterStats } from "../../apiTypes";
+import { DEFAULT_VECTOR_COLOUR } from "../../palettes";
 
 export const CATEGORICAL = "categorical";
 
@@ -11,20 +12,8 @@ export const STYLE_DEFAULTS: LayerStyle = {
   max: null,
   opacity: 1,
   visible: true,
-  color: "#d62728",
+  color: DEFAULT_VECTOR_COLOUR,
 };
-
-/** Swatches offered for vector layers. */
-export const VECTOR_COLOURS = [
-  "#d62728",
-  "#1f77b4",
-  "#2ca02c",
-  "#ff7f0e",
-  "#9467bd",
-  "#111827",
-  "#e377c2",
-  "#17becf",
-];
 
 /** The server's defaults for this layer, overridden by what the user saved. */
 export function effectiveStyle(layer: MapLayer, saved?: Partial<LayerStyle>): LayerStyle {

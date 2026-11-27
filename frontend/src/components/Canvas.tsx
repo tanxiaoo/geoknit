@@ -393,7 +393,7 @@ export function Canvas() {
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
         >
-          <Background variant={BackgroundVariant.Lines} gap={24} color="#d4d8de" />
+          <Background variant={BackgroundVariant.Lines} gap={24} color="var(--gk-canvas-grid)" />
           <Groups
             groups={groups}
             nodes={nodes}

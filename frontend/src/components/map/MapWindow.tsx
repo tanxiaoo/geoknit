@@ -23,9 +23,9 @@ import {
   renderLayers,
   statsFor,
   unionBounds,
-  VECTOR_COLOURS,
   type Legend,
 } from "./layers";
+import { VECTOR_COLOURS } from "../../palettes";
 
 /** The floating map window of the open Map Viewer (SPEC 8). */
 export function MapWindow() {

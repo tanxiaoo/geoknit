@@ -9,17 +9,17 @@ after change 01 step 5).
 
 ## Step 1: Tokens, no visible change
 
-- [ ] Before touching any colour: add a Playwright screenshot test
+- [x] Before touching any colour: add a Playwright screenshot test
       (`toHaveScreenshot`) of the synthetic workflow's canvas, component
       window and map window, and commit its baselines. None exist today: the
       e2e and docs-shots screenshots are written to files, never compared.
       Font rendering differs between Windows and Linux, so the comparison
       runs on one platform (the CI Linux job) with Linux baselines.
-- [ ] `frontend/src/theme.css` with the light palette, starting from the
+- [x] `frontend/src/theme.css` with the light palette, starting from the
       `:root` block of `styles.css`; `styles.css` and the TS files read every
       UI colour from tokens; map data colours moved to `palettes.ts`;
       `themeColor()` helper for MapLibre
-- [ ] vitest: no colour literal outside `theme.css`, `palettes.ts`, test files
+- [x] vitest: no colour literal outside `theme.css`, `palettes.ts`, test files
       and vendored SVGs
 
 **Done when:**

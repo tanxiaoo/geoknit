@@ -1,0 +1,139 @@
+/* GeoKnit colour tokens (change 02, SPEC 8). Every UI colour of the frontend comes from
+ * here; no other .css/.ts/.tsx file under src/ holds a colour literal (checked by
+ * src/colourLiterals.test.ts). Data colours (Map Viewer swatches) live in palettes.ts.
+ *
+ * Light is today's look. Until the theme setting exists, the light tokens also apply
+ * when <html> has no data-theme attribute. */
+
+:root,
+:root[data-theme="light"] {
+  /* surfaces */
+  --gk-app-bg: #fff;
+  --gk-panel-bg: #f8fafc;
+  --gk-surface-alt: #f1f5f9;
+  --gk-canvas-bg: #e5e8ec;
+  --gk-canvas-grid: #d4d8de;
+  --gk-node-bg: #eef0f3;
+  --gk-node-border: #64748b;
+  --gk-param-bg: #fff;
+  --gk-topbar-bg: #0f172a;
+  --gk-map-bg: #f1f3f4;
+  --gk-line: #e2e8f0;
+  --gk-hover-bg: #eff6ff;
+  --gk-input-border: #94a3b8;
+  --gk-control-border: #cbd5e1;
+  --gk-code-bg: #fffffe;
+  --gk-checker-a: #e2e8f0;
+  --gk-checker-b: #f8fafc;
+  --gk-ring: #fff;
+
+  /* text */
+  --gk-ink: #0f172a;
+  --gk-muted: #64748b;
+  --gk-ink-soft: #334155;
+  --gk-ink-subtle: #475569;
+  --gk-on-strip: #fff;
+  --gk-on-fill: #fff;
+
+  /* top bar and window headers (dark in both themes) */
+  --gk-topbar-ink: #fff;
+  --gk-topbar-soft: #cbd5e1;
+  --gk-topbar-muted: #94a3b8;
+  --gk-topbar-raised: #1e293b;
+  --gk-topbar-border: #334155;
+  --gk-topbar-hover: rgb(255 255 255 / 0.08);
+  --gk-topbar-dirty: #fbbf24;
+  --gk-logo: #5eead4;
+  --gk-worker-idle: #22c55e;
+
+  /* controls */
+  --gk-active-bg: #0f172a;
+  --gk-active-ink: #fff;
+  --gk-primary: #2563eb;
+  --gk-icon-hover: rgb(148 163 184 / 0.25);
+
+  /* states */
+  --gk-out-of-date: #d97706;
+  --gk-error: #dc2626;
+  --gk-selected: #16a34a;
+  --gk-running: #d97706;
+  --gk-success: #16a34a;
+  --gk-error-ring: #fecaca;
+  --gk-error-bg: #fef2f2;
+  --gk-error-line: rgb(220 38 38 / 0.15);
+  --gk-fits: #86efac;
+  --gk-modified-bg: #fff7ed;
+  --gk-modified-ink: #9a3412;
+
+  /* banners above the canvas */
+  --gk-banner-warn-bg: #fef3c7;
+  --gk-banner-warn-ink: #92400e;
+  --gk-banner-trust-bg: #fee2e2;
+  --gk-banner-trust-ink: #991b1b;
+  --gk-banner-info-bg: #dbeafe;
+  --gk-banner-info-ink: #1e3a8a;
+  --gk-banner-info-button: #1d4ed8;
+
+  /* folder tree */
+  --gk-folder-icon: #ca8a04;
+  --gk-file-badge-bg: #cbd5e1;
+
+  /* Params nodes */
+  --gk-slider: #334155;
+  --gk-slider-stale-bg: #fde68a;
+  --gk-slider-stale-ink: #78350f;
+  --gk-switch-off: #cbd5e1;
+  --gk-switch-knob: #fff;
+  --gk-swatch-border: rgb(15 23 42 / 0.25);
+  --gk-ramp-border: rgb(15 23 42 / 0.2);
+
+  /* Panel (sticky note) */
+  --gk-panel-note-bg: #fef6c7;
+  --gk-panel-note-ink: #0f172a;
+  --gk-panel-note-border: #d6c77a;
+  --gk-panel-note-muted: #6b5d1f;
+  --gk-panel-note-rule: rgb(107 93 31 / 0.15);
+
+  /* hover summary, assistant, toast, groups */
+  --gk-tip-bg: #fffbe6;
+  --gk-tip-border: #e5d98b;
+  --gk-pill-bg: #ede9fe;
+  --gk-pill-ink: #6d28d9;
+  --gk-send-bg: #cbd5e1;
+  --gk-toast-bg: #7f1d1d;
+  --gk-group-border: #b6bec9;
+  --gk-group-bg: rgb(148 163 184 / 0.08);
+  --gk-group-ink: #475569;
+
+  /* shadows */
+  --gk-shadow-popover: rgb(15 23 42 / 0.18);
+  --gk-shadow-window: rgb(15 23 42 / 0.28);
+  --gk-shadow-tip: rgb(15 23 42 / 0.15);
+  --gk-shadow-toast: rgb(0 0 0 / 0.25);
+  --gk-shadow-knob: rgb(15 23 42 / 0.3);
+
+  /* Map Viewer UI (MapLibre reads these through themeColor()) */
+  --gk-map-marker: #2563eb;
+  --gk-map-point-outline: #ffffff;
+
+  /* data types: ports, wires, legend (SPEC 3) */
+  --gk-type-number: #64748b;
+  --gk-type-text: #a16207;
+  --gk-type-raster: #0b7a7c;
+  --gk-type-vector: #c2410c;
+  --gk-type-table: #7c3aed;
+  --gk-type-model: #be185d;
+  --gk-type-boolean: #0369a1;
+  --gk-type-color: #4d7c0f;
+  --gk-type-colormap: #4338ca;
+  --gk-type-layer: #a21caf;
+  --gk-type-any: #64748b;
+
+  /* category strips: the tab colours come from GET /api/components; this is the strip
+   * of an inline component whose category is not a tab */
+  --gk-cat-other: #475569;
+
+  /* wires */
+  --gk-wire-width: 2px;
+  --gk-wire-faded-opacity: 0.4;
+}

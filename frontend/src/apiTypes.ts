@@ -320,10 +320,11 @@ export interface NodePatch {
 /** `auto` (the default) follows the theme. */
 export type Basemap = "auto" | "light" | "dark" | "none";
 
-/** A layer's look; `color` is for vectors, the rest for rasters. */
+/** A layer's look; `color` is for vectors, the rest for rasters. `colormap` is a ramp
+ * name, `categorical`, or a Colormap (change 03; tiles get it as `cmap`). */
 export interface LayerStyle {
   bands: number[];
-  colormap: string;
+  colormap: string | ColormapJson;
   min: number | null;
   max: number | null;
   opacity: number;

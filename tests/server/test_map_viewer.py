@@ -196,6 +196,130 @@ def test_raster_tiles(imd: tuple[TestClient, str, Path]) -> None:
     assert client.get(f"/tiles/..%2F..%2Fsecret/{z}/{x}/{y}.png").status_code == 404
 
 
+def _centre_tile(layer: dict[str, Any], z: int = 14) -> tuple[int, int, int]:
+    west, south, east, north = layer["raster"]["bounds"]
+    return _tile_at((west + east) / 2, (south + north) / 2, z)
+
+
+def _cmap_tile(client: TestClient, key: str, tile: tuple[int, int, int], cmap: Any) -> np.ndarray:
+    z, x, y = tile
+    text = json.dumps(cmap, separators=(",", ":"))
+    r = client.get(f"/tiles/{key}/{z}/{x}/{y}.png", params={"cmap": text})
+    assert r.status_code == 200, r.text
+    return _png(r.content)
+
+
+def _class_values(client: TestClient, key: str, tile: tuple[int, int, int]) -> np.ndarray:
+    """Class value of each pixel of the tile (-1 where transparent), read back from the
+    categorical palette (the synthetic classes are 0-7, so each has its own colour)."""
+    z, x, y = tile
+    img = _png(client.get(f"/tiles/{key}/{z}/{x}/{y}.png?colormap=categorical").content)
+    out = np.full(img.shape[:2], -1)
+    for value, colour in enumerate(tiles.PALETTE[:8]):
+        rgb = [int(colour[i : i + 2], 16) for i in (1, 3, 5)]
+        out[(img[..., :3] == rgb).all(axis=-1) & (img[..., 3] == 255)] = value
+    return out
+
+
+def test_classes_colormap_tiles(imd: tuple[TestClient, str, Path]) -> None:
+    """Done when: classes {1: red, 2: blue} colour exactly those classes, the rest
+    transparent with other: None."""
+    client, viewer, _ = imd
+    layer = _layers(client, viewer)["n4.classes"]
+    key, tile = layer["key"], _centre_tile(layer)
+    values = _class_values(client, key, tile)
+    assert (values == 1).sum() > 0 and (values == 2).sum() > 0 and (values > 2).sum() > 0
+
+    cmap = {
+        "kind": "classes",
+        "classes": [[1, "#FF0000", "low"], [2, "#0000FF", ""]],
+        "other": None,
+    }
+    img = _cmap_tile(client, key, tile, cmap)
+    assert (img[values == 1] == [255, 0, 0, 255]).all()
+    assert (img[values == 2] == [0, 0, 255, 255]).all()
+    assert (img[(values != 1) & (values != 2)][:, 3] == 0).all()
+
+    # `other` colours the rest; an #RRGGBBAA alpha multiplies the tile's
+    cmap = {"kind": "classes", "classes": [[1, "#FF000080", ""]], "other": "#00FF00"}
+    img = _cmap_tile(client, key, tile, cmap)
+    assert (img[values == 1] == [255, 0, 0, 128]).all()
+    assert (img[values >= 2] == [0, 255, 0, 255]).all()
+    assert (img[values == -1][:, 3] == 0).all()  # outside the raster stays transparent
+
+
+def test_continuous_colormap_tiles(imd: tuple[TestClient, str, Path]) -> None:
+    """Done when: a custom ramp with fixed min/max gives the stop colour at the stop's value."""
+    client, viewer, _ = imd
+    layer = _layers(client, viewer)["n4.classes"]
+    key, tile = layer["key"], _centre_tile(layer)
+    values = _class_values(client, key, tile)
+    stops = [[0, "#000000"], [0.2, "#FF8000"], [0.6, "#20C0A0"], [1, "#FFFFFF"]]
+    cmap = {"kind": "continuous", "stops": stops, "min": 0, "max": 5, "reverse": False}
+    img = _cmap_tile(client, key, tile, cmap)
+    for value, colour in ((1, (255, 128, 0)), (3, (32, 192, 160))):  # 1 → 0.2, 3 → 0.6
+        shown = img[values == value]
+        assert len(shown) and (np.abs(shown[:, :3].astype(int) - colour) <= 1).all()
+        assert (shown[:, 3] == 255).all()
+
+    # reversed: 1 now sits at 0.8, between the 0.6 and 1 stops
+    img = _cmap_tile(client, key, tile, {**cmap, "reverse": True})
+    expected = np.round((np.array([32, 192, 160]) + 255) / 2)
+    assert (np.abs(img[values == 1][:, :3] - expected) <= 1).all()
+
+    assert (
+        client.get(
+            f"/tiles/{key}/{tile[0]}/{tile[1]}/{tile[2]}.png", params={"cmap": "{bad"}
+        ).status_code
+        == 400
+    )
+    bad = json.dumps({"kind": "continuous", "stops": [[0, "#000000"]]})
+    r = client.get(f"/tiles/{key}/{tile[0]}/{tile[1]}/{tile[2]}.png", params={"cmap": bad})
+    assert r.status_code == 400 and "2 stops" in r.json()["detail"]
+
+
+def test_named_colormap_draws_as_today(imd: tuple[TestClient, str, Path]) -> None:
+    """Done when: a named ramp without customisation renders the same bytes as by name."""
+    client, viewer, _ = imd
+    layer = _layers(client, viewer)["n17.map"]
+    key, (z, x, y) = layer["key"], _centre_tile(layer)
+    for name in ("viridis", "terrain"):
+        today = client.get(f"/tiles/{key}/{z}/{x}/{y}.png?colormap={name}&min=5&max=80").content
+        cmap = json.dumps({"kind": "continuous", "name": name, "min": None, "max": None})
+        r = client.get(f"/tiles/{key}/{z}/{x}/{y}.png?min=5&max=80", params={"cmap": cmap})
+        assert r.content == today
+        fixed = json.dumps({"kind": "continuous", "name": name, "min": 5, "max": 80})
+        assert client.get(f"/tiles/{key}/{z}/{x}/{y}.png", params={"cmap": fixed}).content == today
+    # no min/max anywhere: the 2-98 % stretch, as by name
+    today = client.get(f"/tiles/{key}/{z}/{x}/{y}.png?colormap=magma").content
+    cmap = json.dumps({"kind": "continuous", "name": "magma"})
+    assert client.get(f"/tiles/{key}/{z}/{x}/{y}.png", params={"cmap": cmap}).content == today
+    # reversed: rio-tiler's table backwards
+    lut = tiles.colormap_lut(tiles.types.Colormap.named("magma", reverse=True))
+    assert (lut == tiles._lut("magma")[::-1]).all()
+
+
+def test_colormap_objects_are_saved_as_styles(imd: tuple[TestClient, str, Path]) -> None:
+    client, viewer, _ = imd
+    cmap = {"kind": "classes", "classes": [[1, "#ff0000", "Built"]], "other": None}
+    r = client.patch(
+        f"/api/nodes/{viewer}", json={"map": {"styles": {"n4.classes": {"colormap": cmap}}}}
+    )
+    assert r.status_code == 200, r.text
+    saved = {"kind": "classes", "classes": [[1, "#FF0000", "Built"]], "other": None}
+    assert r.json()["map"]["styles"]["n4.classes"]["colormap"] == saved
+    assert client.get("/api/graph").json()["out_of_date"] == 0
+    # the legend data: GET /api/map gives the Colormap in the layer's style
+    assert _layers(client, viewer)["n4.classes"]["style"]["colormap"] == saved
+
+    bad = {"kind": "classes", "classes": []}
+    r = client.patch(
+        f"/api/nodes/{viewer}", json={"map": {"styles": {"n4.classes": {"colormap": bad}}}}
+    )
+    assert r.status_code == 400 and "at least one class" in r.json()["detail"]
+    client.patch(f"/api/nodes/{viewer}", json={"map": {"styles": {"n4.classes": None}}})
+
+
 def test_band_statistics(imd: tuple[TestClient, str, Path]) -> None:
     client, viewer, _ = imd
     key = _layers(client, viewer)["n12.raster"]["key"]

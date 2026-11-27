@@ -212,6 +212,7 @@ export const strings = {
   featuresShown: (shown: number, total: number) =>
     shown < total ? `showing ${shown} of ${total} features` : `${total} features`,
   classValue: (value: number) => `class ${value}`,
+  legendOther: "other values",
   inspect: "Inspect",
   inspectHint: "Click the map to read the values of every layer there",
   inspectOutside: "outside",

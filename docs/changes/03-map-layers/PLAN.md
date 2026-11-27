@@ -8,12 +8,12 @@ and Color nodes) and change 02 step 4 (basemap `auto`). Read `CLAUDE.md`,
 
 ## Step 1: Colormaps in tiles
 
-- [ ] Colormap → 256-entry LUT (continuous, rescaled by min/max) and a
+- [x] Colormap → 256-entry LUT (continuous, rescaled by min/max) and a
       value → RGBA lookup (classes, `other`, alpha), in the colour step of
       `tiles.render_tile` next to `_lut` and the categorical palette
-- [ ] `/tiles/...?cmap=` (compact JSON); `_check_style` accepts a Colormap
+- [x] `/tiles/...?cmap=` (compact JSON); `_check_style` accepts a Colormap
       object as `colormap`
-- [ ] Legend data from a Colormap in `GET /api/map/{id}` and `legendFor`
+- [x] Legend data from a Colormap in `GET /api/map/{id}` and `legendFor`
 
 **Done when** (pytest, `tests/server/test_map_viewer.py`):
 - a classes Colormap `{1: red, 2: blue}` on the synthetic class raster

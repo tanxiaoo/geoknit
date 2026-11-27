@@ -499,10 +499,14 @@ def create_app(
         y: int,
         bands: str | None = None,
         colormap: str = "viridis",
+        cmap: str | None = None,
         min: float | None = Query(default=None),  # noqa: A002  (query names of the API)
         max: float | None = Query(default=None),  # noqa: A002
     ) -> Response:
-        """A 256 px Web Mercator tile of a cached raster (rio-tiler, from overviews)."""
+        """A 256 px Web Mercator tile of a cached raster (rio-tiler, from overviews).
+
+        ``cmap`` is a Colormap as compact JSON; it replaces ``colormap`` when given.
+        """
         png = tiles.render_tile(
             session.map_cache(),
             key,
@@ -510,7 +514,7 @@ def create_app(
             x,
             y,
             bands=_bands(bands) or (1,),
-            colormap=colormap,
+            colormap=tiles.colormap_from_query(cmap) if cmap is not None else colormap,
             vmin=min,
             vmax=max,
         )

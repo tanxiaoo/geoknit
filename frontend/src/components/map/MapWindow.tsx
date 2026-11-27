@@ -17,11 +17,14 @@ import {
   CATEGORICAL,
   effectiveStyle,
   formatValue,
+  gradientStops,
+  isColormap,
   isRgb,
   legendFor,
   range,
   renderLayers,
   resolveBasemap,
+  showsClasses,
   statsFor,
   unionBounds,
   type Legend,
@@ -30,6 +33,8 @@ import { VECTOR_COLOURS } from "../../palettes";
 import { useTheme } from "../../theme";
 
 const BASEMAPS: Basemap[] = ["auto", "light", "dark", "none"];
+/** The colormap picker's entry for a Colormap object (edited in the Colormap window). */
+const CUSTOM = "__custom__";
 
 /** The floating map window of the open Map Viewer (SPEC 8). */
 export function MapWindow() {
@@ -371,10 +376,15 @@ function RasterControls({
         <label className="gk-map-row">
           <span>{strings.colormap}</span>
           <select
-            value={style.colormap}
+            value={isColormap(style.colormap) ? CUSTOM : style.colormap}
             onChange={(e) => onChange({ colormap: e.target.value })}
             data-testid={`layer-colormap-${layer.id}`}
           >
+            {isColormap(style.colormap) && (
+              <option value={CUSTOM} disabled>
+                {strings.colormapCustom}
+              </option>
+            )}
             {[...categorical, ...colormapNames].map((c) => (
               <option key={c} value={c}>
                 {strings.colormapNames[c] ?? c}
@@ -383,7 +393,7 @@ function RasterControls({
           </select>
         </label>
       )}
-      {(rgb || style.colormap !== CATEGORICAL) && (
+      {!showsClasses(style) && (
         <div className="gk-map-row gk-map-range">
           <NumberField
             label={strings.min}
@@ -475,7 +485,7 @@ export function LegendView({ legend, layer }: { legend: Legend | null; layer: st
         <div className="gk-map-legend" data-testid={testid} data-kind="ramp">
           <div
             className="gk-map-ramp"
-            style={{ background: `linear-gradient(to right, ${legend.colours.join(", ")})` }}
+            style={{ background: `linear-gradient(to right, ${gradientStops(legend)})` }}
           />
           <div className="gk-map-ramp-labels">
             <span>{formatValue(legend.min)}</span>
@@ -489,9 +499,15 @@ export function LegendView({ legend, layer }: { legend: Legend | null; layer: st
           {legend.classes.map((c) => (
             <li key={c.value}>
               <span className="gk-map-swatch-small" style={{ background: c.color }} />
-              {strings.classValue(c.value)}
+              {c.label ?? strings.classValue(c.value)}
             </li>
           ))}
+          {legend.other !== undefined && (
+            <li key="other" data-testid={`${testid}-other`}>
+              <span className="gk-map-swatch-small" style={{ background: legend.other }} />
+              {strings.legendOther}
+            </li>
+          )}
         </ul>
       );
     case "rgb":

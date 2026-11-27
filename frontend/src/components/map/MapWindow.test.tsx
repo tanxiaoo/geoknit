@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { GraphView, MapLayer, MapView, NodeView } from "../../apiTypes";
+import type { ColormapJson, GraphView, MapLayer, MapView, NodeView } from "../../apiTypes";
 import { paramEntry } from "../../testFixtures";
 import { initialState, store } from "../../store";
 import { nodeKind } from "../nodes/kinds";
@@ -8,6 +8,7 @@ import {
   BASEMAP_PAINT,
   effectiveStyle,
   formatValue,
+  gradientStops,
   legendFor,
   renderLayers,
   statsFor,
@@ -181,6 +182,82 @@ describe("map logic", () => {
       bands: ["A02", "A01", "A00"],
       min: 0,
       max: 1,
+    });
+  });
+
+  test("a Colormap style goes to the tiles as compact JSON in cmap", () => {
+    const cm: ColormapJson = { kind: "classes", classes: [[1, "#FF0000", "Built"]], other: null };
+    const url = tileUrl(classes.key!, effectiveStyle(classes, { colormap: cm }));
+    const q = new URLSearchParams(url.split("?")[1]);
+    expect(q.get("cmap")).toBe('{"kind":"classes","classes":[[1,"#FF0000","Built"]],"other":null}');
+    expect(q.has("colormap")).toBe(false);
+    expect(JSON.parse(q.get("cmap")!)).toEqual(cm);
+    // a classes Colormap draws nearest pixels; a continuous one does not
+    const styles = { "n4.classes": { colormap: cm }, "n17.map": { colormap: cm } };
+    const ramp: ColormapJson = { kind: "continuous", name: "magma", min: null, max: null, reverse: false };
+    expect(renderLayers([classes, pred], styles).map((l) => l.kind === "raster" && l.nearest)).toEqual([
+      true,
+      true,
+    ]);
+    expect(renderLayers([pred], { "n17.map": { colormap: ramp } })[0]).toMatchObject({ nearest: false });
+  });
+
+  test("legends of a classes Colormap: labels (value when empty) and the other colour", () => {
+    const cm: ColormapJson = {
+      kind: "classes",
+      classes: [
+        [1, "#FF0000", "Built"],
+        [2.5, "#0000FF80", ""],
+      ],
+      other: "#CCCCCC",
+    };
+    const style = effectiveStyle(classes, { colormap: cm });
+    expect(legendFor(classes, style, classes.raster!.stats, COLORMAPS)).toEqual({
+      kind: "classes",
+      classes: [
+        { value: 1, color: "#FF0000", label: "Built" },
+        { value: 2.5, color: "#0000FF80", label: "2.5" },
+      ],
+      other: "#CCCCCC",
+    });
+    const transparent = effectiveStyle(classes, { colormap: { ...cm, other: null } });
+    expect(legendFor(classes, transparent, null, COLORMAPS)).not.toHaveProperty("other");
+  });
+
+  test("legends of a continuous Colormap: custom stops, reverse, its own min/max", () => {
+    const cm: ColormapJson = {
+      kind: "continuous",
+      name: null,
+      stops: [
+        [0, "#000000"],
+        [0.25, "#FF0000"],
+        [1, "#FFFFFF"],
+      ],
+      min: 10,
+      max: null,
+      reverse: false,
+    };
+    const legend = legendFor(pred, effectiveStyle(pred, { colormap: cm }), pred.raster!.stats, COLORMAPS);
+    expect(legend).toEqual({
+      kind: "ramp",
+      colours: ["#000000", "#FF0000", "#FFFFFF"],
+      positions: [0, 0.25, 1],
+      min: 10, // the Colormap's, not the style's 2
+      max: 90, // auto: the stretch
+    });
+    expect(gradientStops(legend as Extract<typeof legend, { kind: "ramp" }>)).toBe(
+      "#000000 0%, #FF0000 25%, #FFFFFF 100%",
+    );
+    const back = effectiveStyle(pred, { colormap: { ...cm, reverse: true } });
+    const reversed = legendFor(pred, back, null, COLORMAPS);
+    expect(reversed).toMatchObject({ colours: ["#FFFFFF", "#FF0000", "#000000"], positions: [0, 0.75, 1] });
+    // a named ramp: the server's colours (reversed when asked), evenly spaced
+    const named: ColormapJson = { kind: "continuous", name: "viridis", min: null, max: null, reverse: true };
+    expect(legendFor(pred, effectiveStyle(pred, { colormap: named }), null, COLORMAPS)).toEqual({
+      kind: "ramp",
+      colours: [...COLORMAPS.viridis].reverse(),
+      min: 2,
+      max: 90,
     });
   });
 

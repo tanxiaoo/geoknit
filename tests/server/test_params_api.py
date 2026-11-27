@@ -89,6 +89,18 @@ def test_patch_values_integer_and_options(client: TestClient) -> None:
     slider = _add(client, "param/slider")["id"]
     view = _patch(client, slider, min=0.4, max=9.6, step=0.3, value=4.6, integer=True)
     assert [view[k] for k in ("min", "max", "step", "value", "integer")] == [0, 10, 1, 5, True]
+    # a refused value leaves the integer mode (and the undo history) as it was
+    other = _add(client, "param/number")["id"]
+    _patch(client, other, value=2.5)
+    undo_before = client.get("/api/graph").json()["can_undo"]
+    r = client.patch(f"/api/nodes/{other}", json={"value": "abc", "integer": True})
+    assert r.status_code == 400 and r.json()["detail"] == "a Number value must be a number"
+    graph = client.get("/api/graph").json()
+    after = graph["nodes"][other]
+    assert (after["value"], after["integer"]) == (2.5, False)
+    assert client.post("/api/undo").status_code == 200
+    assert client.get("/api/graph").json()["nodes"][other]["value"] == 0  # undid the 2.5 patch
+    assert undo_before is True
     text = _add(client, "param/text")["id"]
     r = client.patch(f"/api/nodes/{text}", json={"integer": True})
     assert r.status_code == 400 and r.json()["detail"] == "Text has no integer mode"

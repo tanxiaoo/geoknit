@@ -387,7 +387,7 @@ class _Exporter:
             text = head + indent(body)
         if outputs:
             # List outputs are plain lists, as in GeoKnit (a tuple is converted).
-            returned = [f"list({p})" if spec.outputs[p].access == "list" else p for p in outputs]
+            returned = [self._returned(node, p) for p in outputs]
             text += f"{INDENT}return {', '.join(returned)}\n"
         for port in outputs:
             var = f"{self.names[node.id]}_{port}"
@@ -395,6 +395,15 @@ class _Exporter:
             self.exprs[(node.id, port)] = f"{var}_value" if var == fname else var
             self.out_types[(node.id, port)] = self.graph.output_types(node.id, port)
         return _Function(node, fname, wired, outputs, text, imports)
+
+    def _returned(self, node: Node, port: str) -> str:
+        """How a function returns an output, as GeoKnit keeps it (SPEC 10): a list
+        output as ``list(x)``; a Boolean output through ``bool`` (so ``numpy.bool_``
+        becomes ``bool``, as ``as_output`` does), per element for a list of them."""
+        is_list = self.graph.output_is_list(node.id, port)  # also a like: output of a list
+        if self.graph.output_types(node.id, port) == (types.BOOLEAN,):
+            return f"[bool(_v) for _v in {port}]" if is_list else f"bool({port})"
+        return f"list({port})" if is_list else port
 
     def header_comment(self, node: Node) -> str:
         if node.component == "inline":

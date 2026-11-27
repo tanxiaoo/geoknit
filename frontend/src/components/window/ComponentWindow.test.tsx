@@ -224,6 +224,56 @@ describe("component window", () => {
     });
   });
 
+  test("a new port gets the first of the header's types, on both sides", () => {
+    const patch = open(
+      rf({
+        id: "n6",
+        title: "Expression",
+        category: "Maths",
+        editable_ports: {
+          inputs: true,
+          outputs: true,
+          types: ["Number", "Raster"],
+          input_types: ["Number", "Raster", "Any"],
+        },
+        settings: [],
+        inputs: [{ name: "a", type: "Raster", access: "item" }],
+        outputs: [{ name: "r", type: "Raster", access: "item" }],
+      }),
+    );
+    fireEvent.click(screen.getByTestId("add-input"));
+    expect(patch.mock.lastCall?.[1].ports?.inputs[1]).toMatchObject({ name: "x1", type: "Number" });
+    fireEvent.click(screen.getByTestId("add-output"));
+    expect(patch.mock.lastCall?.[1].ports?.outputs[1]).toMatchObject({
+      name: "y1",
+      type: "Number",
+    });
+  });
+
+  test("a like: output shows the input it follows, without a type picker", () => {
+    const patch = open(
+      rf({
+        id: "n7",
+        title: "Python",
+        category: "Script",
+        editable_ports: { inputs: true, outputs: true, types: ["Number", "Text"] },
+        settings: [],
+        inputs: [{ name: "data", type: "Any", types: ["Any"], access: "item" }],
+        outputs: [{ name: "out", type: "Any", types: ["Any"], access: "item", like: "data" }],
+      }),
+    );
+    expect(screen.queryByTestId("port-type-out")).toBeNull();
+    expect(screen.getByTestId("port-like-out").textContent).toBe("like data");
+    // renaming the input sends `was`; the server rewrites the like:
+    const name = screen.getByTestId("port-name-data");
+    fireEvent.change(name, { target: { value: "items" } });
+    fireEvent.blur(name);
+    expect(patch.mock.lastCall?.[1].ports?.inputs[0]).toMatchObject({
+      name: "items",
+      was: "data",
+    });
+  });
+
   test("a Script component without ports: has fixed ports", () => {
     open(rf({ id: "n5", category: "Script", editable_ports: null }));
     expect(screen.queryByTestId("add-input")).toBeNull();

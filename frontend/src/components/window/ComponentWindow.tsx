@@ -400,6 +400,12 @@ interface PortLabelProps {
 function PortLabel({ port, editable, types, onRename, onType, onRemove }: PortLabelProps) {
   const [name, setName] = useState(port.name);
   const dot = <span className="gk-type-dot" style={{ background: PORT_COLOURS[port.type] }} />;
+  // A `like:` output takes its input's type: no type to pick (SPEC 4).
+  const fixedType = port.like ? (
+    <span className="gk-setting-type" data-testid={`port-like-${port.name}`}>
+      {strings.likeInput(port.like)}
+    </span>
+  ) : null;
   if (!editable)
     return (
       <>
@@ -407,7 +413,7 @@ function PortLabel({ port, editable, types, onRename, onType, onRemove }: PortLa
           {dot}
           {port.name}
         </span>
-        <span className="gk-setting-type">{port.type}</span>
+        {fixedType ?? <span className="gk-setting-type">{port.type}</span>}
       </>
     );
   const commit = () => {
@@ -429,17 +435,19 @@ function PortLabel({ port, editable, types, onRename, onType, onRemove }: PortLa
           data-testid={`port-name-${port.name}`}
         />
       </span>
-      <select
-        className="gk-setting-type"
-        value={port.type}
-        aria-label={strings.portType}
-        onChange={(e) => onType(e.currentTarget.value as PortType)}
-        data-testid={`port-type-${port.name}`}
-      >
-        {types.map((t) => (
-          <option key={t}>{t}</option>
-        ))}
-      </select>
+      {fixedType ?? (
+        <select
+          className="gk-setting-type"
+          value={port.type}
+          aria-label={strings.portType}
+          onChange={(e) => onType(e.currentTarget.value as PortType)}
+          data-testid={`port-type-${port.name}`}
+        >
+          {types.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
+      )}
       <button
         className="gk-icon-button"
         onClick={onRemove}

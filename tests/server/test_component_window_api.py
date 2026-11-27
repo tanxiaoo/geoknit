@@ -203,6 +203,21 @@ def test_ports_patch_follows_the_ports_header_key(client: TestClient) -> None:
     assert r.json()["detail"] == "the inputs of Reclassify cannot be edited"
 
 
+def test_renaming_an_input_a_like_output_follows(client: TestClient) -> None:
+    py = _add(client, PYTHON)
+    ports = {
+        "inputs": [{"name": "data", "type": "Any"}],
+        "outputs": [{"name": "out", "type": "Any", "like": "data"}],
+    }
+    assert client.patch(f"/api/nodes/{py}", json={"ports": ports}).status_code == 200
+    # what the Settings tab sends on a rename: the outputs as they were, `was` on the input
+    ports["inputs"] = [{"name": "items", "type": "Any", "was": "data"}]
+    r = client.patch(f"/api/nodes/{py}", json={"ports": ports})
+    assert r.status_code == 200, r.text
+    assert [p["name"] for p in r.json()["inputs"]] == ["items"]
+    assert r.json()["outputs"][0]["like"] == "items"
+
+
 def test_components_list_says_which_ports_are_editable(client: TestClient) -> None:
     entries = {e["ref"]: e for e in client.get("/api/components").json()["components"]}
     python = entries[PYTHON]["editable_ports"]

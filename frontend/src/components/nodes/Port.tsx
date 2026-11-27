@@ -3,7 +3,7 @@ import { Handle, Position } from "@xyflow/react";
 import type { PortType } from "../../apiTypes";
 import { portSummary, store, useStore } from "../../store";
 import { strings } from "../../strings";
-import { PORT_COLOURS, tipSummary, typeLabel, wireError } from "../../types";
+import { PORT_COLOURS, sameTypeWires, tipSummary, typeLabel, wireError } from "../../types";
 
 /** Show what a port or wire carries next to the pointer (SPEC 8). */
 export function showTip(
@@ -34,6 +34,8 @@ export interface DragFrom {
   name?: string;
   title?: string;
   list?: boolean;
+  /** Dragged from an input: the same-type rule's wired types (`sameTypeWires`). */
+  wired?: PortType[][];
 }
 
 export const DragContext = createContext<DragFrom | null>(null);
@@ -49,17 +51,30 @@ export function portName(handle: string | null | undefined): string {
 /** The refusal for a wire between ``drag`` and this port, or null if it fits. */
 export function dragRefusal(
   drag: DragFrom,
-  port: { side: "in" | "out"; name: string; types: PortType[]; list: boolean; title: string },
+  port: {
+    side: "in" | "out";
+    name: string;
+    types: PortType[];
+    list: boolean;
+    title: string;
+    /** An input: the same-type rule's wired types (`sameTypeWires`). */
+    wired?: PortType[][];
+  },
 ): string | null {
   if (port.side === "in") {
     return wireError(
       { title: drag.title ?? "", types: drag.types, list: drag.list ?? false },
-      { name: port.name, types: port.types, access: port.list ? "list" : "item" },
+      { name: port.name, types: port.types, access: port.list ? "list" : "item", wired: port.wired },
     );
   }
   return wireError(
     { title: port.title, types: port.types, list: port.list },
-    { name: drag.name ?? "", types: drag.types, access: drag.list ? "list" : "item" },
+    {
+      name: drag.name ?? "",
+      types: drag.types,
+      access: drag.list ? "list" : "item",
+      wired: drag.wired,
+    },
   );
 }
 
@@ -76,10 +91,12 @@ interface Props {
 export function Port({ nodeId, side, name, types, list = false }: Props) {
   const drag = useContext(DragContext);
   const title = useStore((s) => s.graph?.nodes[nodeId]?.title ?? "");
+  const graph = useStore((s) => s.graph);
   let refusal: string | null = null;
   let fit = "";
   if (drag && drag.nodeId !== nodeId && drag.side !== side) {
-    refusal = dragRefusal(drag, { side, name, types, list, title });
+    const wired = side === "in" && graph ? sameTypeWires(graph, nodeId, name) : undefined;
+    refusal = dragRefusal(drag, { side, name, types, list, title, wired });
     fit = refusal ? "gk-misfit" : "gk-fits";
   }
   // SPEC 3: first type's colour, a thin ring of the second.

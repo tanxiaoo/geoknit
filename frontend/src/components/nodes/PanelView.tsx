@@ -174,6 +174,8 @@ interface GridState {
   index: CellValue[];
   loading: boolean;
   error: string | null;
+  /** A page came back empty before `total_rows` were shown: stop asking. */
+  ended: boolean;
 }
 
 const fresh = (view: TableView): GridState => ({
@@ -182,6 +184,7 @@ const fresh = (view: TableView): GridState => ({
   index: view.index,
   loading: false,
   error: null,
+  ended: false,
 });
 
 /** A scrollable grid with an index column and the column headers, under "N rows × M
@@ -196,7 +199,7 @@ function TableGrid({ nodeId, view }: { nodeId: string; view: TableView }) {
   const scroller = useRef<HTMLDivElement>(null);
   const busy = useRef(false);
 
-  const more = st.rows.length < view.total_rows;
+  const more = !st.ended && st.rows.length < view.total_rows;
   const diskOff = paging !== undefined && !paging.diskCache;
   const key = paging?.diskCache ? paging.key : null;
 
@@ -218,6 +221,8 @@ function TableGrid({ nodeId, view }: { nodeId: string; view: TableView }) {
                 rows: [...s.rows, ...page.rows],
                 index: [...s.index, ...page.index],
                 loading: false,
+                // an empty page would be asked for again at the same offset forever
+                ended: page.rows.length === 0,
               }
             : { ...s, loading: false },
         );

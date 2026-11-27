@@ -123,6 +123,7 @@ class InProcessExecutor:
                 cwd=self.base_dir,
                 print_port=PRINT_PORT,
                 output_types=self.graph.resolved_output_types(nid),
+                list_outputs=self.graph.list_outputs(nid),
             )
             if not result.ok:
                 assert result.error is not None

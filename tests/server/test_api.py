@@ -295,7 +295,14 @@ def test_ports_carry_types_like_and_resolved_type(client: TestClient) -> None:
     assert r.status_code == 400 and r.json()["detail"] == "Text can't connect to Table | Vector"
     assert _wire(client, sel, "selected", panel, "data").status_code == 201
     graph = client.get("/api/graph").json()
-    assert graph["nodes"][panel]["outputs"][0]["resolved_type"] is None  # sel unresolved
+    through = graph["nodes"][panel]["outputs"][0]
+    assert through["resolved_type"] is None  # sel unresolved
+    # ... but the server knows what it can be; the frontend checks drags against that
+    assert through["types"] == ["Any"] and through["resolved_types"] == ["Table", "Vector"]
+    assert graph["nodes"][sel]["outputs"][0]["resolved_types"] == ["Table", "Vector"]
+    read = _add(client, "builtin/raster/clip")
+    r = _wire(client, panel, "data", read, "raster")
+    assert r.status_code == 400 and r.json()["detail"] == "Table | Vector can't connect to Raster"
     up = _add(client, "inline", source=UPPER)
     assert _wire(client, text, "value", up, "text").status_code == 201
     graph = client.get("/api/graph").json()

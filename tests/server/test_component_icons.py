@@ -64,6 +64,11 @@ def test_pack_svg_icon_is_served(tmp_path: Path) -> None:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("image/svg+xml")
         assert r.text == SVG
+        # hardened: never sniffed as another type, no scripts, nothing loaded
+        assert r.headers["x-content-type-options"] == "nosniff"
+        assert r.headers["content-security-policy"] == (
+            "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        )
         # A file elsewhere inside the pack folder is fine too.
         assert client.get("/api/components/fakepack/Icons/shared/icon").status_code == 200
         entry = next(

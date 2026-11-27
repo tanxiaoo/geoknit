@@ -101,13 +101,15 @@ def _ports(ports: Iterable[Any]) -> list[dict[str, Any]]:
 
 
 def _output_ports(graph: Graph, node: Node) -> list[dict[str, Any]]:
-    """Outputs with ``like``, the type the graph resolved (``None`` while unresolved)
-    and ``resolved_access``: ``list`` when the output carries a list, also a Panel
-    passing one through (SPEC 3 "List values")."""
+    """Outputs with ``like``, the type the graph resolved (``None`` while unresolved),
+    ``resolved_types`` (every type it can carry, ``Graph.output_types``, which the
+    wiring checks use) and ``resolved_access``: ``list`` when the output carries a
+    list, also a Panel passing one through (SPEC 3 "List values")."""
     out = _ports(node.outputs.values())
     for view, port in zip(out, node.outputs.values(), strict=True):
         view["like"] = port.like
         view["resolved_type"] = graph.output_type(node.id, port.name)
+        view["resolved_types"] = list(graph.output_types(node.id, port.name))
         view["resolved_access"] = "list" if graph.output_is_list(node.id, port.name) else "item"
     return out
 

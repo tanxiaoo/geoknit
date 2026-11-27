@@ -22,7 +22,9 @@ class RunNode:
     (the worker does not know the graph); the outputs are checked against them.
     ``list_keys`` names the port keys of ``list`` inputs that come from list
     outputs: their elements are concatenated into the input, where any other
-    key adds one element (SPEC 3 "List values").
+    key adds one element (SPEC 3 "List values"). ``list_outputs`` names the
+    ``like:`` outputs that carry a list although declared ``item`` (an ``Any``
+    item input fed by a list): their value is checked as a list.
     """
 
     node_id: str
@@ -31,6 +33,7 @@ class RunNode:
     cache_key: str
     output_types: dict[str, str] = field(default_factory=dict)
     list_keys: frozenset[str] = frozenset()
+    list_outputs: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

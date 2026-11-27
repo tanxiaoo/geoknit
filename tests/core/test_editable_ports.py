@@ -188,6 +188,47 @@ picked = data
     assert node.outputs["picked"].like == "data"
 
 
+FOLLOW = """\
+# geoknit: component
+# name: Follow
+# category: Script
+# ports: {inputs: editable}
+# inputs:
+#   data: Any
+# outputs:
+#   out: {like: data}
+
+# --- code ---
+out = data
+"""
+
+
+@pytest.mark.parametrize("send_outputs", [False, True])
+def test_renaming_an_input_rewrites_the_like_that_follows_it(send_outputs: bool) -> None:
+    g = Graph()
+    text = g.add_component(PARAM_TEXT).id
+    node = g.add_component(INLINE, source=FOLLOW).id
+    panel = g.add_component(PARAM_PANEL).id
+    g.add_wire(text, "value", node, "data")
+    g.add_wire(node, "out", panel, "data")
+    # the frontend sends the outputs back as they were (like: the old name); also
+    # with ``outputs: None``, and although the outputs are not editable
+    outputs = [{"name": "out", "type": "Any", "like": "data"}] if send_outputs else None
+    g.set_ports(node, [{"name": "items", "type": "Any", "was": "data"}], outputs)
+    spec = g.nodes[node].spec
+    assert spec is not None and spec.outputs["out"].like == "items"
+    assert "#   out: {like: items}" in (g.nodes[node].source or "")
+    assert g.output_type(node, "out") == "Text"
+    assert len(g.wires) == 2  # both wires followed the rename
+    # pointing the like: elsewhere is still an output edit
+    with pytest.raises(GraphError, match="the outputs of Follow cannot be edited"):
+        g.set_ports(
+            node,
+            [{"name": "items", "type": "Any"}, {"name": "b", "type": "Any"}],
+            [{"name": "out", "type": "Any", "like": "b"}],
+        )
+
+
 # ── INPUTS ──
 
 

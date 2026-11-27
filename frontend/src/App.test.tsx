@@ -90,6 +90,27 @@ describe("connection rules (SPEC 3)", () => {
     expect(portTypes(out)).toEqual(["Table", "Vector"]);
     expect(portTypes({ ...out, resolved_type: "Vector" })).toEqual(["Vector"]);
   });
+
+  test("an unresolved Panel fed by an unwired union like: output checks the server's set", () => {
+    // Split Points (unwired) → Panel: the server can say ("Table", "Vector") for the
+    // Panel's output, whose declared type is Any; the drag check must use that set.
+    const panelOut: PortView = {
+      name: "data",
+      type: "Any",
+      types: ["Any"],
+      access: "item",
+      like: "data",
+      resolved_type: null,
+      resolved_types: ["Table", "Vector"],
+    };
+    expect(portTypes(panelOut)).toEqual(["Table", "Vector"]);
+    expect(connectionError(portTypes(panelOut), ["Raster"])).toBe(
+      "Table | Vector can't connect to Raster",
+    );
+    expect(connectionError(portTypes(panelOut), ["Vector"])).toBeNull();
+    // an unwired Panel still connects anywhere
+    expect(portTypes({ ...panelOut, resolved_types: ["Any"] })).toEqual(["Any"]);
+  });
 });
 
 describe("catalog", () => {

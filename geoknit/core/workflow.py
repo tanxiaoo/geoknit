@@ -32,7 +32,9 @@ from geoknit.core.graph import (
     GraphError,
     Node,
     Wire,
+    check_integer_mode,
     check_options,
+    number_value,
     param_value,
     set_param_defaults,
 )
@@ -216,6 +218,10 @@ def node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None = None)
             node.min, node.max = raw.get("min", 0), raw.get("max", 100)
             node.step, node.value = raw.get("step", 1), raw.get("value", 50)
             node.integer = raw.get("integer") is True
+            try:
+                check_integer_mode(node)
+            except GraphError as exc:
+                raise WorkflowError(f'node "{node.id}": {exc}') from None
         elif node.component not in (PARAM_PANEL, PARAM_MAP):
             _param_from_dict(node, raw)
         return node
@@ -255,7 +261,11 @@ def _param_from_dict(node: Node, raw: dict[str, Any]) -> None:
     set_param_defaults(node)
     try:
         if node.component == PARAM_NUMBER:
+            # Checked as stored: integer mode refuses a fraction instead of rounding it.
             node.integer = raw.get("integer") is True
+            node.value = number_value(raw.get("value", node.value), False)
+            check_integer_mode(node)
+            return
         if node.component == PARAM_VALUE_LIST and "options" in raw:
             node.options = check_options(raw["options"])
             node.value = node.options[0]["value"]

@@ -244,6 +244,19 @@ describe("Panel: table grid", () => {
     expect(screen.getByTestId("panel-row-p1-250").children[0].textContent).toBe("250");
   });
 
+  test("an empty page before total_rows stops paging (no endless re-requests)", async () => {
+    const spy = vi.spyOn(api, "table").mockResolvedValue(table(1000, 0, { offset: 200 }));
+    drawPanel(table(1000, 200));
+    scrollToEnd();
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    // more scrolling and re-renders do not ask again for the same offset
+    await act(async () => {});
+    scrollToEnd();
+    await act(async () => {});
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("panel-grid-p1").dataset.rows).toBe("200");
+  });
+
   test("a 404 while paging shows as an error in the grid", async () => {
     vi.spyOn(api, "table").mockRejectedValue(new ApiError("not in the cache; run first", 404));
     drawPanel(table(1000, 200));

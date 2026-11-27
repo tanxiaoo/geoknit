@@ -40,6 +40,8 @@ export interface WireFrom {
   types: PortType[];
   /** The port carries a list: a list output, or an `access: list` input. */
   list?: boolean;
+  /** An input: the same-type rule's wired types (`sameTypeWires`). */
+  wired?: PortType[][];
 }
 
 /** The port on ``entry`` that fits ``from``, or null. */
@@ -51,7 +53,12 @@ export function fittingPort(entry: ComponentEntry, from: WireFrom): string | nul
       !wireError(src, { name: p.name, types: portTypes(p), access: p.access });
     return entry.inputs.find(fits)?.name ?? null;
   }
-  const dst = { name: from.port, types: from.types, access: list ? "list" : "item" } as const;
+  const dst = {
+    name: from.port,
+    types: from.types,
+    access: list ? ("list" as const) : ("item" as const),
+    wired: from.wired,
+  };
   const fits = (p: PortView) =>
     !wireError({ title: "", types: portTypes(p), list: carriesList(p) }, dst);
   return entry.outputs.find(fits)?.name ?? null;

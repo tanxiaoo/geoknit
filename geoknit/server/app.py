@@ -32,6 +32,12 @@ from geoknit.server.session import Session, SessionError
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+ICON_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+}
+"""Headers of a pack's ``.svg`` icon (``GET /api/components/{ref}/icon``)."""
+
 PLACEHOLDER = """<!doctype html>
 <html><head><meta charset="utf-8"><title>GeoKnit</title></head>
 <body style="font-family: system-ui, sans-serif; margin: 3rem">
@@ -247,7 +253,10 @@ def create_app(
     def component_icon(ref: str) -> Response:
         """A component's own ``.svg`` icon (``icon: icons/x.svg``), only from inside its folder."""
         path = session.component_icon(ref)
-        return Response(path.read_bytes(), media_type="image/svg+xml")
+        # A pack's SVG is served on the app's origin: opened directly it must not run
+        # scripts, load anything or be sniffed as another type (the canvas draws it as
+        # a CSS mask, which never runs scripts either).
+        return Response(path.read_bytes(), media_type="image/svg+xml", headers=ICON_HEADERS)
 
     @app.get("/api/colormaps", tags=["library"])
     def colormaps() -> dict[str, list[str]]:

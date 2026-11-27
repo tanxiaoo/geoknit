@@ -279,9 +279,13 @@ class Colormap:
 
 
 def to_json_value(value: Any) -> Any:
-    """``value`` as plain JSON data: Color and Colormap by their ``to_json()``."""
+    """``value`` as plain JSON data: Color and Colormap by their ``to_json()``, numpy
+    scalars (``np.int64``, ``np.float32``, ``np.bool_``) as the Python number or ``bool``
+    they hold, so ``json.dumps`` takes them."""
     if isinstance(value, Color | Colormap):
         return value.to_json()
+    if type(value).__module__ == "numpy" and getattr(value, "shape", None) == ():
+        return value.item()
     return value
 
 

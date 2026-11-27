@@ -208,7 +208,17 @@ types).
   header parse error, and so is `like:` together with `type:`.
 - For a `list` input, `like:` resolves to the type of its wires; wires of
   different types into an input that an output follows are refused
-  (`all wires into "items" must have the same type`).
+  (`all wires into "items" must have the same type`). The frontend refuses
+  the same wire while dragging (section 8).
+- A `like:` output of an `item` input of type `Any` that is fed by a list
+  carries that list (a Panel passing one through, `Graph.output_is_list`).
+  After the run its value must then be a list, and its elements are checked
+  against the resolved type (`output "out": item 3: expected Number, got
+  Text`), as for an `access: list` output. The worker gets these outputs with
+  `run_node` (`RunNode.list_outputs`).
+- Renaming an input (`was` in a `ports` edit, section 9) also renames it in
+  every `like:` that names it, whether or not the outputs are editable or sent
+  in the same edit. Removing an input that a `like:` names is a parse error.
 
 ### Lists
 
@@ -557,11 +567,22 @@ JSON, UTF-8, sorted keys, 2-space indent, so it diffs well in git.
   Component nodes always have `display`.
 - **Integer mode.** With `integer: true` a Number or Slider value is a Python
   `int`. Values are rounded half up (`2.5` → `3`, `-2.5` → `-2`, like the
-  frontend's `Math.round`); a Slider also rounds `min` and `max` and makes
-  `step` a whole number of at least 1, and a range that collapses
-  (`0.2..0.4`) is refused (`slider min must be below max`). Turning it off
-  keeps the rounded values. A component that needs an integer and receives a
-  float with a fractional part raises its own error; GeoKnit does not convert.
+  frontend's `Math.round`), exactly: an integer stays as it is (also above
+  2^53) and a float is floored, then its fraction compared with 0.5 (so
+  `0.49999999999999994` → `0`). A Slider also rounds `min` and `max` and
+  makes `step` a whole number of at least 1 (`0.3` → `1`); a step of 0 or
+  less is refused first (`slider step must be positive`), and a range that
+  collapses (`0.2..0.4`) is refused (`slider min must be below max`). An edit
+  is checked whole before anything changes, so a refused `PATCH {value:
+  "abc", integer: true}` leaves the node (and the undo history) as it was.
+  Turning it off keeps the rounded values. **On load** a Number or Slider with
+  `integer: true` must already hold whole numbers (JSON integers, not `2.5`
+  or `3.0`), a Slider a `step` of at least 1 and `min` below `max`; otherwise
+  the file is refused, naming the node (`node "n3": integer mode needs whole
+  numbers (value 2.5)`). It is refused rather than rounded so that a valid
+  file keeps its bytes (save → load → save) and a hand-edited one never
+  changes silently. A component that needs an integer and receives a float
+  with a fractional part raises its own error; GeoKnit does not convert.
 - **Value List.** `options` is a non-empty list of `{label, value}` (exactly
   these keys); `label` is text, `value` a number (not a Boolean) or text,
   each value listed once (`1` and `1.0` are the same value, `1` and `"1"` are
@@ -621,13 +642,15 @@ so behaviour matches Windows):
 
 - server → worker:
   - `run_node {node_id, source, inputs: {port: cache_key | [cache_key, …]},
-    cache_key, output_types, list_keys}`. Settings are part of `source`. A
+    cache_key, output_types, list_keys, list_outputs}`. Settings are part of `source`. A
     `list` input gets its keys in wire order. The worker does not know the
     graph, so `output_types: {port: type}` carries the resolved types of
     `like:` outputs (checked after the code runs), and
     `list_keys: frozenset[str]` the keys of list inputs that come from list
     outputs (their elements are concatenated; any other key adds one
-    element). The in-process executor uses the graph directly.
+    element), and `list_outputs: frozenset[str]` the `like:` outputs that
+    carry a list although declared `item` (section 3). The in-process
+    executor uses the graph directly.
   - `put_value {cache_key, value}`: a Params value (Text, Number, Slider,
     Boolean Toggle, Value List, Color Swatch, Colormap) or an empty Panel's
     `None`, sent before each run so the worker can look it up.
@@ -701,7 +724,10 @@ The server forwards these as WebSocket events to the browser.
   written in row groups of 10 000 rows so a page of rows can be read alone.
   Model → joblib. Number, Text, Boolean, Color and Colormap → JSON
   (`{"value": …}`, Color and Colormap in their JSON form, rebuilt by the
-  port type recorded in `meta.json`). A Raster that is still an unchanged
+  port type recorded in `meta.json`; numpy scalars such as `np.int64`,
+  `np.float32` and `np.bool_`, also as list elements, are written as the
+  Python number or `bool` they hold, so they read back as `int`, `float`
+  and `bool`). A Raster that is still an unchanged
   lazy view of a file (straight from `rioxarray.open_rasterio`) is not
   copied: the cache writes `<port>.ref.json` (path, size, mtime, band names),
   and a changed source file makes it a miss.
@@ -867,15 +893,21 @@ icons), `03`–`06` (component window), `07` (Map Viewer).
   inline component's own category) is `#475569`.
 - **Ports**: a union input's dot is drawn in the first listed type's colour
   with a thin ring of the second; the hover summary names all types. Output
-  colours follow `resolved_type` (the declared `types` while unresolved; an
-  unwired Panel's are `["Any"]`). A port that carries a list (an output whose
+  colours and drag checks follow `resolved_types` (`GET /api/graph`, the
+  types the server's own wiring checks use: one once resolved, an unwired
+  Panel's `["Any"]`, and for a `like:` output fed by an unresolved one, the
+  types that one can have, e.g. a Panel after an unwired Split Points is
+  `Table | Vector`); without them `resolved_type`, then the declared `types`.
+  A port that carries a list (an output whose
   `resolved_access` is `"list"`, an `access: list` input, a Panel's input
   when its output carries a list) gets a second ring in its type's colour
   outside the white one; a list wire is a wider stroke with the canvas colour
   drawn down its middle, Grasshopper's double line. Wires take the source
   output's flag. While dragging, the frontend checks wires with the server's
-  rules and messages (`wireError` in `types.ts`, type mismatch first), and
-  the search popup for a wire dropped in empty space only offers ports that
+  rules and messages (`wireError` in `types.ts`, type mismatch first, then a
+  list into an item input, then `all wires into "items" must have the same
+  type` for a list input that an output is `like`, from the arriving types
+  of the wires already in it), and the search popup for a wire dropped in empty space only offers ports that
   pass the same check.
 - **Params nodes on the canvas**:
   - Text: a pill with a "T" badge, edited inline on double-click.
@@ -968,8 +1000,10 @@ opens.
 - The Settings tab shows the inputs editor when `editable_ports.inputs`, the
   outputs section when `editable_ports.outputs`; the type list offers
   `types` (`input_types` for inputs, plus the port's own type when it is
-  outside them); a new port gets the first of `types`; picking a type for a
-  union input replaces its types.
+  outside them); a new port gets the first of `types` (on either side);
+  picking a type for a union input replaces its types. A `like:` output has no
+  type to pick: it shows `like <input>` (`strings.likeInput`). Renaming an
+  input sends `was`, and the server renames the `like:` that follows it.
 - A wired Params value is shown as `wired: Boolean Toggle = True`,
   `wired: Value List = One` (the option's label), `wired: Colormap =
   viridis`, `wired: Number = 3`, `wired: Color Swatch = #0B7A7C`.
@@ -1020,7 +1054,9 @@ A Panel shows what passes through it, by type:
   it. Later pages (200 rows) are read from the disk cache
   (`GET /api/table/{key}`) when the grid is within 120 px of its end (also
   right after a page arrives, so a Panel taller than its rows fills itself).
-  The paging key (`keys.data`) and `disk_cache` come from
+  A page that comes back empty before `total_rows` rows are shown ends the
+  paging for that result (it would otherwise be asked for again at the same
+  offset). The paging key (`keys.data`) and `disk_cache` come from
   `GET /api/nodes/{id}/output`, fetched once per result when a Panel shows a
   table.
 - **Disk cache off** (`disk_cache` false): the Panel shows the first page
@@ -1185,7 +1221,12 @@ Details:
   `like` (the input's name or `null`). In
   `GET /api/graph`, outputs also carry `resolved_type` (the output's own type
   for an ordinary output, the resolved type of a `like:` output, `null` while
-  it is unresolved) and `resolved_access` (`"list"` or `"item"`, from
+  it is unresolved), `resolved_types` (every type it can carry,
+  `Graph.output_types`: one element once resolved, `["Any"]` for an unwired
+  Panel, otherwise the possible types, which can be narrower than the
+  declared `types`: a Panel fed by an unwired Split Points has `types:
+  ["Any"]` but `resolved_types: ["Table", "Vector"]`; the frontend checks
+  drags against these) and `resolved_access` (`"list"` or `"item"`, from
   `output_is_list`, so a Panel passing a list through is drawn as a list).
 - **`GET /api/components`** answers `{components: [...], tabs: [{name,
   colour, groups: [name, …]}]}`. Each component entry has `ref`, `version`,
@@ -1201,7 +1242,10 @@ Details:
   (case-insensitive) and reference; the frontend keeps this order.
 - **`GET /api/components/{ref}/icon`** serves the `.svg` named by the
   component's `icon:` as `image/svg+xml`, bytes unchanged
-  (`Registry.icon_path`). An absolute path, a path that leaves the folder
+  (`Registry.icon_path`), with `X-Content-Type-Options: nosniff` and
+  `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline';
+  sandbox`, so a pack's SVG opened on the app's origin runs no script and
+  loads nothing (the canvas draws it as a CSS mask). An absolute path, a path that leaves the folder
   the component was loaded from, a missing file, a `<set>:<name>` icon and an
   unknown reference answer `404`.
 - `GET /api/graph` returns `{workflow, nodes, out_of_date, path, trusted,
@@ -1222,7 +1266,8 @@ Details:
   - `ports` is `{inputs?, outputs?}`, each a list of `{name, type, types?,
     like?, access?, file?, was?}` where `was` is the old name of a renamed
     port. A side left out stays as it is; a side sent back unchanged keeps its
-    union types and `like:` outputs. Edits are checked against the header's
+    union types and `like:` outputs. A renamed input is renamed in the
+    `like:` of the outputs that follow it (section 4). Edits are checked against the header's
     `ports:` (section 4): `the inputs of Reclassify cannot be edited`,
     `Raster Calculator inputs are Raster or Number` (`400`).
   - `value`: of a Color Swatch any `Color.parse` form (`#0b7a7c`,
@@ -1248,9 +1293,11 @@ Details:
   addressed as `<key>[i]`. `offset` past the end gives `rows: []`. `limit`
   0–1000 and `offset` ≥ 0, otherwise `400`. `404` for: a key that is not a
   port key, a key not in the disk cache (`not in the cache; run first`), a
-  list element out of range or of a list stored as one JSON file, a port that
-  is not a Table or Vector (also a whole list), and any key when the disk
-  cache is off (`the disk cache is off: …`).
+  list element out of range (`list element 5 is out of range (3 elements)`),
+  an element of a list stored as one JSON file (`"values" is a list of
+  Number, not a table`) or of a port that is no list (`"n" is not a list`),
+  a port that is not a Table or Vector (also a whole list), and any key when
+  the disk cache is off (`the disk cache is off: …`).
   - Pages read only the Parquet row groups they overlap
     (`pyarrow.parquet.ParquetFile.read_row_groups`; the file is opened and
     closed per request so Windows can delete it); GeoParquet WKB geometry is
@@ -1328,8 +1375,12 @@ vendored into the script if used):
   unconnected), and returns `{panel id: value}`. Number → Text and
   Boolean → Text wires become `str(...)`; a component with an `out: Text`
   output collects what it prints; a Map Viewer is a comment only.
-- Lists: a list output is returned as `list(x)` (a tuple becomes a list as in
-  GeoKnit); a `list` input receives `[*a, b, *c]` built in wire order, a list
+- Lists: a list output (also a `like:` output that carries a list) is
+  returned as `list(x)` (a tuple becomes a list as in GeoKnit); a Boolean
+  output as `bool(x)`, a list of them as `[bool(_v) for _v in x]`, so a
+  `numpy.bool_` (`result = a > b`) becomes `bool` as GeoKnit's output check
+  does. Only functions with Boolean outputs change, and no helper is
+  vendored for it; a `list` input receives `[*a, b, *c]` built in wire order, a list
   wire spread with `*` and a single-value wire added as one element; a list
   wire that needs the Number/Boolean → Text conversion is spread as
   `*[str(_v) for _v in a]`.

@@ -23,6 +23,7 @@ import {
   PARAM_TEXT,
   PORT_COLOURS,
   portTypes as viewTypes,
+  sameTypeWires,
 } from "../types";
 import { ColorNode } from "./nodes/ColorNode";
 import { ColormapNode } from "./nodes/ColormapNode";
@@ -226,6 +227,7 @@ export function Canvas() {
         name,
         title: graph.nodes[p.nodeId]?.title ?? "",
         list: portList(graph, p.nodeId, side, name),
+        wired: side === "in" ? sameTypeWires(graph, p.nodeId, name) : undefined,
       });
     },
     [graph],
@@ -252,7 +254,14 @@ export function Canvas() {
       setSearch({
         screen: local(point.clientX, point.clientY),
         flow: flow.screenToFlowPosition({ x: point.clientX, y: point.clientY }),
-        from: { nodeId: from.nodeId, port, side: from.side, types: from.types, list: from.list },
+        from: {
+          nodeId: from.nodeId,
+          port,
+          side: from.side,
+          types: from.types,
+          list: from.list,
+          wired: from.wired,
+        },
       });
     },
     [drag, graph, flow],

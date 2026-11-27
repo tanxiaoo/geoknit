@@ -1,6 +1,6 @@
 // Data-type colours and category colour lookup (SPEC 3, SPEC 8) and the connection rules (SPEC 3).
 
-import type { NodeState, PortType, PortView, TabView } from "./apiTypes";
+import type { GraphView, NodeState, PortType, PortView, TabView } from "./apiTypes";
 import { strings } from "./strings";
 
 export const DATA_TYPES: Exclude<PortType, "Any">[] = [
@@ -48,8 +48,10 @@ export function canConnect(out: PortType, input: PortType): boolean {
   );
 }
 
-/** The types a port can carry: the resolved type of a `like:` output, else the declared ones. */
+/** The types a port can carry: the server's `resolved_types` for a graph output (the
+ * same set its wiring checks use), else the resolved type, else the declared ones. */
 export function portTypes(p: PortView): PortType[] {
+  if (p.resolved_types && p.resolved_types.length) return p.resolved_types;
   if (p.resolved_type) return [p.resolved_type];
   return p.types && p.types.length ? p.types : [p.type];
 }
@@ -88,16 +90,62 @@ export interface WireTarget {
   name: string;
   types: PortType[];
   access: "item" | "list";
+  /** A list input that an output of its node is `like`: the arriving types of the wires
+   * already into it (`sameTypeWires`), for the same-type rule. */
+  wired?: PortType[][];
+}
+
+/** The types a value of `outs` has once it reaches an input of `ins` (Number/Boolean →
+ * Text applies; an `Any` output may be any of `ins`), as the server's `_arriving_types`. */
+export function arrivingTypes(outs: PortType[], ins: PortType[]): PortType[] {
+  const found: PortType[] = [];
+  for (const t of outs) {
+    let arriving: PortType[] = [];
+    if (t === "Any") arriving = ins;
+    else if (ins.some((i) => canConnect(t, i)))
+      arriving = [ins.includes(t) || ins.includes("Any") ? t : "Text"];
+    for (const a of arriving) if (!found.includes(a)) found.push(a);
+  }
+  return found;
+}
+
+/** For the same-type rule (SPEC 3 "List values"): the arriving types of each wire already
+ * into `nodeId.input`, when it is a list input that an output of the node is `like`;
+ * otherwise undefined (the rule does not apply). */
+export function sameTypeWires(
+  graph: GraphView,
+  nodeId: string,
+  input: string,
+): PortType[][] | undefined {
+  const view = graph.nodes[nodeId];
+  const inp = view?.inputs.find((p) => p.name === input);
+  if (!view || !inp || inp.access !== "list") return undefined;
+  if (!view.outputs.some((o) => o.like === input)) return undefined;
+  const ins = inp.types && inp.types.length ? inp.types : [inp.type];
+  return graph.workflow.wires
+    .filter((w) => w.to[0] === nodeId && w.to[1] === input)
+    .map((w) => {
+      const src = graph.nodes[w.from[0]]?.outputs.find((o) => o.name === w.from[1]);
+      return src ? arrivingTypes(portTypes(src), ins) : [];
+    });
 }
 
 /** Why a wire is refused, as the server words it (type mismatch first), or null if it fits.
- * A list output only goes into a list input, or into an `Any` item input (Panel) whole. */
+ * A list output only goes into a list input, or into an `Any` item input (Panel) whole;
+ * the wires into a list input that an output is `like` must have one type. */
 export function wireError(src: WireSource, dst: WireTarget): string | null {
   const problem = connectionError(src.types, dst.types);
   if (problem) return problem;
   const anyItem = dst.types.length === 1 && dst.types[0] === "Any";
   if (src.list && dst.access === "item" && !anyItem) {
     return strings.listIntoItem(src.title, dst.name);
+  }
+  if (dst.access === "list" && dst.wired) {
+    const mine = arrivingTypes(src.types, dst.types);
+    const one = (ts: PortType[]) => ts.length === 1 && ts[0] !== "Any";
+    if (one(mine) && dst.wired.some((theirs) => one(theirs) && theirs[0] !== mine[0])) {
+      return strings.sameTypeInto(dst.name);
+    }
   }
   return null;
 }

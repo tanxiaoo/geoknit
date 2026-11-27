@@ -88,6 +88,7 @@ export const strings = {
   cantConnect: (from: string, to: string) => `${from} can't connect to ${to}`,
   listIntoItem: (title: string, input: string) =>
     `${title} gives a list; "${input}" takes one value — use List Item`,
+  sameTypeInto: (input: string) => `all wires into "${input}" must have the same type`,
   listOf: (types: string) => `list of ${types}`,
   moreItems: (n: number) => `… ${n} more`,
   sliderMin: "min",
@@ -169,6 +170,8 @@ export const strings = {
   removePort: "Remove",
   portName: "Port name",
   portType: "Type",
+  /** A `like:` output's type in the Settings tab: it follows that input (SPEC 4). */
+  likeInput: (input: string) => `like ${input}`,
 
   // Map Viewer (SPEC 8)
   mapViewer: "Map Viewer",

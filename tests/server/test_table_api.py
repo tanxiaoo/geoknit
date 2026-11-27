@@ -181,6 +181,15 @@ def test_pages_read_row_groups_only(
     assert read == [[2, 3, 4]]
     assert [r[0] for r in page["rows"]] == list(range(250, 450))
 
+    # The Done-when check again, through the API, on 10 row groups of 100 rows:
+    # several groups are read, and only those the page overlaps.
+    read.clear()
+    page = _page(client, "f" * 64 + ".t", offset=200, limit=200)
+    assert read == [[2, 3]]
+    assert page["total_rows"] == 1000 and page["offset"] == 200
+    assert [r[0] for r in page["rows"]] == list(range(200, 400))
+    assert page["index"] == list(range(200, 400))
+
 
 def test_vector_page_shows_geometry_type(run: tuple[TestClient, dict[str, str]]) -> None:
     client, nodes = run
@@ -199,7 +208,9 @@ def test_vector_page_shows_geometry_type(run: tuple[TestClient, dict[str, str]])
     parts_key = out["keys"]["parts"]
     line = _page(client, f"{parts_key}[1]")
     assert line["rows"] == [[9, "LineString"]] and line["total_rows"] == 1
-    assert client.get(f"/api/table/{parts_key}[2]").status_code == 404
+    r = client.get(f"/api/table/{parts_key}[2]")
+    assert r.status_code == 404
+    assert r.json()["detail"] == "list element 2 is out of range (2 elements)"
     assert client.get(f"/api/table/{parts_key}").status_code == 404  # the list itself
 
 
@@ -255,6 +266,15 @@ def test_unknown_keys_answer_404(run: tuple[TestClient, dict[str, str]]) -> None
     assert r.status_code == 404 and r.json()["detail"] == "not in the cache; run first"
     assert client.get("/api/table/nonsense").status_code == 404
     assert client.get(f"/api/table/{'0' * 64}.table[0]").status_code == 404
+
+    # A list stored as one JSON file, and an element of a port that is no list.
+    cache = DiskCache(Path(str(_session(client).executor.cache_dir)))
+    cache.write("d" * 64, {"values": [1, 2, 3], "n": 4})
+    r = client.get(f"/api/table/{'d' * 64}.values[0]")
+    assert r.status_code == 404
+    assert r.json()["detail"] == '"values" is a list of Number, not a table'
+    r = client.get(f"/api/table/{'d' * 64}.n[0]")
+    assert r.status_code == 404 and r.json()["detail"] == '"n" is not a list'
 
 
 def test_disk_cache_off(run: tuple[TestClient, dict[str, str]]) -> None:

@@ -23,7 +23,7 @@ import logging
 import tokenize
 import traceback
 import warnings
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -636,6 +636,7 @@ def run_component(
     cwd: Path | None = None,
     print_port: str | None = None,
     output_types: Mapping[str, str] | None = None,
+    list_outputs: Collection[str] = (),
 ) -> RunResult:
     """Run one component, following SPEC 4 "Running one component".
 
@@ -643,6 +644,9 @@ def run_component(
     that receives everything printed (the Python component's ``out``).
     ``output_types`` holds the types the graph resolved for ``like:`` outputs;
     an output not listed is checked against its declared type(s).
+    ``list_outputs`` names outputs that carry a list although declared ``item``:
+    a ``like:`` output of an ``Any`` item input fed by a list (``Graph.list_outputs``);
+    like ``access: list`` outputs, their value must be a list whose elements are checked.
     """
     result = RunResult()
     filename = filename or f"<component {spec.name}>"
@@ -705,7 +709,7 @@ def run_component(
             return result
         value = types.as_output(namespace[name])
         expected = (output_types or {}).get(name) or port.types
-        if port.access == "list":
+        if port.access == "list" or name in list_outputs:
             if isinstance(value, tuple):
                 value = list(value)
             if isinstance(value, list):

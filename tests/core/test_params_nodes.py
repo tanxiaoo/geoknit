@@ -233,6 +233,85 @@ def test_integer_mode_rounds_and_keeps_step_at_least_one() -> None:
     assert isinstance(node.value, int)
 
 
+def test_round_half_up_is_exact_like_math_round() -> None:
+    from geoknit.core.graph import round_half_up
+
+    # floor(x + 0.5) gives 1 here: 0.49999999999999994 + 0.5 rounds up to 1.0
+    assert round_half_up(0.49999999999999994) == 0
+    assert round_half_up(-0.5) == 0 and round_half_up(-0.5000000000000001) == -1
+    assert [round_half_up(v) for v in (2.5, -2.5, 1.4999, 3.0)] == [3, -2, 1, 3]
+    big = 2**53 + 1  # an int is unchanged (float(big) + 0.5 would lose the 1)
+    assert round_half_up(big) == big and round_half_up(-big) == -big
+    import numpy as np
+
+    assert round_half_up(np.int64(7)) == 7 and type(round_half_up(np.int64(7))) is int
+    assert round_half_up(np.float32(2.5)) == 3
+
+
+def test_a_refused_number_patch_changes_nothing() -> None:
+    g = Graph()
+    n = g.add_component(PARAM_NUMBER).id
+    g.set_value(n, 2.5)
+    changes: list[set[str]] = []
+    g.subscribe(lambda c, r: changes.append(c))
+    with pytest.raises(GraphError, match="a Number value must be a number"):
+        g.set_number(n, value="abc", integer=True)  # type: ignore[arg-type]
+    node = g.nodes[n]
+    assert (node.value, node.integer) == (2.5, False) and not changes
+
+
+def test_integer_mode_refuses_a_negative_step() -> None:
+    g = Graph()
+    s = g.add_component(PARAM_SLIDER).id
+    for step in (-1, -0.5, 0):
+        with pytest.raises(GraphError, match="slider step must be positive"):
+            g.set_slider(s, step=step, integer=True)
+    node = g.nodes[s]
+    assert (node.step, node.integer) == (1, False)
+    g.set_slider(s, step=0.3, integer=True)  # a positive step below 1 becomes 1
+    assert node.step == 1
+
+
+@pytest.mark.parametrize(
+    ("node", "message"),
+    [
+        ({"component": "param/number", "value": 2.5, "integer": True},
+         r"integer mode needs whole numbers \(value 2.5\)"),
+        ({"component": "param/number", "value": 3.0, "integer": True},
+         r"integer mode needs whole numbers \(value 3.0\)"),
+        ({"component": "param/slider", "min": 0, "max": 10, "step": 1, "value": 4.5,
+          "integer": True}, r"integer mode needs whole numbers \(value 4.5\)"),
+        ({"component": "param/slider", "min": 0.5, "max": 10, "step": 1, "value": 4,
+          "integer": True}, r"integer mode needs whole numbers \(min 0.5\)"),
+        ({"component": "param/slider", "min": 0, "max": 10, "step": -1, "value": 4,
+          "integer": True}, "integer mode needs a step of at least 1"),
+    ],
+)  # fmt: skip
+def test_integer_mode_values_in_a_file_are_refused_not_rounded(node: dict, message: str) -> None:
+    with pytest.raises(WorkflowError, match=f'node "n1": {message}'):
+        graph_from_dict({"format": 1, "nodes": [{"id": "n1", "position": [0, 0], **node}]})
+
+
+def test_valid_integer_mode_files_keep_their_bytes() -> None:
+    doc = {
+        "format": 1,
+        "geoknit_version": "0.1.0",
+        "groups": [],
+        "nodes": [
+            {"component": "param/number", "id": "n1", "integer": True, "position": [0, 0],
+             "value": -3},
+            {"component": "param/slider", "id": "n2", "integer": True, "max": 2**60,
+             "min": -5, "position": [0, 0], "step": 2, "value": 2**53 + 1},
+        ],
+        "view": {},
+        "wires": [],
+    }  # fmt: skip
+    g = graph_from_dict(doc)
+    assert g.nodes["n2"].value == 2**53 + 1
+    assert dumps(graph_to_dict(g)) == dumps(doc)
+    assert dumps(graph_to_dict(graph_from_dict(json.loads(dumps(doc))))) == dumps(doc)
+
+
 def test_value_list_type_follows_its_options_and_rechecks_wires() -> None:
     g = Graph()
     solver = Solver(g)

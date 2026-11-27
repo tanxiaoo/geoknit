@@ -151,6 +151,7 @@ class Worker:
             cwd=self.project_dir,
             print_port=PRINT_PORT,
             output_types=msg.output_types,
+            list_outputs=msg.list_outputs,
         )
         if not result.ok:
             assert result.error is not None

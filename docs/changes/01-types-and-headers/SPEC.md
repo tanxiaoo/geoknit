@@ -209,8 +209,12 @@ An input's `type` can be a list:
 - API: output ports in `GET /api/graph` carry `like` and `resolved_type`; the
   frontend uses `resolved_type` for colours and its own `canConnect` checks
   while dragging. `resolved_type` is the output's own type for an ordinary
-  output, and `null` while a `like:` output is unresolved (the frontend then
-  uses its declared `types`; an unwired Panel's are `["Any"]`).
+  output, and `null` while a `like:` output is unresolved. Outputs also carry
+  `resolved_types` (`Graph.output_types`), which the frontend then uses: an
+  unwired Panel's are `["Any"]`, but a Panel fed by an unwired Split Points
+  has `Table | Vector` (fixed after the review of 27 Nov 2026; before, the
+  frontend fell back to the declared `["Any"]` and let a drag through that the
+  server then refused).
 
 ## 5. List values (SPEC 3, 4, 6, 10)
 
@@ -371,11 +375,13 @@ Details settled while building step 4:
   reads the name `INPUTS`, as the last line of the settings block (after the
   settings, so unwired inputs have their values), so exports of components
   that do not use it are unchanged.
-- The Python component's default `types` leave out `Any`, so its inputs can
-  no longer be made `Any` from the Settings tab (before this change they
-  could); a port already declared `Any` stays. A Python node whose saved
-  source predates the `ports:` line has fixed ports until the line is added
-  in its code.
+- The default `types` leave out `Any` and `Layer`, but the input side also
+  offers `Any` (Q3, option b): the Python component's inputs can still be
+  made `Any` from the Settings tab, as before this change, and the API sends
+  that list as `input_types` (`types` plus `Any`); outputs are not offered
+  `Any`.
+  A Python node whose saved source predates the `ports:` line has fixed
+  ports until the line is added in its code.
 - Frontend: the Settings tab shows the inputs editor when
   `editable_ports.inputs`, the outputs section when `editable_ports.outputs`;
   the type list offers `types` (plus the port's own type when it is outside

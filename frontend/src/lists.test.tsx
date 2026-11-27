@@ -12,7 +12,7 @@ import { PanelNode } from "./components/nodes/PanelNode";
 import { DragContext, dragRefusal, Port, type DragFrom } from "./components/nodes/Port";
 import { TypedEdge } from "./components/TypedEdge";
 import { initialState, store } from "./store";
-import { carriesList, tipSummary, wireError } from "./types";
+import { carriesList, sameTypeWires, tipSummary, wireError } from "./types";
 
 const REFUSAL = 'Numbers gives a list; "x" takes one value — use List Item';
 
@@ -174,6 +174,74 @@ describe("drag rule: a list output into an item input", () => {
     expect(screen.getByTestId("port-n2-in-xs").className).toMatch(/gk-fits/);
     fireEvent.mouseEnter(x, { clientX: 1, clientY: 1 });
     expect(store.getState().tip?.text).toBe(REFUSAL);
+  });
+});
+
+describe("drag rule: one type into a list input an output is like", () => {
+  const SAME = 'all wires into "items" must have the same type';
+  // Sort List: `items: {type: [Number, Text], access: list}`, `sorted: {like: items}`
+  const sorter = view("n3", {
+    title: "Sort List",
+    inputs: [{ name: "items", type: "Number", types: ["Number", "Text"], access: "list" }],
+    outputs: [{ name: "sorted", type: "Number", access: "list", like: "items" }],
+  });
+  const words = view("n4", { outputs: [{ name: "w", type: "Text", access: "list" }] });
+  const wired = (from: string[]): GraphView => ({
+    ...graphOf([numbers, sum, sorter, words]),
+    workflow: {
+      nodes: [],
+      wires: from.map((f) => ({ from: [f, f === "n1" ? "values" : "w"], to: ["n3", "items"] })),
+      groups: [],
+      view: {},
+    },
+  });
+
+  test("a second type is refused, as the server does", () => {
+    const g = wired(["n1"]); // a Number list is in
+    const into = sameTypeWires(g, "n3", "items");
+    expect(into).toEqual([["Number"]]);
+    const dst = { name: "items", types: sorter.inputs[0].types!, access: "list" as const };
+    const text = { title: "Words", types: ["Text" as const], list: true };
+    expect(wireError(text, { ...dst, wired: into })).toBe(SAME);
+    expect(wireError({ ...text, types: ["Number"] }, { ...dst, wired: into })).toBeNull();
+    // Boolean → Text arrives as Text: refused next to Numbers too
+    expect(wireError({ title: "Flag", types: ["Boolean"], list: false }, { ...dst, wired: into }))
+      .toBe(SAME);
+    // an unresolved Panel (Any) is not checked; a type mismatch is still reported first
+    expect(wireError({ title: "Panel", types: ["Any"], list: false }, { ...dst, wired: into }))
+      .toBeNull();
+    expect(wireError({ title: "R", types: ["Raster"], list: false }, { ...dst, wired: into }))
+      .toBe("Raster can't connect to Number | Text");
+    // without a like: output on it, or with no wires yet, the rule does not apply
+    expect(sameTypeWires(wired([]), "n3", "items")).toEqual([]);
+    expect(sameTypeWires(g, "n2", "xs")).toBeUndefined();
+  });
+
+  test("the input port is marked misfit while dragging, from either end", () => {
+    store.set({ graph: wired(["n1"]) });
+    const drag: DragFrom = { nodeId: "n4", side: "out", types: ["Text"], name: "w", list: true };
+    render(
+      <ReactFlowProvider>
+        <DragContext.Provider value={drag}>
+          <Port nodeId="n3" side="in" name="items" types={["Number", "Text"]} list />
+        </DragContext.Provider>
+      </ReactFlowProvider>,
+    );
+    const items = screen.getByTestId("port-n3-in-items");
+    expect(items.className).toMatch(/gk-misfit/);
+    fireEvent.mouseEnter(items, { clientX: 1, clientY: 1 });
+    expect(store.getState().tip?.text).toBe(SAME);
+    // dragged from the input: the wired types travel with the drag
+    const fromIn: DragFrom = {
+      nodeId: "n3",
+      side: "in",
+      types: ["Number", "Text"],
+      name: "items",
+      list: true,
+      wired: sameTypeWires(wired(["n1"]), "n3", "items"),
+    };
+    const w = { side: "out" as const, name: "w", types: ["Text" as const], list: true, title: "" };
+    expect(dragRefusal(fromIn, w)).toBe(SAME);
   });
 });
 

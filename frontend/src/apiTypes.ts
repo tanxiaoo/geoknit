@@ -27,6 +27,10 @@ export interface PortView {
   like?: string | null;
   /** Output only (`/api/graph`): the type the graph resolved, null while unresolved. */
   resolved_type?: PortType | null;
+  /** Output only (`/api/graph`): every type the graph says it can carry, from the wires
+   * (`Graph.output_types`): one when resolved, `["Any"]` for an unwired Panel, else the
+   * types its unwired source could have. Drag checks use these. */
+  resolved_types?: PortType[];
   /** Output only (`/api/graph`): "list" when the output carries a list, also a Panel
    * passing one through (SPEC 3 "List values"). */
   resolved_access?: "item" | "list";

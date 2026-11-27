@@ -342,7 +342,15 @@ class WorkerExecutor:
         try:
             output_types = self.graph.resolved_output_types(nid)
             self._send(
-                p.RunNode(nid, node.source, inputs, node_key, output_types, frozenset(list_keys))
+                p.RunNode(
+                    nid,
+                    node.source,
+                    inputs,
+                    node_key,
+                    output_types,
+                    frozenset(list_keys),
+                    self.graph.list_outputs(nid),
+                )
             )
             while True:
                 msg = self._recv()

@@ -177,6 +177,48 @@ def test_load_checks_wires_after_all_are_added() -> None:
     assert loaded.output_type(sel, "selected") == "Vector"
 
 
+GATHER = _component(
+    "Gather",
+    "# inputs:\n#   items: {type: Any, access: list}\n"
+    "# outputs:\n#   gathered: {like: items, access: list}\n",
+    "gathered = list(items)",
+)
+TABLES = _component("Tables", "# inputs:\n#   tables: {type: Table, access: list}\n", "pass")
+
+
+def test_load_accepts_a_wire_that_only_fits_once_all_wires_are_in() -> None:
+    """Checked in file order, the wire out of ``gathered`` would be refused: with only
+    the Vector wire in, ``gathered`` is a Vector list, which a Table input refuses.
+    With the unwired Panel's wire too it may be anything, so the file is valid."""
+    g = Graph()
+    vec, gather, tabs = _add(g, MAKE_VECTOR), _add(g, GATHER), _add(g, TABLES)
+    panel = g.add_component(PARAM_PANEL).id
+    g.add_wire(vec, "vector", gather, "items")
+    g.add_wire(panel, "data", gather, "items")
+    g.add_wire(gather, "gathered", tabs, "tables")
+    assert g.output_types(gather, "gathered") == ("Vector", "Any")
+    data = graph_to_dict(g)
+    order = [(w["from"][0], w["to"][0]) for w in data["wires"]]
+    out_wire = data["wires"].pop(order.index((gather, tabs)))
+    data["wires"].insert(order.index((vec, gather)) + 1, out_wire)  # before the Panel's wire
+
+    # One wire at a time, the file order is refused ...
+    step = Graph()
+    for raw in data["nodes"]:
+        step.add_node(graph_from_dict({"format": 1, "nodes": [raw]}).nodes[raw["id"]])
+    refused = []
+    for w in data["wires"]:
+        try:
+            step.add_wire(w["from"][0], w["from"][1], w["to"][0], w["to"][1])
+        except GraphError as exc:
+            refused.append(str(exc))
+    assert refused == ["Vector can't connect to Table"]
+    # ... the loader checks once every wire is in, and keeps all three
+    loaded = graph_from_dict(data)
+    assert len(loaded.wires) == 3 and loaded.wires_into(tabs)
+    assert graph_to_dict(loaded)["wires"] == data["wires"]
+
+
 # ── run ──
 
 

@@ -54,7 +54,17 @@ def _entry(cache: DiskCache, key: str) -> tuple[Path, dict[str, Any]]:
         raise TableError(f'"{key}" is not a port key')
     entry, info = cache.port_info(m.group(1))
     if m.group(2) is not None:
-        entry, info = list_element_info(entry, info, int(m.group(2)))
+        i, port = int(m.group(2)), m.group(1).rsplit(".", 1)[1]
+        if info.get("access") != "list":
+            raise TableError(f'"{port}" is not a list')
+        if info.get("format") != "list":  # Number, Text, … lists are one JSON file
+            what = f"a list of {info['type']}" if info.get("type") else "a list"
+            raise TableError(f'"{port}" is {what}, not a table')
+        count = info.get("count")
+        if isinstance(count, int) and not 0 <= i < count:
+            noun = "element" if count == 1 else "elements"
+            raise TableError(f"list element {i} is out of range ({count} {noun})")
+        entry, info = list_element_info(entry, info, i)
     if info.get("access") == "list" or info.get("type") not in (types.TABLE, types.VECTOR):
         raise TableError(f"{key} is not a Table or a Vector")
     return entry, info

@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import contextlib
 import math
+import numbers
 import re
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from geoknit.core import types
@@ -95,12 +96,47 @@ def default_options() -> list[dict[str, Any]]:
 
 
 def round_half_up(value: float) -> int:
-    """``2.5`` → ``3``, ``-2.5`` → ``-2``: the rounding of the integer mode (as ``Math.round``)."""
-    return math.floor(value + 0.5)
+    """``2.5`` → ``3``, ``-2.5`` → ``-2``: the rounding of the integer mode (as ``Math.round``).
+
+    Exact: an integer is returned unchanged (also above 2**53), and a float's
+    fraction is compared with 0.5 after ``floor`` (so ``0.49999999999999994`` → ``0``,
+    which ``floor(x + 0.5)`` gets wrong).
+    """
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    whole = math.floor(value)
+    return whole + 1 if value - whole >= 0.5 else whole
 
 
 def _is_number(value: Any) -> bool:
     return types.type_of(value) == types.NUMBER and math.isfinite(value)
+
+
+def _whole(value: Any) -> bool:
+    """A whole number as integer mode stores it: an ``int`` (not ``3.0``, not a ``bool``)."""
+    return types.type_of(value) == types.NUMBER and isinstance(value, numbers.Integral)
+
+
+def check_integer_mode(node: Node) -> None:
+    """A loaded Number or Number Slider in integer mode holds whole numbers (SPEC 5).
+
+    The workflow file is refused rather than rounded, so a valid file keeps its
+    bytes and a hand-edited one does not change silently.
+    """
+    if not node.integer:
+        return
+    named = {"value": node.value}
+    if node.component == PARAM_SLIDER:
+        named = {"min": node.min, "max": node.max, "step": node.step, "value": node.value}
+    for name, v in named.items():
+        if not _whole(v):
+            raise GraphError(f"integer mode needs whole numbers ({name} {v!r})")
+    if node.component == PARAM_SLIDER:
+        assert node.min is not None and node.max is not None and node.step is not None
+        if node.step < 1:
+            raise GraphError("integer mode needs a step of at least 1")
+        if not node.min < node.max:
+            raise GraphError("slider min must be below max")
 
 
 def check_options(options: Any) -> list[dict[str, Any]]:
@@ -166,14 +202,19 @@ def set_param_defaults(node: Node) -> None:
         node.value = types.Colormap.named(DEFAULT_COLORMAP)
 
 
+def number_value(value: Any, integer: bool) -> Any:
+    """A Number node's value, checked, and rounded in integer mode."""
+    if not _is_number(value):
+        raise GraphError("a Number value must be a number")
+    return round_half_up(value) if integer else value
+
+
 def param_value(node: Node, value: Any) -> Any:
     """``value`` checked and normalised for a Number, Boolean Toggle, Color Swatch,
     Colormap or Value List node (a ``GraphError`` says why it does not fit)."""
     kind = node.component
     if kind == PARAM_NUMBER:
-        if not _is_number(value):
-            raise GraphError("a Number value must be a number")
-        return round_half_up(value) if node.integer else value
+        return number_value(value, node.integer)
     if kind == PARAM_TOGGLE:
         if not isinstance(value, bool):
             raise GraphError("a Boolean Toggle value must be true or false")
@@ -438,15 +479,20 @@ class Graph:
             inputs = [_port_dict(p) for p in old.inputs.values()]
         if outputs is None:
             outputs = [_port_dict(p) for p in old.outputs.values()]
+        renamed_in = {str(p["was"]): str(p["name"]) for p in inputs if p.get("was")}
+        renamed_out = {str(p["was"]): str(p["name"]) for p in outputs if p.get("was")}
+        # A ``like:`` output follows a renamed input (SPEC 4).
+        outputs = [
+            {**p, "like": renamed_in[p["like"]]} if p.get("like") in renamed_in else p
+            for p in outputs
+        ]
         try:
             new_source = set_ports(node.source, inputs, outputs)
             new = parse_component(new_source)
         except (ValueError, ComponentParseError) as exc:
             raise GraphError(str(exc)) from None
         for side, sent in (("inputs", inputs), ("outputs", outputs)):
-            _check_port_edit(old, new, side, sent)
-        renamed_in = {str(p["was"]): str(p["name"]) for p in inputs if p.get("was")}
-        renamed_out = {str(p["was"]): str(p["name"]) for p in outputs if p.get("was")}
+            _check_port_edit(old, new, side, sent, renamed_in)
         node.set_source(new_source)
         rewired: list[Wire] = []
         for w in self.wires:
@@ -486,13 +532,18 @@ class Graph:
     def set_number(
         self, node_id: str, *, value: float | None = None, integer: bool | None = None
     ) -> None:
-        """A Number node's value and integer mode (``None`` keeps it)."""
+        """A Number node's value and integer mode (``None`` keeps it).
+
+        Everything is checked before anything changes, so a refused value
+        leaves the integer mode as it was.
+        """
         node = self.node(node_id)
         if node.component != PARAM_NUMBER:
             raise GraphError(f"{node.title} is not a Number")
-        if integer is not None:
-            node.integer = bool(integer)
-        self._update_value(node, param_value(node, node.value if value is None else value))
+        whole = node.integer if integer is None else bool(integer)
+        new = number_value(node.value if value is None else value, whole)
+        node.integer = whole
+        self._update_value(node, new)
 
     def set_options(self, node_id: str, options: list[dict[str, Any]], value: Any = None) -> None:
         """A Value List's options and chosen value.
@@ -539,13 +590,13 @@ class Graph:
         for v in (lo, hi, st, val):
             if not _is_number(v):
                 raise GraphError("slider min, max, step and value must be numbers")
+        if st <= 0:  # refused before integer mode rounds it up to 1
+            raise GraphError("slider step must be positive")
         if whole:  # integer mode: whole numbers, step at least 1 (change 01, 2)
             lo, hi, val = round_half_up(lo), round_half_up(hi), round_half_up(val)
             st = round_half_up(st) if st >= 1 else 1
         if not lo < hi:
             raise GraphError("slider min must be below max")
-        if st <= 0:
-            raise GraphError("slider step must be positive")
         val = _clamp(val, lo, hi)
         node.min, node.max, node.step, node.integer = lo, hi, st, whole
         self._update_value(node, val)
@@ -648,6 +699,18 @@ class Graph:
             and w.src_port in self.nodes[w.src].outputs
             and self.output_is_list(w.src, w.src_port)
             for w in self.wires_into(node_id, out.like)
+        )
+
+    def list_outputs(self, node_id: str) -> frozenset[str]:
+        """A node's ``like:`` outputs that carry a list although declared ``item``
+        (a Panel-style pass-through of a list), for checking values after a run."""
+        node = self.node(node_id)
+        return frozenset(
+            name
+            for name, port in node.outputs.items()
+            if port.access != "list"
+            and port.like is not None
+            and self.output_is_list(node_id, name)
         )
 
     def resolved_output_types(self, node_id: str) -> dict[str, str]:
@@ -827,14 +890,25 @@ def _either(names: Iterable[str]) -> str:
 
 
 def _check_port_edit(
-    old: ComponentSpec, new: ComponentSpec, side: str, sent: list[dict[str, Any]]
+    old: ComponentSpec,
+    new: ComponentSpec,
+    side: str,
+    sent: list[dict[str, Any]],
+    renamed_in: dict[str, str],
 ) -> None:
-    """Refuse a change the header's ``ports:`` key does not allow."""
+    """Refuse a change the header's ``ports:`` key does not allow.
+
+    A ``like:`` that follows a renamed input (``renamed_in``) is not a change.
+    """
     before: dict[str, Port] = getattr(old, side)
     after: dict[str, Port] = getattr(new, side)
     editing = old.ports
     if editing is None or not editing.editable(side):
-        if [_port_key(p) for p in before.values()] != [_port_key(p) for p in after.values()]:
+        expected = [
+            _port_key(replace(p, like=renamed_in.get(p.like, p.like)) if p.like else p)
+            for p in before.values()
+        ]
+        if expected != [_port_key(p) for p in after.values()]:
             raise GraphError(f"the {side} of {old.name} cannot be edited")
         return
     was = {str(p.get("name")): str(p.get("was") or p.get("name")) for p in sent}

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MlMap, Marker } from "maplibre-gl";
 import type { Basemap } from "../../apiTypes";
 import { strings } from "../../strings";
-import { themeColor } from "../../theme";
+import { themeColor, useTheme } from "../../theme";
 import type { RenderLayer } from "./layers";
 
 type MapLibre = typeof import("maplibre-gl");
@@ -161,6 +161,7 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
   vectorLayers.current = layers.filter((l) => l.kind === "vector").flatMap((l) => vectorParts(l.id));
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     let disposed = false;
@@ -214,7 +215,23 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
   useEffect(() => {
     const map = mapRef.current;
     if (ready && map) sync(map, layers, basemap, urls.current);
-  }, [ready, layers, basemap]);
+  }, [ready, layers, basemap, theme]); // theme: the point outline is a theme colour
+
+  // The map background and the click marker are UI colours: re-read them when the theme
+  // changes (the first values are read when the map is created).
+  useEffect(() => {
+    const map = mapRef.current;
+    const lib = libRef.current;
+    if (!ready || !map || !lib) return;
+    map.setPaintProperty("gk-background", "background-color", themeColor("map-bg"));
+    const old = marker.current;
+    if (old) {
+      marker.current = new lib.Marker({ color: themeColor("map-marker"), scale: 0.7 })
+        .setLngLat(old.getLngLat())
+        .addTo(map);
+      old.remove();
+    }
+  }, [ready, theme]);
 
   useEffect(() => {
     const map = mapRef.current;

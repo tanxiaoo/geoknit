@@ -7,6 +7,8 @@
 
 :root,
 :root[data-theme="light"] {
+  color-scheme: light;
+
   /* surfaces */
   --gk-app-bg: #fff;
   --gk-panel-bg: #f8fafc;
@@ -16,6 +18,7 @@
   --gk-node-bg: #eef0f3;
   --gk-node-border: #64748b;
   --gk-param-bg: #fff;
+  --gk-field-bg: #fff;
   --gk-topbar-bg: #0f172a;
   --gk-map-bg: #f1f3f4;
   --gk-line: #e2e8f0;
@@ -34,6 +37,7 @@
   --gk-ink-subtle: #475569;
   --gk-on-strip: #fff;
   --gk-on-fill: #fff;
+  --gk-on-type: #fff;
 
   /* top bar and window headers (dark in both themes) */
   --gk-topbar-ink: #fff;
@@ -73,6 +77,7 @@
   --gk-banner-info-bg: #dbeafe;
   --gk-banner-info-ink: #1e3a8a;
   --gk-banner-info-button: #1d4ed8;
+  --gk-banner-button-ink: #fff;
 
   /* folder tree */
   --gk-folder-icon: #ca8a04;
@@ -80,6 +85,7 @@
 
   /* Params nodes */
   --gk-slider: #334155;
+  --gk-slider-ink: #fff;
   --gk-slider-stale-bg: #fde68a;
   --gk-slider-stale-ink: #78350f;
   --gk-switch-off: #cbd5e1;
@@ -131,6 +137,147 @@
 
   /* category strips: the tab colours come from GET /api/components; this is the strip
    * of an inline component whose category is not a tab */
+  --gk-cat-other: #475569;
+
+  /* wires */
+  --gk-wire-width: 2px;
+  --gk-wire-faded-opacity: 0.4;
+}
+
+/* Dark: the SPEC 3 table of change 02 where it gives a value (surfaces, text, Panel note,
+ * states, map-bg, data types); the rest in the same spirit (Tailwind slate scale). The top
+ * bar, the category strips and the strip text are the same as in light. The token set must
+ * match the light block exactly (src/theme.test.ts). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* surfaces */
+  --gk-app-bg: #0b1220;
+  --gk-panel-bg: #111827;
+  --gk-surface-alt: #1f2937;
+  --gk-canvas-bg: #111827;
+  --gk-canvas-grid: #1f2937;
+  --gk-node-bg: #1e293b;
+  --gk-node-border: #475569;
+  --gk-param-bg: #0f172a;
+  --gk-field-bg: #0f172a;
+  --gk-topbar-bg: #0f172a;
+  --gk-map-bg: #1f2937;
+  --gk-line: #334155;
+  --gk-hover-bg: #1e3a5f;
+  --gk-input-border: #64748b;
+  --gk-control-border: #475569;
+  --gk-code-bg: #1e1e1e;
+  --gk-checker-a: #334155;
+  --gk-checker-b: #1e293b;
+  --gk-ring: #0f172a;
+
+  /* text */
+  --gk-ink: #e5e7eb;
+  --gk-muted: #94a3b8;
+  --gk-ink-soft: #cbd5e1;
+  --gk-ink-subtle: #a7b3c4;
+  --gk-on-strip: #fff;
+  --gk-on-fill: #fff;
+  --gk-on-type: #0f172a;
+
+  /* top bar and window headers (dark in both themes) */
+  --gk-topbar-ink: #fff;
+  --gk-topbar-soft: #cbd5e1;
+  --gk-topbar-muted: #94a3b8;
+  --gk-topbar-raised: #1e293b;
+  --gk-topbar-border: #334155;
+  --gk-topbar-hover: rgb(255 255 255 / 0.08);
+  --gk-topbar-dirty: #fbbf24;
+  --gk-logo: #5eead4;
+  --gk-worker-idle: #22c55e;
+
+  /* controls */
+  --gk-active-bg: #e2e8f0;
+  --gk-active-ink: #0f172a;
+  --gk-primary: #2563eb;
+  --gk-icon-hover: rgb(148 163 184 / 0.25);
+
+  /* states */
+  --gk-out-of-date: #f59e0b;
+  --gk-error: #f87171;
+  --gk-selected: #4ade80;
+  --gk-running: #f59e0b;
+  --gk-success: #4ade80;
+  --gk-error-ring: #7f1d1d;
+  --gk-error-bg: #2a1215;
+  --gk-error-line: rgb(248 113 113 / 0.2);
+  --gk-fits: #22c55e;
+  --gk-modified-bg: #431407;
+  --gk-modified-ink: #fdba74;
+
+  /* banners above the canvas */
+  --gk-banner-warn-bg: #422006;
+  --gk-banner-warn-ink: #fde68a;
+  --gk-banner-trust-bg: #450a0a;
+  --gk-banner-trust-ink: #fecaca;
+  --gk-banner-info-bg: #172554;
+  --gk-banner-info-ink: #bfdbfe;
+  --gk-banner-info-button: #93c5fd;
+  --gk-banner-button-ink: #0f172a;
+
+  /* folder tree */
+  --gk-folder-icon: #eab308;
+  --gk-file-badge-bg: #334155;
+
+  /* Params nodes */
+  --gk-slider: #94a3b8;
+  --gk-slider-ink: #0f172a;
+  --gk-slider-stale-bg: #78350f;
+  --gk-slider-stale-ink: #fde68a;
+  --gk-switch-off: #475569;
+  --gk-switch-knob: #f8fafc;
+  --gk-swatch-border: rgb(226 232 240 / 0.35);
+  --gk-ramp-border: rgb(226 232 240 / 0.3);
+
+  /* Panel (sticky note) */
+  --gk-panel-note-bg: #3b3416;
+  --gk-panel-note-ink: #fde68a;
+  --gk-panel-note-border: #6b5d1f;
+  --gk-panel-note-muted: #cbb968;
+  --gk-panel-note-rule: rgb(253 230 138 / 0.15);
+
+  /* hover summary, assistant, toast, groups */
+  --gk-tip-bg: #2e2a14;
+  --gk-tip-border: #6b5d1f;
+  --gk-pill-bg: #2e1065;
+  --gk-pill-ink: #c4b5fd;
+  --gk-send-bg: #475569;
+  --gk-toast-bg: #7f1d1d;
+  --gk-group-border: #475569;
+  --gk-group-bg: rgb(148 163 184 / 0.08);
+  --gk-group-ink: #94a3b8;
+
+  /* shadows */
+  --gk-shadow-popover: rgb(0 0 0 / 0.45);
+  --gk-shadow-window: rgb(0 0 0 / 0.6);
+  --gk-shadow-tip: rgb(0 0 0 / 0.4);
+  --gk-shadow-toast: rgb(0 0 0 / 0.5);
+  --gk-shadow-knob: rgb(0 0 0 / 0.5);
+
+  /* Map Viewer UI (MapLibre reads these through themeColor()) */
+  --gk-map-marker: #60a5fa;
+  --gk-map-point-outline: #111827;
+
+  /* data types: ports, wires, legend (change 02 SPEC 3: lighter shades of the same hues) */
+  --gk-type-number: #94a3b8;
+  --gk-type-text: #fbbf24;
+  --gk-type-raster: #2dd4bf;
+  --gk-type-vector: #fb923c;
+  --gk-type-table: #a78bfa;
+  --gk-type-model: #f472b6;
+  --gk-type-boolean: #38bdf8;
+  --gk-type-color: #a3e635;
+  --gk-type-colormap: #818cf8;
+  --gk-type-layer: #e879f9;
+  --gk-type-any: #94a3b8;
+
+  /* category strips: the same in both themes */
   --gk-cat-other: #475569;
 
   /* wires */

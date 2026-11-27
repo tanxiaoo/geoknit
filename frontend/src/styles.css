@@ -20,6 +20,11 @@ button {
   font: inherit;
   cursor: pointer;
 }
+/* text fields follow the theme (native ones use the browser's colours); :where() keeps
+ * this below any class rule */
+:where(input:not([type]), input[type="text"], input[type="number"], input[type="search"], select, textarea) {
+  background-color: var(--gk-field-bg);
+}
 button:disabled {
   cursor: default;
   opacity: 0.6;
@@ -339,12 +344,15 @@ button:disabled {
 }
 .gk-badge-raster {
   background: var(--gk-type-raster);
+  color: var(--gk-on-type);
 }
 .gk-badge-vector {
   background: var(--gk-type-vector);
+  color: var(--gk-on-type);
 }
 .gk-badge-workflow {
   background: var(--gk-active-bg);
+  color: var(--gk-active-ink);
 }
 
 /* ── canvas toolbar ── */
@@ -409,7 +417,7 @@ button:disabled {
   border: 0;
   border-radius: 4px;
   background: var(--gk-banner-warn-ink);
-  color: var(--gk-on-fill);
+  color: var(--gk-banner-button-ink);
   font-weight: 600;
 }
 .gk-banner-trust {
@@ -578,7 +586,7 @@ button:disabled {
   height: 28px;
   border-radius: 50%;
   background: var(--gk-type-text);
-  color: var(--gk-on-fill);
+  color: var(--gk-on-type);
   font-weight: 700;
   font-family: Inter, sans-serif;
 }
@@ -620,7 +628,7 @@ button:disabled {
   margin-left: 10px;
   padding: 0 10px;
   background: var(--gk-slider);
-  color: var(--gk-on-fill);
+  color: var(--gk-slider-ink);
   font-weight: 700;
   border-radius: 0 4px 4px 0;
   cursor: pointer;

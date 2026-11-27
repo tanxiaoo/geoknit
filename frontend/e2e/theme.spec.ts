@@ -1,6 +1,8 @@
 // Change 02 step 1: screenshot baselines of the synthetic workflow's canvas, a component
 // window and the Map Viewer window, taken before any colour moves to theme tokens, so the
-// token refactor can be checked to change nothing visible.
+// token refactor can be checked to change nothing visible. Step 2 adds the same three
+// shots in the dark theme (`*-dark.png`, `data-theme="dark"` set on <html> after a reload);
+// the light ones set no attribute.
 //
 // Font rendering differs between Windows and Linux, so the comparison runs on Linux only
 // (the CI ubuntu job) against the `*-chromium-linux.png` baselines next to this file.
@@ -97,28 +99,35 @@ test.describe.serial("theme screenshots", () => {
         { timeout: 120_000 },
       )
       .toBe(true);
-    await page.reload(); // fit the view to the workflow; no run logs, nothing selected
-    await expect(page.getByTestId(`map-count-${viewer}`)).toContainText("2 layers");
-    await expect(page.getByTestId(`panel-text-${panel}`)).toHaveClass(/gk-panel-view/);
-    // The fit on page load can run before every node is measured, so the framing varies;
-    // fit again now that all nodes (and the Panel's table) are drawn.
-    await page.getByTestId("fit").click();
-    await page.mouse.move(0, 0); // no hover highlight
+    await fresh(null); // light: no data-theme attribute
   });
 
   test.afterAll(async () => {
     await page.close();
   });
 
-  test("canvas", async () => {
+  /** Reload (fits the view to the workflow; no run logs, nothing selected: the windows
+   * select their node), set the theme, and fit again once every node is drawn. */
+  async function fresh(theme: "dark" | null) {
+    await page.reload();
+    if (theme) await page.evaluate((t) => (document.documentElement.dataset.theme = t), theme);
+    await expect(page.getByTestId(`map-count-${viewer}`)).toContainText("2 layers");
+    await expect(page.getByTestId(`panel-text-${panel}`)).toHaveClass(/gk-panel-view/);
+    // The fit on page load can run before every node is measured, so the framing varies;
+    // fit again now that all nodes (and the Panel's table) are drawn.
+    await page.getByTestId("fit").click();
+    await page.mouse.move(0, 0); // no hover highlight
+  }
+
+  async function canvasShot(name: string) {
     await expect(page.getByTestId(`node-${panel}`)).toHaveAttribute("data-state", "done");
-    await expect(page.getByTestId("canvas")).toHaveScreenshot("canvas.png", {
+    await expect(page.getByTestId("canvas")).toHaveScreenshot(name, {
       animations: "disabled",
       mask: [page.getByTestId(`panel-text-${panel}`)],
     });
-  });
+  }
 
-  test("component window", async () => {
+  async function componentWindowShot(name: string) {
     await page.getByTestId(`node-${forest}`).dblclick();
     const win = page.getByTestId("component-window");
     await expect(page.getByTestId("window-title")).toHaveText("Random Forest");
@@ -127,15 +136,15 @@ test.describe.serial("theme screenshots", () => {
     const output = page.getByTestId("output");
     await expect(output).toContainText("trained on");
     await page.mouse.move(0, 0);
-    await expect(win).toHaveScreenshot("component-window.png", {
+    await expect(win).toHaveScreenshot(name, {
       animations: "disabled",
       mask: [output.locator(".gk-output-body > div:not([data-testid])")],
     });
     await page.getByTestId("window-ok").click();
     await expect(win).toHaveCount(0);
-  });
+  }
 
-  test("map window", async () => {
+  async function mapWindowShot(name: string) {
     await page.getByTestId(`node-${viewer}`).dblclick();
     const win = page.getByTestId("map-window");
     await expect(win).toBeVisible();
@@ -149,8 +158,40 @@ test.describe.serial("theme screenshots", () => {
       return !!map && map.loaded() && map.areTilesLoaded() && !map.isMoving();
     });
     await page.mouse.move(0, 0);
-    await expect(win).toHaveScreenshot("map-window.png", { animations: "disabled" });
+    await expect(win).toHaveScreenshot(name, { animations: "disabled" });
     await page.getByTestId("map-close").click();
     await expect(win).toHaveCount(0);
+  }
+
+  // light: no data-theme attribute (the light tokens apply without one)
+  test("canvas", async () => {
+    await canvasShot("canvas.png");
+  });
+
+  test("component window", async () => {
+    await componentWindowShot("component-window.png");
+  });
+
+  test("map window", async () => {
+    await mapWindowShot("map-window.png");
+  });
+
+  // Change 02 step 2: the same three in the dark theme (set on <html> as the app will)
+  test("canvas, dark", async () => {
+    await fresh("dark");
+    await canvasShot("canvas-dark.png");
+  });
+
+  // set again in each test: after a failure Playwright restarts the worker (a new page)
+  const dark = () => page.evaluate(() => (document.documentElement.dataset.theme = "dark"));
+
+  test("component window, dark", async () => {
+    await dark();
+    await componentWindowShot("component-window-dark.png");
+  });
+
+  test("map window, dark", async () => {
+    await dark();
+    await mapWindowShot("map-window-dark.png");
   });
 });

@@ -28,7 +28,7 @@ never changes it.
 - API: `GET /api/settings` → `{theme}`; `PATCH /api/settings` `{theme}`.
   Not part of undo, never makes anything out of date, allowed during a run
   and on a read-only workflow. Another theme value answers `422` (like any
-  invalid request body), and nothing is written.
+  invalid request body) and `null` answers `400`; nothing is written.
 - Top bar: one button (Lucide `sun-moon`) that cycles System → Light → Dark,
   with a tooltip naming the current choice.
 - **No flash before the first paint.** Today the built frontend is served by

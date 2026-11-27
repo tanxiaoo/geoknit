@@ -664,6 +664,7 @@ export class Store {
 
   // ── user settings (change 02) ──
   private themeEdits = 0;
+  private themeSave: Promise<void> = Promise.resolve();
 
   /** On startup: keep the theme the page was served with (and follow the OS when it is
    * `system`), then apply the saved one (under `npm run dev` the page has none). */
@@ -682,11 +683,16 @@ export class Store {
   async setTheme(theme: ThemeSetting): Promise<void> {
     this.themeEdits++;
     this.applyTheme(theme);
-    try {
-      await this.api.patchSettings({ theme });
-    } catch (e) {
-      this.showToast(e instanceof Error ? e.message : String(e));
-    }
+    // one PATCH at a time, in click order, so fast clicks save the theme that is shown
+    const save = this.themeSave.then(async () => {
+      try {
+        await this.api.patchSettings({ theme });
+      } catch (e) {
+        this.showToast(e instanceof Error ? e.message : String(e));
+      }
+    });
+    this.themeSave = save;
+    await save;
   }
 
   private applyTheme(theme: ThemeSetting): void {

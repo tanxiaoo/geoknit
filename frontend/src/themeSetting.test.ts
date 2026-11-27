@@ -148,6 +148,27 @@ describe("store", () => {
     expect(root.dataset.theme).toBe("dark");
   });
 
+  test("fast clicks save in click order, one PATCH at a time", async () => {
+    fakeSystem(false);
+    const fake = api("system");
+    const started: ThemeSetting[] = [];
+    let release: () => void = () => {};
+    fake.patchSettings.mockImplementation(async (p: { theme: ThemeSetting }) => {
+      started.push(p.theme);
+      if (started.length === 1) await new Promise<void>((r) => (release = r)); // slow first PATCH
+      return p;
+    });
+    const s = new Store(fake as unknown as Api);
+    const first = s.setTheme("light");
+    const second = s.setTheme("dark");
+    await Promise.resolve();
+    expect(started).toEqual(["light"]); // the second waits for the first
+    release();
+    await Promise.all([first, second]);
+    expect(started).toEqual(["light", "dark"]);
+    expect(root.dataset.theme).toBe("dark");
+  });
+
   test("the top-bar button names the current choice and moves to the next", async () => {
     fakeSystem(false);
     const fake = api();

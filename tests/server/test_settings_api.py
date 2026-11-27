@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from geoknit.server import app as app_module
+from geoknit.server.user_settings import UserSettings
 from tests.conftest import SYNTHETIC
 from tests.server.conftest import collect_until_finished, make_client
 from tests.server.test_api import SLEEPY, _add
@@ -53,10 +54,14 @@ def test_unreadable_file_means_defaults(client: TestClient, trust_file: Path, te
     assert client.patch("/api/settings", json={"theme": "dark"}).json() == {"theme": "dark"}
 
 
-@pytest.mark.parametrize("body", [{"theme": "purple"}, {"theme": 1}, {"theme": None}])
-def test_invalid_theme_is_refused(client: TestClient, trust_file: Path, body: object) -> None:
+@pytest.mark.parametrize(
+    ("body", "status"), [({"theme": "purple"}, 422), ({"theme": 1}, 422), ({"theme": None}, 400)]
+)
+def test_invalid_theme_is_refused(
+    client: TestClient, trust_file: Path, body: object, status: int
+) -> None:
     r = client.patch("/api/settings", json=body)
-    assert r.status_code in (400, 422), r.text
+    assert r.status_code == status, r.text
     assert not _settings(trust_file).exists()
 
 
@@ -133,3 +138,34 @@ def test_placeholder_without_a_build(
     with make_client(project, trust_file) as c:
         r = c.get("/")
         assert r.status_code == 200 and "npm run build" in r.text
+
+
+def test_update_keeps_keys_when_the_file_cannot_be_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A read error other than a missing file refuses the update instead of dropping keys."""
+    path = tmp_path / "settings.json"
+    path.write_text('{"theme": "light", "other": 1}', encoding="utf-8")
+    settings = UserSettings(path)
+    real = Path.read_text
+
+    def locked(self: Path, *args: object, **kwargs: object) -> str:
+        if self == path:
+            raise PermissionError("locked")
+        return real(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "read_text", locked)
+    with pytest.raises(PermissionError):
+        settings.update({"theme": "dark"})
+    monkeypatch.undo()
+    assert json.loads(path.read_text(encoding="utf-8")) == {"theme": "light", "other": 1}
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_update_writes_no_temp_files_and_skips_empty_changes(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    settings = UserSettings(path)
+    assert settings.update({}) == {"theme": "system"}
+    assert not path.exists()
+    settings.update({"theme": "dark"})
+    assert [p.name for p in tmp_path.iterdir()] == ["settings.json"]

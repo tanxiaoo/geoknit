@@ -38,6 +38,9 @@ export const strings = {
     `Exported to ${path}. ${warnings.join(" · ")}`,
   stop: "Stop",
   run: "Run",
+  themeNames: { system: "System", light: "Light", dark: "Dark" },
+  /** Tooltip of the top-bar theme button: the current choice, and that a click changes it. */
+  themeHint: (current: string) => `Theme: ${current} (click to change)`,
 
   // ribbon
   paramsTab: "Params",
@@ -179,7 +182,12 @@ export const strings = {
   mapOpenHint: "Double-click to open the map",
   layers: "Layers",
   basemap: "Basemap",
-  basemapNames: { light: "Light (OpenStreetMap)", none: "None" } as Record<string, string>,
+  basemapNames: {
+    auto: "Auto (follows the theme)",
+    light: "Light (OpenStreetMap)",
+    dark: "Dark (OpenStreetMap)",
+    none: "None",
+  } as Record<string, string>,
   basemapAttribution: "© OpenStreetMap contributors",
   noLayers: "Wire a Raster or Vector into Map Viewer › layers.",
   loadingMap: "Loading the map…",

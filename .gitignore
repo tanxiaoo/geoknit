@@ -26,3 +26,9 @@ htmlcov/
 .vscode/
 .idea/
 *.tsbuildinfo
+
+# export output of the synthetic example (geoknit export examples/synthetic/imd.geoknit)
+examples/synthetic/imd.py
+# local screenshot baselines (GEOKNIT_SCREENSHOTS=1); only the Linux ones are compared in CI
+frontend/e2e/*-snapshots/*-win32.png
+frontend/e2e/*-snapshots/*-darwin.png

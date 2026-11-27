@@ -39,6 +39,7 @@ function Toast() {
 export function App() {
   useEffect(() => {
     void store.load();
+    void store.loadSettings();
     return connectEvents(store);
   }, []);
   return (

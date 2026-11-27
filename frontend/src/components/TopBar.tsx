@@ -1,8 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Play, Spline, Square } from "lucide-react";
 import type { FileNode } from "../apiTypes";
+import { ICONS } from "../icons/registry";
 import { store, useStore } from "../store";
 import { strings } from "../strings";
+import { nextThemeSetting } from "../theme";
+
+const ThemeIcon = ICONS["lucide:sun-moon"].Icon;
+
+/** Cycles the user's theme System → Light → Dark (change 02); the tooltip names the choice. */
+function ThemeButton() {
+  const theme = useStore((s) => s.theme);
+  const hint = strings.themeHint(strings.themeNames[theme]);
+  return (
+    <button
+      className="gk-top-button gk-theme-button"
+      title={hint}
+      aria-label={hint}
+      onClick={() => void store.setTheme(nextThemeSetting(theme))}
+      data-testid="theme-toggle"
+      data-value={theme}
+    >
+      <ThemeIcon size={17} />
+    </button>
+  );
+}
 
 /** Every .geoknit file in the project folder, by relative path. */
 export function workflowFiles(tree: FileNode | null): string[] {
@@ -188,6 +210,7 @@ export function TopBar() {
         <span className="gk-worker-dot" />
         {strings.workerStatus(status?.python ?? "?", worker)}
       </span>
+      <ThemeButton />
       <div className="gk-export">
         <button
           className="gk-top-button"

@@ -193,6 +193,11 @@ export interface Status {
   pid: number | null;
 }
 
+/** The user's settings (`GET`/`PATCH /api/settings`, change 02), not the workflow's. */
+export interface Settings {
+  theme: "system" | "light" | "dark";
+}
+
 /** A table cell or index label as the server sends it (change 01, section 11): missing
  * values are null, infinities "inf" / "-inf", dates ISO text, geometries their type name. */
 export type CellValue = string | number | boolean | null;
@@ -312,7 +317,8 @@ export interface NodePatch {
 
 // ── Map Viewer (SPEC 8, 9) ──
 
-export type Basemap = "light" | "none";
+/** `auto` (the default) follows the theme. */
+export type Basemap = "auto" | "light" | "dark" | "none";
 
 /** A layer's look; `color` is for vectors, the rest for rasters. */
 export interface LayerStyle {

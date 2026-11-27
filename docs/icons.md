@@ -39,6 +39,7 @@ Sets, in the order GeoKnit chooses from them: [Font-GIS](https://github.com/Vigl
 | <img src="icons/lucide-sigma.svg" width="24" height="24" alt=""> | `lucide:sigma` | Lucide (ISC) |
 | <img src="icons/lucide-sliders-horizontal.svg" width="24" height="24" alt=""> | `lucide:sliders-horizontal` | Lucide (ISC) |
 | <img src="icons/lucide-sticky-note.svg" width="24" height="24" alt=""> | `lucide:sticky-note` | Lucide (ISC) |
+| <img src="icons/lucide-sun-moon.svg" width="24" height="24" alt=""> | `lucide:sun-moon` | Lucide (ISC) |
 | <img src="icons/lucide-table.svg" width="24" height="24" alt=""> | `lucide:table` | Lucide (ISC) |
 | <img src="icons/lucide-target.svg" width="24" height="24" alt=""> | `lucide:target` | Lucide (ISC) |
 | <img src="icons/lucide-toggle-right.svg" width="24" height="24" alt=""> | `lucide:toggle-right` | Lucide (ISC) |

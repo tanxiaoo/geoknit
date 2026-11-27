@@ -21,11 +21,15 @@ import {
   legendFor,
   range,
   renderLayers,
+  resolveBasemap,
   statsFor,
   unionBounds,
-  VECTOR_COLOURS,
   type Legend,
 } from "./layers";
+import { VECTOR_COLOURS } from "../../palettes";
+import { useTheme } from "../../theme";
+
+const BASEMAPS: Basemap[] = ["auto", "light", "dark", "none"];
 
 /** The floating map window of the open Map Viewer (SPEC 8). */
 export function MapWindow() {
@@ -73,7 +77,8 @@ function Window({ view }: { view: NodeView }) {
   }, [id, runCount, wired]);
 
   const saved = useMemo(() => view.map?.styles ?? {}, [view.map]);
-  const basemap: Basemap = view.map?.basemap ?? "light";
+  const basemap: Basemap = view.map?.basemap ?? "auto";
+  const theme = useTheme();
   const layers = data?.layers ?? [];
 
   // statistics for bands other than the defaults, fetched when chosen
@@ -166,7 +171,7 @@ function Window({ view }: { view: NodeView }) {
               onChange={(e) => setBasemap(e.target.value as Basemap)}
               data-testid="map-basemap"
             >
-              {(data?.basemaps ?? ["light", "none"]).map((b) => (
+              {(data?.basemaps ?? BASEMAPS).map((b) => (
                 <option key={b} value={b}>
                   {strings.basemapNames[b] ?? b}
                 </option>
@@ -197,7 +202,7 @@ function Window({ view }: { view: NodeView }) {
           <InspectPanel inspected={inspected} layers={layers} />
         </aside>
         <MapCanvas
-          basemap={basemap}
+          basemap={resolveBasemap(basemap, theme)}
           layers={rendered}
           fitBounds={bounds}
           fitKey={fitKey}

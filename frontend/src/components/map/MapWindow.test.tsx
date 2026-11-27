@@ -5,6 +5,7 @@ import { paramEntry } from "../../testFixtures";
 import { initialState, store } from "../../store";
 import { nodeKind } from "../nodes/kinds";
 import {
+  BASEMAP_PAINT,
   effectiveStyle,
   formatValue,
   legendFor,
@@ -104,7 +105,7 @@ const model: MapLayer = {
 const COLORMAPS = { viridis: ["#440154", "#21918c", "#fde725"], magma: ["#000004", "#fcfdbf"] };
 
 function mapView(layers: MapLayer[]): MapView {
-  return { basemap: "light", layers, basemaps: ["light", "none"], colormaps: COLORMAPS, max_features: 50000 };
+  return { basemap: "auto", layers, basemaps: ["auto", "light", "dark", "none"], colormaps: COLORMAPS, max_features: 50000 };
 }
 
 const viewer: NodeView = {
@@ -150,6 +151,7 @@ async function open(layers: MapLayer[], node: NodeView = viewer) {
 afterEach(() => {
   vi.restoreAllMocks();
   canvas.props = null;
+  document.documentElement.removeAttribute("data-theme");
   act(() => store.set({ ...initialState }));
 });
 
@@ -245,6 +247,30 @@ describe("map window", () => {
     });
     fireEvent.change(screen.getByTestId("map-basemap"), { target: { value: "none" } });
     expect(patch).toHaveBeenLastCalledWith("n30", { map: { basemap: "none" } });
+  });
+
+  test("auto follows the theme: dark paint in dark, light paint in light, live", async () => {
+    const paint = () => BASEMAP_PAINT[canvas.props?.basemap as "light" | "dark"];
+    document.documentElement.setAttribute("data-theme", "dark");
+    await open([pred]);
+    expect((screen.getByTestId("map-basemap") as HTMLSelectElement).value).toBe("auto");
+    expect(canvas.props?.basemap).toBe("dark");
+    expect(paint()).toMatchObject({
+      "raster-brightness-min": 1,
+      "raster-brightness-max": 0,
+      "raster-hue-rotate": 180,
+    });
+    await act(async () => document.documentElement.setAttribute("data-theme", "light"));
+    expect(canvas.props?.basemap).toBe("light");
+    expect(paint()).toMatchObject({ "raster-saturation": -0.85, "raster-brightness-min": 0.25 });
+  });
+
+  test("a saved light or dark basemap does not follow the theme", async () => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    await open([pred], { ...viewer, map: { basemap: "light" } });
+    expect(canvas.props?.basemap).toBe("light");
+    await act(async () => document.documentElement.setAttribute("data-theme", "light"));
+    expect(canvas.props?.basemap).toBe("light");
   });
 
   test("a saved style is drawn, and Reset removes it", async () => {

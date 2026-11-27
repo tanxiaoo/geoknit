@@ -116,7 +116,7 @@ def _cache(client: TestClient) -> DiskCache:
 def test_layers_describe_each_wire(imd: tuple[TestClient, str, Path]) -> None:
     client, viewer, _ = imd
     view = client.get(f"/api/map/{viewer}").json()
-    assert view["basemap"] == "light" and "viridis" in view["colormaps"]
+    assert view["basemap"] == "auto" and "viridis" in view["colormaps"]
     layers = {layer["id"]: layer for layer in view["layers"]}
     assert list(layers) == ["n17.map", "n10.test", "n4.classes", "n12.raster", "n16.model"]
     assert layers["n17.map"]["title"] == "Predict Raster › map"
@@ -295,6 +295,23 @@ def test_styles_are_saved_and_never_make_anything_out_of_date(
     assert "styles" not in client.get("/api/graph").json()["nodes"][viewer]["map"]
     client.post("/api/undo")
     assert "n17.map" in client.get("/api/graph").json()["nodes"][viewer]["map"]["styles"]
+
+
+def test_basemap_values(imd: tuple[TestClient, str, Path]) -> None:
+    client, viewer, _ = imd
+    # no saved key means "auto" (follows the theme); see test_layers_describe_each_wire
+    assert client.get(f"/api/map/{viewer}").json()["basemaps"] == ["auto", "light", "dark", "none"]
+    for basemap in ("light", "dark", "none", "auto"):
+        r = client.patch(f"/api/nodes/{viewer}", json={"map": {"basemap": basemap}})
+        assert r.status_code == 200, r.text
+        assert r.json()["map"]["basemap"] == basemap
+        assert client.get(f"/api/map/{viewer}").json()["basemap"] == basemap
+    # a saved "light" stays "light"
+    client.patch(f"/api/nodes/{viewer}", json={"map": {"basemap": "light"}})
+    assert client.get(f"/api/map/{viewer}").json()["basemap"] == "light"
+    bad = client.patch(f"/api/nodes/{viewer}", json={"map": {"basemap": "satellite"}})
+    assert bad.status_code == 400 and "basemap is one of" in bad.json()["detail"]
+    assert client.get(f"/api/map/{viewer}").json()["basemap"] == "light"
 
 
 def test_large_source_raster_gets_overviews_in_the_cache(tmp_path: Path, trust_file: Path) -> None:

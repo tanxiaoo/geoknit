@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { NodeProps } from "@xyflow/react";
+import { FALLBACK_COLOR_VALUE } from "../../palettes";
 import { store } from "../../store";
 import { strings } from "../../strings";
 import { needsRun } from "../../types";
@@ -11,7 +12,7 @@ const HEX = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i;
 /** The `#rrggbb` part of a colour, for `<input type="color">` (which has no alpha). */
 export function pickerValue(hex: string): string {
   const m = HEX.exec(hex.trim());
-  return m ? `#${m[1].toLowerCase()}` : "#000000";
+  return m ? `#${m[1].toLowerCase()}` : FALLBACK_COLOR_VALUE;
 }
 
 /** A picked `#rrggbb` with the alpha of ``hex`` kept, upper case like the server's. */
@@ -23,7 +24,7 @@ export function withAlpha(picked: string, hex: string): string {
 /** Color Swatch: a swatch with its hex; double-click opens a colour picker (change 01, 8). */
 export function ColorNode({ id, data, selected }: NodeProps<GkNode>) {
   const view = data.view;
-  const hex = typeof view.value === "string" ? view.value : "#000000";
+  const hex = typeof view.value === "string" ? view.value : FALLBACK_COLOR_VALUE;
   const [open, setOpen] = useState(false);
   const state = view.state ?? "never_run";
   return (

@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GeoKnit</title>
+    <script>
+      // Theme before the first paint (change 02): the server writes the saved choice as
+      // data-theme-setting on <html>; resolve it (and "system") to data-theme here, before
+      // any CSS applies. Keep in step with resolveTheme() in src/theme.ts.
+      (function () {
+        var root = document.documentElement;
+        var setting = root.getAttribute("data-theme-setting");
+        var theme = setting === "light" || setting === "dark" ? setting : "system";
+        if (theme === "system") {
+          var mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+          theme = mq && mq.matches ? "dark" : "light";
+        }
+        root.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

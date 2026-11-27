@@ -16,22 +16,23 @@ export const DATA_TYPES: Exclude<PortType, "Any">[] = [
   "Layer",
 ];
 
+/** CSS colours of the data types: tokens of theme.css, usable in inline styles. */
 export const PORT_COLOURS: Record<PortType, string> = {
-  Number: "#64748B",
-  Text: "#A16207",
-  Raster: "#0B7A7C",
-  Vector: "#C2410C",
-  Table: "#7C3AED",
-  Model: "#BE185D",
-  Boolean: "#0369A1",
-  Color: "#4D7C0F",
-  Colormap: "#4338CA",
-  Layer: "#A21CAF",
-  Any: "#64748B",
+  Number: "var(--gk-type-number)",
+  Text: "var(--gk-type-text)",
+  Raster: "var(--gk-type-raster)",
+  Vector: "var(--gk-type-vector)",
+  Table: "var(--gk-type-table)",
+  Model: "var(--gk-type-model)",
+  Boolean: "var(--gk-type-boolean)",
+  Color: "var(--gk-type-color)",
+  Colormap: "var(--gk-type-colormap)",
+  Layer: "var(--gk-type-layer)",
+  Any: "var(--gk-type-any)",
 };
 
 /** Centre strip of a category that is not a tab (an inline component's own category). */
-export const OTHER_CATEGORY_COLOUR = "#475569";
+export const OTHER_CATEGORY_COLOUR = "var(--gk-cat-other)";
 
 /** A category's colour from the `tabs` of `GET /api/components` (change 01, section 7). */
 export function categoryColour(tabs: TabView[], category: string | null | undefined): string {

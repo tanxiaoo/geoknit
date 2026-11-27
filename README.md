@@ -7,7 +7,13 @@ GeoKnit runs them on your own machine and shows the results as you go. Every
 component is a short Python script you can open and edit, and a whole
 workflow can be exported as one plain Python script.
 
-![The Milan imperviousness workflow after a run](https://raw.githubusercontent.com/tanxiaoo/geoknit/main/docs/img/milan/02-ran.png)
+<p>
+  <img width="49%" alt="The Milan imperviousness workflow in the light theme" src="https://raw.githubusercontent.com/tanxiaoo/geoknit/main/docs/img/milan/01-opened.png">
+  <img width="49%" alt="The same workflow in the dark theme" src="https://raw.githubusercontent.com/tanxiaoo/geoknit/main/docs/img/milan/01-opened-dark.png">
+</p>
+
+The Milan imperviousness workflow in the light and dark theme (the theme follows
+your system by default; the top-bar button switches it).
 
 - **Local**: a small Python server on your computer, opened in the browser.
   Your data never leaves the machine.

@@ -71,11 +71,15 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
+      # test-results/ holds the actual screenshots; *-snapshots/ the baselines a run without
+      # them writes (theme.spec.ts: download the ubuntu artifact to get the Linux baselines)
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-${{ matrix.os }}
-          path: frontend/test-results/
+          path: |
+            frontend/test-results/
+            frontend/e2e/**/*-snapshots/
 
   # sdist + wheel with the frontend inside, installed and smoke-tested on both platforms
   package:

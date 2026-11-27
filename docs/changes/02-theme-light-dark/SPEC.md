@@ -1,6 +1,6 @@
 # Change 02: Light and dark theme
 
-Status: agreed (checked against the code, 26 Nov 2026) · Touches `docs/SPEC.md`
+Status: done (merged into `docs/SPEC.md`, 27 Nov 2026) · Touches `docs/SPEC.md`
 sections 3, 8, 9, 12
 
 ## Questions for Xiao
@@ -27,7 +27,8 @@ never changes it.
   file means the defaults. Unknown keys are kept and written back.
 - API: `GET /api/settings` → `{theme}`; `PATCH /api/settings` `{theme}`.
   Not part of undo, never makes anything out of date, allowed during a run
-  and on a read-only workflow.
+  and on a read-only workflow. Another theme value answers `422` (like any
+  invalid request body) and `null` answers `400`; nothing is written.
 - Top bar: one button (Lucide `sun-moon`) that cycles System → Light → Dark,
   with a tooltip naming the current choice.
 - **No flash before the first paint.** Today the built frontend is served by
@@ -170,6 +171,13 @@ table. (Checked by hand for the light strips, including the new Sampling
   both themes. The basemap-`none` background (`map-bg`), the click marker
   and the point outline are UI and do follow the theme.
 - **Icons** use `currentColor` and follow the text colour.
+- **Native form controls** (scrollbars, checkboxes, range sliders, select menus) follow
+  the theme through `color-scheme: light | dark` in each theme block; text fields and
+  selects take their background from the `field-bg` token.
+- **Fills with text on them**: white stays on the strips, primary buttons and toasts.
+  Where a fill is a light colour in dark (a type colour behind a badge, the slider value,
+  the banner buttons) the text uses its own token (`on-type`, `slider-ink`,
+  `banner-button-ink`), dark ink in the dark theme and white in light.
 - **Panel** keeps its "sticky note" look in dark with the muted yellow above.
 - **Screenshots.** `docs/ui/` holds the design mockups, which are not made
   from the app, so they stay as they are. The app screenshots are

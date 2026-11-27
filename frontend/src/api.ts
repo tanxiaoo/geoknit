@@ -8,6 +8,7 @@ import type {
   MapView,
   NamedRamps,
   RasterStats,
+  Settings,
   TablePage,
   GraphView,
   NodeJson,
@@ -55,6 +56,8 @@ export const api = {
   colormaps: () => request<NamedRamps>("GET", "/api/colormaps"),
   graph: () => request<GraphView>("GET", "/api/graph"),
   status: () => request<Status>("GET", "/api/status"),
+  settings: () => request<Settings>("GET", "/api/settings"),
+  patchSettings: (patch: Partial<Settings>) => request<Settings>("PATCH", "/api/settings", patch),
   files: () => request<FileNode>("GET", "/api/files"),
   addNode: (component: string, position: [number, number], source?: string) =>
     request<NodeView>("POST", "/api/nodes", { component, position, source }),

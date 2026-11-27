@@ -24,6 +24,7 @@ import type {
   WireJson,
 } from "./apiTypes";
 import { strings } from "./strings";
+import { applyThemeSetting, pageThemeSetting, type ThemeSetting } from "./theme";
 import { categoryColour } from "./types";
 
 export interface Toast {
@@ -74,6 +75,8 @@ export interface AppState {
   mapNode: string | null;
   /** The named colormap ramps (`GET /api/colormaps`), loaded when a Colormap node needs them. */
   ramps: NamedRamps | null;
+  /** The user's theme setting (`GET /api/settings`, change 02). */
+  theme: ThemeSetting;
 }
 
 /** A Panel's table paging: the port key of the table feeding it, and whether the disk
@@ -105,6 +108,7 @@ export const initialState: AppState = {
   windowNode: null,
   mapNode: null,
   ramps: null,
+  theme: "system",
 };
 
 /** What a port carries after a run: its own output, or the output wired into it. */
@@ -656,6 +660,44 @@ export class Store {
     } catch (e) {
       this.showToast(e instanceof Error ? e.message : String(e));
     }
+  }
+
+  // ── user settings (change 02) ──
+  private themeEdits = 0;
+  private themeSave: Promise<void> = Promise.resolve();
+
+  /** On startup: keep the theme the page was served with (and follow the OS when it is
+   * `system`), then apply the saved one (under `npm run dev` the page has none). */
+  async loadSettings(): Promise<void> {
+    this.applyTheme(pageThemeSetting());
+    const edits = this.themeEdits;
+    try {
+      const { theme } = await this.api.settings();
+      if (edits === this.themeEdits) this.applyTheme(theme);
+    } catch {
+      /* the page's theme stays */
+    }
+  }
+
+  /** Choose the theme (top bar): applied at once, saved for this user. */
+  async setTheme(theme: ThemeSetting): Promise<void> {
+    this.themeEdits++;
+    this.applyTheme(theme);
+    // one PATCH at a time, in click order, so fast clicks save the theme that is shown
+    const save = this.themeSave.then(async () => {
+      try {
+        await this.api.patchSettings({ theme });
+      } catch (e) {
+        this.showToast(e instanceof Error ? e.message : String(e));
+      }
+    });
+    this.themeSave = save;
+    await save;
+  }
+
+  private applyTheme(theme: ThemeSetting): void {
+    applyThemeSetting(theme);
+    this.set({ theme });
   }
 
   async trust(): Promise<void> {

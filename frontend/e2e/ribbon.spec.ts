@@ -18,7 +18,8 @@ test("the Raster tab shows its groups in layout order", async ({ page }) => {
   const raster = tabs.find((t) => t.name === "Raster");
   expect(raster?.groups).toEqual(["Files", "Bands", "Calculate", "Extent"]);
 
-  // tabs in the fixed order
+  // tabs in the fixed order (allTextContents does not wait: wait for the ribbon first)
+  await expect(page.getByTestId("tab-Raster")).toBeVisible();
   const names = await page.locator(".gk-tab").allTextContents();
   expect(names.slice(0, 3)).toEqual(["Params", "Vector", "Raster"]);
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type * as Monaco from "monaco-editor";
 import { strings } from "../../strings";
+import { useTheme, type Theme } from "../../theme";
 
 declare global {
   interface Window {
@@ -8,6 +9,9 @@ declare global {
     __geoknitEditor?: Monaco.editor.IStandaloneCodeEditor;
   }
 }
+
+/** Monaco's built-in theme for a GeoKnit theme. */
+const MONACO_THEME: Record<Theme, string> = { light: "vs", dark: "vs-dark" };
 
 interface Props {
   value: string;
@@ -27,6 +31,9 @@ export function CodeEditor({ value, onChange, onBlur, errorLine }: Props) {
   const callbacks = useRef({ onChange, onBlur });
   callbacks.current = { onChange, onBlur };
   const [ready, setReady] = useState(false);
+  const theme = useTheme();
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   useEffect(() => {
     let disposed = false;
@@ -36,6 +43,7 @@ export function CodeEditor({ value, onChange, onBlur, errorLine }: Props) {
       const ed = monaco.editor.create(host.current, {
         value,
         language: "python",
+        theme: MONACO_THEME[themeRef.current],
         automaticLayout: true,
         minimap: { enabled: false },
         fontSize: 13,
@@ -71,6 +79,11 @@ export function CodeEditor({ value, onChange, onBlur, errorLine }: Props) {
     ed.executeEdits("geoknit", [{ range: model.getFullModelRange(), text: value }]);
     ed.pushUndoStop();
   }, [value, ready]);
+
+  // Follow the theme live (the theme is global to Monaco, not per editor).
+  useEffect(() => {
+    if (ready) monacoRef.current?.editor.setTheme(MONACO_THEME[theme]);
+  }, [theme, ready]);
 
   useEffect(() => {
     const monaco = monacoRef.current;

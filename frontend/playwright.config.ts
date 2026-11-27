@@ -15,6 +15,8 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     viewport: { width: 1920, height: 1080 },
+    // the app follows prefers-color-scheme (theme setting `system`): never the host's
+    colorScheme: "light",
     trace: "retain-on-failure",
   },
   webServer: {

@@ -9,17 +9,17 @@ after change 01 step 5).
 
 ## Step 1: Tokens, no visible change
 
-- [ ] Before touching any colour: add a Playwright screenshot test
+- [x] Before touching any colour: add a Playwright screenshot test
       (`toHaveScreenshot`) of the synthetic workflow's canvas, component
       window and map window, and commit its baselines. None exist today: the
       e2e and docs-shots screenshots are written to files, never compared.
       Font rendering differs between Windows and Linux, so the comparison
       runs on one platform (the CI Linux job) with Linux baselines.
-- [ ] `frontend/src/theme.css` with the light palette, starting from the
+- [x] `frontend/src/theme.css` with the light palette, starting from the
       `:root` block of `styles.css`; `styles.css` and the TS files read every
       UI colour from tokens; map data colours moved to `palettes.ts`;
       `themeColor()` helper for MapLibre
-- [ ] vitest: no colour literal outside `theme.css`, `palettes.ts`, test files
+- [x] vitest: no colour literal outside `theme.css`, `palettes.ts`, test files
       and vendored SVGs
 
 **Done when:**
@@ -29,11 +29,11 @@ after change 01 step 5).
 
 ## Step 2: Dark palette and contrast tests
 
-- [ ] Dark block in `theme.css` with the SPEC tables, including the change 01
+- [x] Dark block in `theme.css` with the SPEC tables, including the change 01
       types
-- [ ] vitest contrast tests (types ≥ 3:1, ink ≥ 4.5:1, muted ≥ 3:1, strip
+- [x] vitest contrast tests (types ≥ 3:1, ink ≥ 4.5:1, muted ≥ 3:1, strip
       text ≥ 4.5:1), reading the values from `theme.css`
-- [ ] Monaco `vs-dark`, Panel dark note, icons via `currentColor`
+- [x] Monaco `vs-dark`, Panel dark note, icons via `currentColor`
 
 **Done when:**
 - contrast tests pass for both themes
@@ -42,12 +42,12 @@ after change 01 step 5).
 
 ## Step 3: Setting, API, toggle
 
-- [ ] `settings.json` next to the trust file, read/write (unknown keys kept);
+- [x] `settings.json` next to the trust file, read/write (unknown keys kept);
       `GET/PATCH /api/settings`
-- [ ] Server route for `/` and `/index.html` ahead of the static mount,
+- [x] Server route for `/` and `/index.html` ahead of the static mount,
       writing `data-theme-setting`; inline script in `frontend/index.html`
       resolving it (and `system`) to `data-theme` before the CSS
-- [ ] Top-bar button cycling System → Light → Dark; `system` follows
+- [x] Top-bar button cycling System → Light → Dark; `system` follows
       `prefers-color-scheme` live
 
 **Done when:**
@@ -60,10 +60,10 @@ after change 01 step 5).
 
 ## Step 4: Map Viewer basemap
 
-- [ ] Basemap `auto` (default) | `light` | `dark` | `none` in `tiles.BASEMAPS`,
+- [x] Basemap `auto` (default) | `light` | `dark` | `none` in `tiles.BASEMAPS`,
       `merge_settings`, `map_view` and the map window; dark through MapLibre
       paint properties
-- [ ] A saved `light` stays `light`; no key means `auto`
+- [x] A saved `light` stays `light`; no key means `auto`
 
 **Done when:**
 - vitest (`MapWindow.test.tsx`): `auto` gives the dark basemap paint in dark

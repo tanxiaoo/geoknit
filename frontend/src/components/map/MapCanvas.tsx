@@ -3,9 +3,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MlMap, Marker } from "maplibre-gl";
-import type { Basemap } from "../../apiTypes";
 import { strings } from "../../strings";
-import type { RenderLayer } from "./layers";
+import { themeColor, useTheme } from "../../theme";
+import { BASEMAP_PAINT, type RenderLayer, type ShownBasemap } from "./layers";
 
 type MapLibre = typeof import("maplibre-gl");
 
@@ -15,7 +15,8 @@ export interface VectorHit {
 }
 
 interface Props {
-  basemap: Basemap;
+  /** Already resolved: `auto` is the theme's basemap. */
+  basemap: ShownBasemap;
   layers: RenderLayer[];
   /** Fit the view to these bounds whenever ``fitKey`` changes. */
   fitBounds: [number, number, number, number] | null;
@@ -30,7 +31,7 @@ declare global {
 }
 
 // OpenStreetMap's own tiles: no API key, attribution shown (tile usage policy:
-// https://operations.osmfoundation.org/policies/tiles/). Greyed below for a light map.
+// https://operations.osmfoundation.org/policies/tiles/). Greyed or inverted by BASEMAP_PAINT.
 const BASEMAP_TILES = ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"];
 const BASEMAP = "gk-basemap";
 const PREFIX = "gk-layer-";
@@ -52,9 +53,9 @@ const LINE = [
 const POINT = ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false];
 
 /** Bring the map in line with ``layers`` (top first) and ``basemap``; ``urls`` remembers sources. */
-function sync(map: MlMap, layers: RenderLayer[], basemap: Basemap, urls: Map<string, string>) {
+function sync(map: MlMap, layers: RenderLayer[], basemap: ShownBasemap, urls: Map<string, string>) {
   // the basemap is added or removed, so "none" never contacts the tile service
-  if (basemap === "light" && !map.getSource(BASEMAP)) {
+  if (basemap !== "none" && !map.getSource(BASEMAP)) {
     map.addSource(BASEMAP, {
       type: "raster",
       tiles: BASEMAP_TILES,
@@ -66,15 +67,16 @@ function sync(map: MlMap, layers: RenderLayer[], basemap: Basemap, urls: Map<str
       id: BASEMAP,
       type: "raster",
       source: BASEMAP,
-      paint: {
-        "raster-saturation": -0.85,
-        "raster-brightness-min": 0.25,
-        "raster-contrast": -0.15,
-      },
     });
   } else if (basemap === "none" && map.getSource(BASEMAP)) {
     map.removeLayer(BASEMAP);
     map.removeSource(BASEMAP);
+  }
+  if (basemap !== "none") {
+    // light or dark: the same tiles, only the paint changes (live with the theme)
+    for (const [name, value] of Object.entries(BASEMAP_PAINT[basemap])) {
+      map.setPaintProperty(BASEMAP, name, value);
+    }
   }
 
   const wanted = new Set(layers.map((l) => sourceId(l.id)));
@@ -136,7 +138,7 @@ function sync(map: MlMap, layers: RenderLayer[], basemap: Basemap, urls: Map<str
       map.setPaintProperty(circle, "circle-color", l.colour);
       map.setPaintProperty(circle, "circle-opacity", l.opacity);
       map.setPaintProperty(circle, "circle-radius", 4);
-      map.setPaintProperty(circle, "circle-stroke-color", "#ffffff");
+      map.setPaintProperty(circle, "circle-stroke-color", themeColor("map-point-outline"));
       map.setPaintProperty(circle, "circle-stroke-width", 1);
       for (const part of [fill, line, circle]) map.setLayoutProperty(part, "visibility", visibility);
     }
@@ -160,6 +162,7 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
   vectorLayers.current = layers.filter((l) => l.kind === "vector").flatMap((l) => vectorParts(l.id));
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     let disposed = false;
@@ -173,7 +176,7 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
           style: {
             version: 8,
             sources: {},
-            layers: [{ id: "gk-background", type: "background", paint: { "background-color": "#f1f3f4" } }],
+            layers: [{ id: "gk-background", type: "background", paint: { "background-color": themeColor("map-bg") } }],
           },
           center: [0, 20],
           zoom: 1,
@@ -192,7 +195,7 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
               properties: { ...f.properties },
             }));
           marker.current?.remove();
-          marker.current = new maplibre.Marker({ color: "#2563eb", scale: 0.7 })
+          marker.current = new maplibre.Marker({ color: themeColor("map-marker"), scale: 0.7 })
             .setLngLat(e.lngLat)
             .addTo(map);
           inspect.current(e.lngLat.lng, e.lngLat.lat, hits);
@@ -213,7 +216,23 @@ export function MapCanvas({ basemap, layers, fitBounds, fitKey, onInspect }: Pro
   useEffect(() => {
     const map = mapRef.current;
     if (ready && map) sync(map, layers, basemap, urls.current);
-  }, [ready, layers, basemap]);
+  }, [ready, layers, basemap, theme]); // theme: the point outline is a theme colour
+
+  // The map background and the click marker are UI colours: re-read them when the theme
+  // changes (the first values are read when the map is created).
+  useEffect(() => {
+    const map = mapRef.current;
+    const lib = libRef.current;
+    if (!ready || !map || !lib) return;
+    map.setPaintProperty("gk-background", "background-color", themeColor("map-bg"));
+    const old = marker.current;
+    if (old) {
+      marker.current = new lib.Marker({ color: themeColor("map-marker"), scale: 0.7 })
+        .setLngLat(old.getLngLat())
+        .addTo(map);
+      old.remove();
+    }
+  }, [ready, theme]);
 
   useEffect(() => {
     const map = mapRef.current;

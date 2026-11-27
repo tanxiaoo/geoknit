@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Write Raster
 # category: Raster
+# group: Files
 # icon: write-raster
 # description: Save a raster as a Cloud Optimized GeoTIFF; band names become band descriptions.
 # inputs:

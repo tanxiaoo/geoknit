@@ -165,6 +165,8 @@ class ComponentSpec:
     blocks: Blocks
     ports: EditablePorts | None = None
     """``ports: {inputs: editable, ...}``; ``None``: the ports cannot be edited."""
+    group: str | None = None
+    """``group:``, the ribbon group inside the tab; ``None``: group "Other"."""
 
     @property
     def settings_values(self) -> dict[str, Any]:
@@ -260,6 +262,9 @@ def parse_component(source: str) -> ComponentSpec:
     if not isinstance(name, str) or not name.strip():
         raise ComponentParseError("the header needs a name")
     icon = header.get("icon")
+    group = header.get("group")
+    if group is not None and (isinstance(group, (dict, list)) or not str(group).strip()):
+        raise ComponentParseError("group must be a name, e.g. group: Overlay")
     return ComponentSpec(
         source=source,
         name=name,
@@ -273,6 +278,7 @@ def parse_component(source: str) -> ComponentSpec:
         settings=settings,
         blocks=blocks,
         ports=editable,
+        group=None if group is None else str(group).strip(),
     )
 
 

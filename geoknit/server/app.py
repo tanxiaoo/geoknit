@@ -218,8 +218,8 @@ def create_app(
 
     # ── library and graph ──
     @app.get("/api/components", tags=["library"])
-    def components() -> list[dict[str, Any]]:
-        """Header metadata of every component, for the ribbon."""
+    def components() -> dict[str, Any]:
+        """The ribbon: every component and Params node with its tab and group, and the tabs."""
         return session.components()
 
     @app.get("/api/graph", tags=["graph"])

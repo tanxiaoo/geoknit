@@ -23,6 +23,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from geoknit.components.layout import library
 from geoknit.components.registry import Registry, default_registry
 from geoknit.core.cache import CacheMiss, DiskCache
 from geoknit.core.component import ComponentParseError, parse_component
@@ -428,12 +429,13 @@ class Session:
                 "recovery": self.recovery,
             }
 
-    def components(self) -> list[dict[str, Any]]:
+    def components(self) -> dict[str, Any]:
+        """``{components, tabs}``: the library and Params nodes in ribbon order (change 01, 7)."""
         out = self.registry.entries()
         for entry in out:
             spec = self.registry.spec(entry["ref"])
             entry["settings"] = [_setting_view(s) for s in spec.settings.values()]
-        return out
+        return library(out)
 
     def output(self, node_id: str) -> dict[str, Any]:
         self._node(node_id)

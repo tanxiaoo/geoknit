@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Band Select
 # category: Raster
+# group: Bands
 # icon: bands
 # description: Keep some bands of a raster, by number (1,2,3) or by name (A00,A05).
 # inputs:

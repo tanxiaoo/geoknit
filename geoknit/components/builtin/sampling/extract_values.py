@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Extract Values
 # category: Sampling
+# group: Extract
 # icon: extract
 # description: Read all bands of a raster at each point (one column per band, attributes kept).
 # inputs:

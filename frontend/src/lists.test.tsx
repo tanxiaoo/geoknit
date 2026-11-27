@@ -5,7 +5,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Position, ReactFlowProvider } from "@xyflow/react";
 import { afterEach, describe, expect, test } from "vitest";
 import type { ComponentEntry, GraphView, NodeView, PortView } from "./apiTypes";
-import { fittingPort, paramEntries } from "./catalog";
+import { fittingPort } from "./catalog";
+import { paramEntry } from "./testFixtures";
 import { ComponentNode } from "./components/nodes/ComponentNode";
 import { PanelNode } from "./components/nodes/PanelNode";
 import { DragContext, dragRefusal, Port, type DragFrom } from "./components/nodes/Port";
@@ -138,6 +139,7 @@ describe("drag rule: a list output into an item input", () => {
       origin: "user",
       name: "Sum",
       category: "Script",
+      group: "Other",
       icon: null,
       description: "",
       inputs: sum.inputs,
@@ -149,7 +151,7 @@ describe("drag rule: a list output into an item input", () => {
     const from = { nodeId: "n1", port: "values", side: "out" as const, types, list: true };
     expect(fittingPort(entry, from)).toBe("xs");
     expect(fittingPort(entry, { ...from, list: false })).toBe("x");
-    const panel = paramEntries().find((e) => e.ref === "param/panel")!;
+    const panel = paramEntry("param/panel");
     expect(fittingPort(panel, from)).toBe("data");
     const lister = { ...entry, outputs: [numbers.outputs[0]] };
     const into = { nodeId: "n2", port: "x", side: "in" as const, types };

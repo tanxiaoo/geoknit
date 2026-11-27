@@ -67,9 +67,14 @@ def test_docs_page_and_schema(client: TestClient) -> None:
 
 
 def test_components_list_the_library(client: TestClient) -> None:
-    comps = {c["ref"]: c for c in client.get("/api/components").json()}
+    body = client.get("/api/components").json()
+    comps = {c["ref"]: c for c in body["components"]}
     rec = comps["builtin/raster/reclassify"]
-    assert rec["category"] == "Raster"
+    assert rec["category"] == "Raster" and rec["group"] == "Calculate"
+    assert comps["param/slider"]["category"] == "Params"
+    assert comps["param/slider"]["group"] == "Input"
+    raster = next(t for t in body["tabs"] if t["name"] == "Raster")
+    assert raster["colour"] == "#0B7A7C" and raster["groups"][0] == "Files"
     assert {s["name"] for s in rec["settings"]} == {"no_match", "dtype"}
     assert next(s for s in rec["settings"] if s["name"] == "dtype")["widget"] == "dropdown"
 
@@ -271,7 +276,7 @@ selected = data
 
 
 def test_ports_carry_types_like_and_resolved_type(client: TestClient) -> None:
-    comps = {c["ref"]: c for c in client.get("/api/components").json()}
+    comps = {c["ref"]: c for c in client.get("/api/components").json()["components"]}
     split = comps["builtin/sampling/split_points"]
     assert all("types" in p for p in split["inputs"] + split["outputs"])
     assert all("like" in p for p in split["outputs"])
@@ -310,7 +315,7 @@ values = [3, 1, 2]
 
 
 def test_outputs_say_whether_they_carry_a_list(client: TestClient) -> None:
-    comps = {c["ref"]: c for c in client.get("/api/components").json()}
+    comps = {c["ref"]: c for c in client.get("/api/components").json()["components"]}
     assert all(p["access"] == "item" for p in comps["builtin/raster/reclassify"]["outputs"])
 
     nums = _add(client, "inline", source=NUMBERS)

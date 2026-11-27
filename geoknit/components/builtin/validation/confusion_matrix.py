@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Confusion Matrix
 # category: Validation
+# group: Classification
 # icon: confusion-matrix
 # description: Compare a class map with reference points (confusion matrix, accuracy, kappa, F1).
 # inputs:

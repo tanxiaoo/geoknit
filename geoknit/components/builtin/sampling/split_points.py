@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Split Points
 # category: Sampling
+# group: Split
 # icon: split-points
 # description: Split sample points into random training and test points (held out for validation).
 # inputs:

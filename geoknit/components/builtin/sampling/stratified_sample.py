@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Stratified Sample
 # category: Sampling
+# group: Draw
 # icon: stratified-sample
 # description: Draw the same number of random points per class, at pixel centres inside the AOI.
 # inputs:

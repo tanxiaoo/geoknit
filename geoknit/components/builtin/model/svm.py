@@ -1,6 +1,7 @@
 # geoknit: component
 # name: SVM
 # category: Model
+# group: Train
 # icon: svm
 # description: Train a support vector machine (regression or classification) on a table.
 # inputs:

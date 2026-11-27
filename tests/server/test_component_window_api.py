@@ -85,7 +85,11 @@ def test_save_as_component_appears_in_the_library(tmp_path: Path, trust_file: Pa
         assert r.status_code == 200, r.text
         assert r.json()["ref"] == "user/script/my_ndvi"
         assert (user / "script" / "my_ndvi.py").read_text(encoding="utf-8") == source
-        entry = next(c for c in client.get("/api/components").json() if c["ref"] == r.json()["ref"])
+        entry = next(
+            c
+            for c in client.get("/api/components").json()["components"]
+            if c["ref"] == r.json()["ref"]
+        )
         assert entry["origin"] == "user" and entry["name"] == "My NDVI!"
 
         again = client.post(f"/api/nodes/{py}/save_component", json={})
@@ -200,7 +204,7 @@ def test_ports_patch_follows_the_ports_header_key(client: TestClient) -> None:
 
 
 def test_components_list_says_which_ports_are_editable(client: TestClient) -> None:
-    entries = {e["ref"]: e for e in client.get("/api/components").json()}
+    entries = {e["ref"]: e for e in client.get("/api/components").json()["components"]}
     python = entries[PYTHON]["editable_ports"]
     assert python["inputs"] and python["outputs"] and python["types"][0] == "Number"
     assert entries[RECLASSIFY]["editable_ports"] is None

@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Align Raster
 # category: Raster
+# group: Extent
 # icon: align
 # description: Resample a raster onto the grid (CRS, resolution, extent) of a reference raster.
 # inputs:

@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Accuracy
 # category: Validation
+# group: Regression
 # icon: accuracy
 # description: Compare a continuous map with reference points (n, RMSE, MAE, R², bias).
 # inputs:

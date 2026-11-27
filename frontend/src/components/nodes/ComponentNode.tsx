@@ -1,8 +1,8 @@
 import type { NodeProps } from "@xyflow/react";
 import { iconFor } from "../../icons";
-import { useStore } from "../../store";
+import { useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
-import { carriesList, categoryColour, needsRun, portTypes } from "../../types";
+import { carriesList, needsRun, portTypes } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
 
@@ -11,6 +11,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<GkNode>) {
   const view = data.view;
   const canvasDisplay = useStore((s) => s.graph?.workflow.view.display ?? "text");
   const error = useStore((s) => s.errors[id]);
+  const colour = useCategoryColour(view.category);
   const display = view.display === "default" ? canvasDisplay : view.display;
   const Icon = iconFor(view.icon, view.category);
   const state = view.state ?? "never_run";
@@ -32,7 +33,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<GkNode>) {
       </div>
       <div
         className={`gk-strip gk-strip-${display}`}
-        style={{ background: categoryColour(view.category) }}
+        style={{ background: colour }}
       >
         {display === "icon" ? (
           <Icon size={18} aria-label={view.title} />

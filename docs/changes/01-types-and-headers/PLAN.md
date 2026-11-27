@@ -108,13 +108,13 @@ touches.
 
 ## Step 5: Ribbon groups, tab order, category colours
 
-- [ ] Header key `group:`; `_layout.yaml` (references) for built-ins and
+- [x] Header key `group:`; `_layout.yaml` (references) for built-ins and
       Params nodes; layout test
-- [ ] `GET /api/components` → `{components, tabs}`, Params nodes included;
+- [x] `GET /api/components` → `{components, tabs}`, Params nodes included;
       frontend `paramEntries`, `categories`, `CATEGORY_ORDER`,
       `CATEGORY_COLOURS` removed
-- [ ] Ribbon renders labelled groups; search shows "Tab › Group"
-- [ ] Category colours from SPEC section 7
+- [x] Ribbon renders labelled groups; search shows "Tab › Group"
+- [x] Category colours from SPEC section 7
 
 **Done when:**
 - pytest: removing a built-in from `_layout.yaml` fails the layout test

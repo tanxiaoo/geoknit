@@ -431,6 +431,46 @@ tab, the ribbon shows components in labelled groups, Grasshopper style.
   from `CATEGORY_COLOURS` in `frontend/src/types.ts` to the `tabs` answer
   above (change 02 then turns them into theme tokens).
 
+Details settled while building step 5:
+
+- **Only what exists is listed.** `_layout.yaml` names only the built-ins
+  and Params nodes that exist now (`param/text`, `param/slider`,
+  `param/panel`, `param/map` and the 20 built-in files). The Params nodes of
+  step 6, the `builtin/params/*` geometry components and the other change 04
+  components are added to the layout by the step that adds them; the layout
+  test (`tests/components/test_layout.py`) fails until they are. Today's
+  Params groups: Input (Text, Number Slider), Inspect (Panel), Map (Map
+  Viewer). Map Viewer stays in Params, in a group named after its future
+  Display group, until change 03 moves it (the check allows `param/map` in
+  Params or Display). Train/Test Split sits in Sampling › Split next to
+  Split Points until step 9 merges them; Accuracy is Validation › Regression.
+  Groups of the existing built-ins follow change 04's tables.
+- **Tabs.** The tab order and colours are `TABS` in
+  `geoknit/components/layout.py`; the layout's tabs must be a subset of it in
+  that order. A tab appears only when it has at least one entry (so Maths,
+  Sets, Table and Display are not shown yet); pack and user categories
+  follow alphabetically (case-insensitive), coloured `#475569`.
+- **Built-in headers carry `group:`.** Every built-in declares
+  `group:` and the layout test checks it (and `category:`) equals its place.
+  At run time a reference listed in the layout takes the layout's tab and
+  group. `group:` must be a non-empty scalar (a list or mapping is a header
+  parse error). A pack component whose `group:` names a built-in group of
+  the same tab joins that group, after the built-ins.
+- **Order of `components`.** `GET /api/components` lists entries sorted by
+  tab, then group, then layout position (built-ins), then name
+  (case-insensitive) and reference; the frontend keeps this order. Params
+  entries have `origin: "param"`, `version: ""`, `settings: []`,
+  `editable_ports: null`, `description: ""` and the same port views as
+  header components (the Panel's output has `like: data`). Their icon is
+  `null` except Map Viewer (`map-viewer`) until step 7.
+- **Frontend.** The store holds `tabs`; `categoryColour(tabs, category)`
+  (and the `useCategoryColour` hook) look the colour up there, with
+  `#475569` for a category that is no tab (an inline component's own
+  category). `allEntries` went with `paramEntries`, since the library now
+  includes the Params nodes. The search box and the search popup show
+  "Tab › Group" (`strings.tabGroup`); search also matches the group name.
+  The Map Viewer node and window still use the Params colour until change 03.
+
 ## 8. New Params nodes (SPEC 5, 6, 7)
 
 Handled by the server like Text and Slider: no worker run, cache key

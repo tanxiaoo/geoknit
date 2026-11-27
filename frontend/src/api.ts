@@ -1,7 +1,7 @@
 // Typed client for the GeoKnit server (SPEC 9). Every UI action goes through here.
 
 import type {
-  ComponentEntry,
+  Library,
   ExportResult,
   FileNode,
   InspectResult,
@@ -49,7 +49,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  components: () => request<ComponentEntry[]>("GET", "/api/components"),
+  components: () => request<Library>("GET", "/api/components"),
   graph: () => request<GraphView>("GET", "/api/graph"),
   status: () => request<Status>("GET", "/api/status"),
   files: () => request<FileNode>("GET", "/api/files"),

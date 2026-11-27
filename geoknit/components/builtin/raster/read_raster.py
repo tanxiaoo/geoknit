@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Read Raster
 # category: Raster
+# group: Files
 # icon: read-raster
 # description: Open a raster file (e.g. a GeoTIFF) lazily; pixels are read only when needed.
 # inputs:

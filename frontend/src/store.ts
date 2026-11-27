@@ -17,9 +17,11 @@ import type {
   RunReport,
   ServerEvent,
   Status,
+  TabView,
   WireJson,
 } from "./apiTypes";
 import { strings } from "./strings";
+import { categoryColour } from "./types";
 
 export interface Toast {
   id: number;
@@ -38,7 +40,10 @@ export type FileMenu = "closed" | "menu" | "saveAs";
 
 export interface AppState {
   graph: GraphView | null;
+  /** Components and Params nodes in ribbon order (`GET /api/components`). */
   components: ComponentEntry[];
+  /** Ribbon tabs with their colours and groups. */
+  tabs: TabView[];
   files: FileNode | null;
   status: Status | null;
   connected: boolean;
@@ -65,6 +70,7 @@ export interface AppState {
 export const initialState: AppState = {
   graph: null,
   components: [],
+  tabs: [],
   files: null,
   status: null,
   connected: false,
@@ -229,13 +235,13 @@ export class Store {
   // ── loading ──
   async load(): Promise<void> {
     try {
-      const [components, graph, files, status] = await Promise.all([
+      const [library, graph, files, status] = await Promise.all([
         this.api.components(),
         this.api.graph(),
         this.api.files(),
         this.api.status(),
       ]);
-      this.set({ components, graph, files, status });
+      this.set({ components: library.components, tabs: library.tabs, graph, files, status });
       await this.loadResults();
     } catch (e) {
       this.showToast(e instanceof Error ? e.message : String(e));
@@ -305,7 +311,8 @@ export class Store {
 
   async refreshComponents(): Promise<void> {
     try {
-      this.set({ components: await this.api.components() });
+      const library = await this.api.components();
+      this.set({ components: library.components, tabs: library.tabs });
     } catch {
       /* the ribbon stays as it was */
     }
@@ -602,4 +609,10 @@ if (typeof window !== "undefined") window.__geoknit = store; // for end-to-end t
 
 export function useStore<T>(select: (s: AppState) => T, s: Store = store): T {
   return useSyncExternalStore(s.subscribe, () => select(s.getState()));
+}
+
+/** The centre-strip colour of a category, from the server's tabs (SPEC 8). */
+export function useCategoryColour(category: string | null | undefined): string {
+  const tabs = useStore((s) => s.tabs);
+  return categoryColour(tabs, category);
 }

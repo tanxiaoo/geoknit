@@ -41,9 +41,8 @@ export const strings = {
 
   // ribbon
   paramsTab: "Params",
-  numberSlider: "Number Slider",
-  text: "Text",
-  panel: "Panel",
+  /** Search results: where a component sits in the ribbon. */
+  tabGroup: (tab: string, group: string) => `${tab} › ${group}`,
   searchPlaceholder: "Search components (or double-click empty canvas)",
   noMatches: "No matching components",
   addHint: "Click to add, or drag onto the canvas",

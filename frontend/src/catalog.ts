@@ -1,69 +1,33 @@
-// What can be added to the canvas: Params nodes plus the component library.
+// What can be added to the canvas: the Params nodes and the component library, both
+// from `GET /api/components` in ribbon order (change 01, section 7).
 
-import type { ComponentEntry, PortType, PortView } from "./apiTypes";
+import type { ComponentEntry, PortType, PortView, TabView } from "./apiTypes";
 import { strings } from "./strings";
-import {
-  CATEGORY_ORDER,
-  carriesList,
-  PARAM_MAP,
-  PARAM_PANEL,
-  PARAM_SLIDER,
-  PARAM_TEXT,
-  portTypes,
-  wireError,
-} from "./types";
+import { carriesList, portTypes, wireError } from "./types";
 
-const PORT_NAMES: Record<string, string> = {
-  [PARAM_PANEL]: "data",
-  [PARAM_MAP]: "layers",
-};
-
-function param(ref: string, name: string, inputs: PortType[], outputs: PortType[]): ComponentEntry {
-  const port = (t: PortType, n: string) => ({
-    name: n,
-    type: t,
-    access: ref === PARAM_MAP ? ("list" as const) : ("item" as const),
-  });
-  return {
-    ref,
-    version: "",
-    origin: "param",
-    name,
-    category: "Params",
-    icon: null,
-    description: "",
-    inputs: inputs.map((t) => port(t, PORT_NAMES[ref] ?? "value")),
-    outputs: outputs.map((t) => port(t, PORT_NAMES[ref] ?? "value")),
-    requires: [],
-    settings: [],
-  };
+/** The entries of one tab, by group in the tab's order (entries keep the server's order). */
+export function groupsOf(
+  library: ComponentEntry[],
+  tab: TabView,
+): { group: string; entries: ComponentEntry[] }[] {
+  return tab.groups
+    .map((group) => ({
+      group,
+      entries: library.filter((e) => e.category === tab.name && e.group === group),
+    }))
+    .filter((g) => g.entries.length > 0);
 }
 
-export function paramEntries(): ComponentEntry[] {
-  return [
-    param(PARAM_SLIDER, strings.numberSlider, [], ["Number"]),
-    param(PARAM_TEXT, strings.text, [], ["Text"]),
-    param(PARAM_PANEL, strings.panel, ["Any"], ["Any"]),
-    param(PARAM_MAP, strings.mapViewer, ["Any"], []),
-  ];
-}
-
-export function allEntries(library: ComponentEntry[]): ComponentEntry[] {
-  return [...paramEntries(), ...library];
-}
-
-/** Ribbon tabs: Params, the built-in categories in SPEC order, then pack categories. */
-export function categories(library: ComponentEntry[]): string[] {
-  const found = new Set(library.map((c) => c.category));
-  const known = CATEGORY_ORDER.filter((c) => c === "Params" || found.has(c));
-  const extra = [...found].filter((c) => !CATEGORY_ORDER.includes(c)).sort();
-  return [...known, ...extra];
+/** "Tab › Group", shown next to a name in search results. */
+export function placeOf(entry: ComponentEntry): string {
+  const tab = entry.category === "Params" ? strings.paramsTab : entry.category;
+  return strings.tabGroup(tab, entry.group);
 }
 
 export function matches(entry: ComponentEntry, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [entry.name, entry.category, entry.description, entry.ref].some((s) =>
+  return [entry.name, entry.category, entry.group, entry.description, entry.ref].some((s) =>
     s.toLowerCase().includes(q),
   );
 }

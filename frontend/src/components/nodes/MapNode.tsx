@@ -1,8 +1,8 @@
 import type { NodeProps } from "@xyflow/react";
 import { Map as MapIcon } from "lucide-react";
-import { useStore } from "../../store";
+import { useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
-import { categoryColour, needsRun } from "../../types";
+import { needsRun } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
 
@@ -11,6 +11,7 @@ export function MapNode({ id, data, selected }: NodeProps<GkNode>) {
   const view = data.view;
   const count = useStore((s) => s.graph?.workflow.wires.filter((w) => w.to[0] === id).length ?? 0);
   const state = view.state ?? "never_run";
+  const colour = useCategoryColour("Params");
   return (
     <div
       className={`gk-node gk-comp gk-map-node gk-state-${state}${selected ? " gk-selected" : ""}`}
@@ -25,7 +26,7 @@ export function MapNode({ id, data, selected }: NodeProps<GkNode>) {
           <span>layers</span>
         </div>
       </div>
-      <div className="gk-strip gk-strip-text" style={{ background: categoryColour("Params") }}>
+      <div className="gk-strip gk-strip-text" style={{ background: colour }}>
         <span className="gk-vertical">{strings.mapViewer}</span>
       </div>
       <div className="gk-col gk-map-count" data-testid={`map-count-${id}`}>

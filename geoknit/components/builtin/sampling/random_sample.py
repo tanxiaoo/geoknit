@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Random Sample
 # category: Sampling
+# group: Draw
 # icon: random-sample
 # description: Draw random points at the centres of valid (non-nodata) pixels inside the AOI.
 # inputs:

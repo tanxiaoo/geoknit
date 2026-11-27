@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Train/Test Split
 # category: Sampling
+# group: Split
 # icon: split
 # description: Split a table into random training and test rows.
 # inputs:

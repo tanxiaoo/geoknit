@@ -41,6 +41,19 @@ _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
     PARAM_MAP: ({"layers": Port("layers", types.ANY, access="list")}, {}),
 }
 
+PARAM_TITLES: dict[str, str] = {
+    PARAM_TEXT: "Text",
+    PARAM_SLIDER: "Number Slider",
+    PARAM_PANEL: "Panel",
+    PARAM_MAP: "Map Viewer",
+}
+
+
+def param_ports(kind: str) -> tuple[dict[str, Port], dict[str, Port]]:
+    """The fixed (inputs, outputs) of a Params node kind."""
+    return _PARAM_PORTS[kind]
+
+
 DISPLAYS = ("default", "text", "icon")
 
 ChangeListener = Callable[[set[str], set[str]], None]
@@ -96,12 +109,7 @@ class Node:
     def title(self) -> str:
         if self.spec is not None:
             return self.spec.name
-        return {
-            PARAM_TEXT: "Text",
-            PARAM_SLIDER: "Number Slider",
-            PARAM_PANEL: "Panel",
-            PARAM_MAP: "Map Viewer",
-        }.get(self.component, self.component)
+        return PARAM_TITLES.get(self.component, self.component)
 
     def set_source(self, source: str) -> None:
         """Replace the source; on a parse error keep the last good ports."""

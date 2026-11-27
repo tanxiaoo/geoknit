@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Reproject
 # category: Vector
+# group: CRS
 # icon: reproject
 # description: Transform a vector layer to another CRS, e.g. EPSG:32632.
 # inputs:

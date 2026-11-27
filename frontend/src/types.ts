@@ -1,6 +1,6 @@
-// Data-type and category colours (SPEC 3, SPEC 8) and the connection rules (SPEC 3).
+// Data-type colours and category colour lookup (SPEC 3, SPEC 8) and the connection rules (SPEC 3).
 
-import type { NodeState, PortType, PortView } from "./apiTypes";
+import type { NodeState, PortType, PortView, TabView } from "./apiTypes";
 import { strings } from "./strings";
 
 export const DATA_TYPES: Exclude<PortType, "Any">[] = [
@@ -30,20 +30,12 @@ export const PORT_COLOURS: Record<PortType, string> = {
   Any: "#64748B",
 };
 
-export const CATEGORY_COLOURS: Record<string, string> = {
-  Params: "#475569",
-  Raster: "#0B7A7C",
-  Vector: "#C2410C",
-  Sampling: "#7C3AED",
-  Model: "#BE185D",
-  Validation: "#15803D",
-  Script: "#475569",
-};
+/** Centre strip of a category that is not a tab (an inline component's own category). */
+export const OTHER_CATEGORY_COLOUR = "#475569";
 
-export const CATEGORY_ORDER = ["Params", "Raster", "Vector", "Sampling", "Model", "Validation", "Script"];
-
-export function categoryColour(category: string | null | undefined): string {
-  return (category && CATEGORY_COLOURS[category]) || "#475569";
+/** A category's colour from the `tabs` of `GET /api/components` (change 01, section 7). */
+export function categoryColour(tabs: TabView[], category: string | null | undefined): string {
+  return tabs.find((t) => t.name === category)?.colour ?? OTHER_CATEGORY_COLOUR;
 }
 
 /** SPEC 3: same type, an `Any` input, Number/Boolean → Text, or an `Any` output. */

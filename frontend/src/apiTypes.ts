@@ -124,7 +124,10 @@ export interface ComponentEntry {
   version: string;
   origin: string;
   name: string;
+  /** The ribbon tab. */
   category: string;
+  /** The group inside the tab ("Other" for a pack component without `group:`). */
+  group: string;
   icon: string | null;
   description: string;
   inputs: PortView[];
@@ -132,6 +135,19 @@ export interface ComponentEntry {
   requires: string[];
   settings: SettingView[];
   editable_ports?: EditablePorts | null;
+}
+
+/** A ribbon tab: its centre-strip colour and its groups in order (change 01, section 7). */
+export interface TabView {
+  name: string;
+  colour: string;
+  groups: string[];
+}
+
+/** `GET /api/components`: components and Params nodes in ribbon order, and the tabs. */
+export interface Library {
+  components: ComponentEntry[];
+  tabs: TabView[];
 }
 
 export interface FileNode {

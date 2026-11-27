@@ -8,10 +8,9 @@ import type {
   PortView,
   SettingView,
 } from "../../apiTypes";
-import { store, useStore } from "../../store";
+import { store, useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
 import {
-  categoryColour,
   PARAM_SLIDER,
   PARAM_TEXT,
   PORT_COLOURS,
@@ -34,6 +33,7 @@ const WIDTH = 680;
 function Window({ view }: { view: NodeView }) {
   const id = view.id;
   const source = view.source ?? "";
+  const colour = useCategoryColour(view.category);
   const [tab, setTab] = useState<Tab>("settings");
   const [pos, setPos] = useState(() => ({
     x: Math.max(20, window.innerWidth - WIDTH - 320),
@@ -109,7 +109,7 @@ function Window({ view }: { view: NodeView }) {
         onPointerMove={onHeaderMove}
         onPointerUp={() => (drag.current = null)}
       >
-        <span className="gk-window-category" style={{ color: categoryColour(view.category) }}>
+        <span className="gk-window-category" style={{ color: colour }}>
           {view.category}
         </span>
         <span className="gk-window-title" data-testid="window-title">

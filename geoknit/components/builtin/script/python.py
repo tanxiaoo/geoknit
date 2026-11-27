@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Python
 # category: Script
+# group: Python
 # icon: python
 # description: Your own Python code. Add inputs and outputs in the component window.
 # ports: {inputs: editable, outputs: editable}

@@ -230,9 +230,31 @@ button:disabled {
 }
 .gk-buttons {
   display: flex;
-  gap: 8px;
-  padding: 10px 12px;
+  align-items: stretch;
+  gap: 0;
+  padding: 8px 4px 4px;
   flex-wrap: wrap;
+}
+.gk-ribbon-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px;
+  border-right: 1px solid var(--line);
+}
+.gk-ribbon-group:last-child {
+  border-right: 0;
+}
+.gk-ribbon-group-buttons {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gk-ribbon-group-label {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
 }
 .gk-component-button {
   display: flex;

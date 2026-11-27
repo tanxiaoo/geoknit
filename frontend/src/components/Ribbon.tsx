@@ -1,25 +1,26 @@
 import { useMemo, useState } from "react";
 import { useReactFlow } from "@xyflow/react";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search } from "lucide-react";
 import type { ComponentEntry } from "../apiTypes";
-import { allEntries, categories, matches, paramEntries } from "../catalog";
+import { groupsOf, matches, placeOf } from "../catalog";
 import { iconFor } from "../icons";
 import { store, useStore } from "../store";
 import { strings } from "../strings";
 import { categoryColour } from "../types";
 import { MIME_COMPONENT } from "./Canvas";
 
-/** Category tabs with component buttons, plus the search box (SPEC 8). */
+/** Category tabs with component buttons in labelled groups, plus the search box (SPEC 8).
+ * Tabs, groups and order come from `GET /api/components` (change 01, section 7). */
 export function Ribbon() {
   const library = useStore((s) => s.components);
-  const tabs = useMemo(() => categories(library), [library]);
-  const [tab, setTab] = useState("Params");
+  const tabs = useStore((s) => s.tabs);
+  const [picked, setPicked] = useState("Params");
   const [query, setQuery] = useState("");
   const flow = useReactFlow();
 
-  const items =
-    tab === "Params" ? paramEntries() : library.filter((c) => c.category === tab);
-  const found = query ? allEntries(library).filter((e) => matches(e, query)).slice(0, 12) : [];
+  const current = tabs.find((t) => t.name === picked) ?? tabs[0];
+  const groups = useMemo(() => (current ? groupsOf(library, current) : []), [library, current]);
+  const found = query ? library.filter((e) => matches(e, query)).slice(0, 12) : [];
 
   /** Add at the centre of the visible canvas. */
   const add = (entry: ComponentEntry) => {
@@ -36,12 +37,12 @@ export function Ribbon() {
       <div className="gk-tabs">
         {tabs.map((t) => (
           <button
-            key={t}
-            className={`gk-tab${t === tab ? " gk-tab-active" : ""}`}
-            onClick={() => setTab(t)}
-            data-testid={`tab-${t}`}
+            key={t.name}
+            className={`gk-tab${t.name === current?.name ? " gk-tab-active" : ""}`}
+            onClick={() => setPicked(t.name)}
+            data-testid={`tab-${t.name}`}
           >
-            {t === "Params" ? strings.paramsTab : t}
+            {t.name === "Params" ? strings.paramsTab : t.name}
           </button>
         ))}
         <div className="gk-spacer" />
@@ -62,7 +63,7 @@ export function Ribbon() {
               {found.length === 0 && <li className="gk-muted">{strings.noMatches}</li>}
               {found.map((e) => (
                 <li key={e.ref} onClick={() => add(e)}>
-                  {e.name} <span className="gk-muted">{e.category}</span>
+                  {e.name} <span className="gk-muted">{placeOf(e)}</span>
                 </li>
               ))}
             </ul>
@@ -70,33 +71,43 @@ export function Ribbon() {
         </div>
       </div>
       <div className="gk-buttons">
-        {items.map((e) => {
-          const Icon = e.category === "Params" ? SlidersHorizontal : iconFor(e.icon, e.category);
-          return (
-            <button
-              key={e.ref}
-              className="gk-component-button"
-              draggable
-              title={`${e.description || e.name}\n${strings.addHint}`}
-              onDragStart={(ev) => {
-                ev.dataTransfer.setData(MIME_COMPONENT, e.ref);
-                ev.dataTransfer.effectAllowed = "copy";
-              }}
-              onClick={() => add(e)}
-              data-testid={`ribbon-${e.ref}`}
-            >
-              <span className="gk-button-icon" style={{ color: categoryColour(e.category) }}>
-                <Icon size={16} />
-              </span>
-              {e.name}
-              {e.origin === "user" && (
-                <span className="gk-badge" title={strings.userComponent}>
-                  {strings.userComponent}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {groups.map(({ group, entries }) => (
+          <section className="gk-ribbon-group" key={group} data-testid={`ribbon-group-${group}`}>
+            <div className="gk-ribbon-group-buttons">
+              {entries.map((e) => {
+                const Icon = iconFor(e.icon, e.category);
+                return (
+                  <button
+                    key={e.ref}
+                    className="gk-component-button"
+                    draggable
+                    title={`${e.description || e.name}\n${strings.addHint}`}
+                    onDragStart={(ev) => {
+                      ev.dataTransfer.setData(MIME_COMPONENT, e.ref);
+                      ev.dataTransfer.effectAllowed = "copy";
+                    }}
+                    onClick={() => add(e)}
+                    data-testid={`ribbon-${e.ref}`}
+                  >
+                    <span
+                      className="gk-button-icon"
+                      style={{ color: categoryColour(tabs, e.category) }}
+                    >
+                      <Icon size={16} />
+                    </span>
+                    {e.name}
+                    {e.origin === "user" && (
+                      <span className="gk-badge" title={strings.userComponent}>
+                        {strings.userComponent}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="gk-ribbon-group-label">{group}</div>
+          </section>
+        ))}
       </div>
     </nav>
   );

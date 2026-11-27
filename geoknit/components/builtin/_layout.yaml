@@ -1,0 +1,40 @@
+# Ribbon layout of the built-in components and the Params nodes
+# (change 01, section 7): tab → group → references, in ribbon order.
+#
+# Tabs follow the fixed order Params, Maths, Sets, Table, Vector, Raster,
+# Sampling, Model, Validation, Display, Script (geoknit/components/layout.py).
+# Only what exists is listed: a component or Params node is added here by the
+# step that adds it, and tests/components/test_layout.py fails until it is.
+# A component's `category:` and `group:` header must match its place here.
+
+Params:
+  Input: [param/text, param/slider]
+  Inspect: [param/panel]
+  # Moves to Display › Map in change 03.
+  Map: [param/map]
+
+Vector:
+  Files: [builtin/vector/read_vector, builtin/vector/write_vector]
+  CRS: [builtin/vector/reproject]
+
+Raster:
+  Files: [builtin/raster/read_raster, builtin/raster/write_raster]
+  Bands: [builtin/raster/band_select]
+  Calculate: [builtin/raster/reclassify]
+  Extent: [builtin/raster/clip, builtin/raster/align_raster]
+
+Sampling:
+  Draw: [builtin/sampling/random_sample, builtin/sampling/stratified_sample]
+  Split: [builtin/sampling/split_points, builtin/sampling/train_test_split]
+  Extract: [builtin/sampling/extract_values]
+
+Model:
+  Train: [builtin/model/random_forest, builtin/model/svm]
+  Apply: [builtin/model/predict_raster]
+
+Validation:
+  Classification: [builtin/validation/confusion_matrix]
+  Regression: [builtin/validation/accuracy]
+
+Script:
+  Python: [builtin/script/python]

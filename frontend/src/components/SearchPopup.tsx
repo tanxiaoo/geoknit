@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentEntry } from "../apiTypes";
-import { allEntries, fittingPort, matches, type WireFrom } from "../catalog";
+import { fittingPort, matches, placeOf, type WireFrom } from "../catalog";
 import { iconFor } from "../icons";
 import { useStore } from "../store";
 import { strings } from "../strings";
@@ -17,13 +17,14 @@ interface Props {
 /** Component search at the cursor (double-click canvas, or a wire dropped in empty space). */
 export function SearchPopup({ x, y, from, onPick, onClose }: Props) {
   const library = useStore((s) => s.components);
+  const tabs = useStore((s) => s.tabs);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   const list = useMemo(
     () =>
-      allEntries(library)
+      library
         .filter((e) => matches(e, query))
         .filter((e) => !from || fittingPort(e, from) !== null)
         .slice(0, 30),
@@ -69,11 +70,11 @@ export function SearchPopup({ x, y, from, onPick, onClose }: Props) {
               onClick={() => onPick(e)}
               data-testid={`search-item-${e.ref}`}
             >
-              <span className="gk-search-icon" style={{ background: categoryColour(e.category) }}>
+              <span className="gk-search-icon" style={{ background: categoryColour(tabs, e.category) }}>
                 <Icon size={13} />
               </span>
               <span>{e.name}</span>
-              <span className="gk-muted">{e.category}</span>
+              <span className="gk-muted">{placeOf(e)}</span>
             </li>
           );
         })}

@@ -29,6 +29,7 @@ from geoknit.core.component import (
     ComponentParseError,
     ComponentSpec,
     LibraryEntry,
+    Port,
     parse_component,
 )
 
@@ -159,27 +160,32 @@ class Registry:
                     "origin": item.origin,
                     "name": spec.name,
                     "category": spec.category,
+                    "group": spec.group,
                     "icon": spec.icon,
                     "description": spec.description,
-                    "inputs": [
-                        {"name": p.name, "type": p.type, "types": list(p.types), "access": p.access}
-                        for p in spec.inputs.values()
-                    ],
-                    "outputs": [
-                        {
-                            "name": p.name,
-                            "type": p.type,
-                            "types": list(p.types),
-                            "like": p.like,
-                            "access": p.access,
-                        }
-                        for p in spec.outputs.values()
-                    ],
+                    "inputs": [input_view(p) for p in spec.inputs.values()],
+                    "outputs": [output_view(p) for p in spec.outputs.values()],
                     "requires": list(spec.requires),
                     "editable_ports": spec.ports.as_dict() if spec.ports else None,
                 }
             )
         return out
+
+
+def input_view(p: Port) -> dict[str, Any]:
+    """An input as ``GET /api/components`` lists it."""
+    return {"name": p.name, "type": p.type, "types": list(p.types), "access": p.access}
+
+
+def output_view(p: Port) -> dict[str, Any]:
+    """An output as ``GET /api/components`` lists it."""
+    return {
+        "name": p.name,
+        "type": p.type,
+        "types": list(p.types),
+        "like": p.like,
+        "access": p.access,
+    }
 
 
 def default_registry(

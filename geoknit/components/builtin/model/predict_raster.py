@@ -1,6 +1,7 @@
 # geoknit: component
 # name: Predict Raster
 # category: Model
+# group: Apply
 # icon: predict
 # description: Apply a model to every pixel of a raster, window by window.
 # inputs:

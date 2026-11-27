@@ -251,12 +251,21 @@ class _Exporter:
 
     # ── inputs ──
     def wired_value(self, node: Node, port: str) -> str:
+        """The argument for an input; a list input gets ``[*a, b, *c]`` in wire order
+        (a list wire adds its elements, any other wire one element, SPEC 3)."""
         wires = self.graph.wires_into(node.id, port)
         in_types = node.inputs[port].types
-        values = [self._convert(self.exprs[(w.src, w.src_port)], w, in_types) for w in wires]
-        if node.inputs[port].access == "list":
-            return "[" + ", ".join(values) + "]"
-        return values[0]
+        if node.inputs[port].access != "list":
+            return self._convert(self.exprs[(wires[0].src, wires[0].src_port)], wires[0], in_types)
+        values: list[str] = []
+        for w in wires:
+            expr = self.exprs[(w.src, w.src_port)]
+            if self.graph.output_is_list(w.src, w.src_port):
+                each = self._convert("_v", w, in_types)
+                values.append(f"*{expr}" if each == "_v" else f"*[{each} for _v in {expr}]")
+            else:
+                values.append(self._convert(expr, w, in_types))
+        return "[" + ", ".join(values) + "]"
 
     def _convert(self, expr: str, wire: Any, in_types: tuple[str, ...]) -> str:
         """Number/Boolean → Text wires get ``str()`` (SPEC 3), like ``convert_for_input``."""
@@ -335,7 +344,9 @@ class _Exporter:
         else:
             text = head + indent(body)
         if outputs:
-            text += f"{INDENT}return {', '.join(outputs)}\n"
+            # List outputs are plain lists, as in GeoKnit (a tuple is converted).
+            returned = [f"list({p})" if spec.outputs[p].access == "list" else p for p in outputs]
+            text += f"{INDENT}return {', '.join(returned)}\n"
         for port in outputs:
             var = f"{self.names[node.id]}_{port}"
             # An output named like its component (Half → half) must not hide the function.

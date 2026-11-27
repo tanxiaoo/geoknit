@@ -152,11 +152,16 @@ class InProcessExecutor:
             wires = self.graph.wires_into(node.id, name)
             if not wires:
                 continue
-            values = []
+            values: list[Any] = []
             for w in wires:
                 if w.src not in self.results or self.solver.states.get(w.src) != DONE:
                     raise _MissingInput(f'input "{name}": {w.src} has no result yet; run it first')
-                values.append(types.convert_for_input(self.results[w.src][w.src_port], port.types))
+                value = self.results[w.src][w.src_port]
+                if port.access == "list" and self.graph.output_is_list(w.src, w.src_port):
+                    # A list wire adds all its elements (decided by the port, SPEC 3).
+                    values.extend(types.convert_for_input(v, port.types) for v in value)
+                else:
+                    values.append(types.convert_for_input(value, port.types))
             inputs[name] = values if port.access == "list" else values[0]
         return inputs
 

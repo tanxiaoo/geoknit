@@ -65,16 +65,16 @@ touches.
 
 ## Step 3: List values
 
-- [ ] Header: `access: list` on outputs (`_parse_ports`, `_port_line`);
+- [x] Header: `access: list` on outputs (`_parse_ports`, `_port_line`);
       element type checks on list outputs and list inputs
-- [ ] Worker and in-process executor: list inputs concatenate single and
+- [x] Worker and in-process executor: list inputs concatenate single and
       list wires in order (by source port)
-- [ ] Refuse list output → item input with the spec message; `Any` item
+- [x] Refuse list output → item input with the spec message; `Any` item
       inputs (Panel) take the list whole
-- [ ] Cache: list folder format with `index.json`; single JSON for simple
+- [x] Cache: list folder format with `index.json`; single JSON for simple
       types; `written_rasters` handles list elements
-- [ ] Panel and hover summaries for lists; double-line ports and wires
-- [ ] Export: lists and `[*a, b, *c]` inputs
+- [x] Panel and hover summaries for lists; double-line ports and wires
+- [x] Export: lists and `[*a, b, *c]` inputs
 
 **Done when** (pytest):
 - a component returning `[3, 1, 2]` as `list Number` feeds a list input

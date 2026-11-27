@@ -2,7 +2,7 @@ import type { NodeProps } from "@xyflow/react";
 import { iconFor } from "../../icons";
 import { useStore } from "../../store";
 import { strings } from "../../strings";
-import { categoryColour, needsRun, portTypes } from "../../types";
+import { carriesList, categoryColour, needsRun, portTypes } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
 
@@ -25,7 +25,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<GkNode>) {
       <div className="gk-col gk-inputs">
         {view.inputs.map((p) => (
           <div className="gk-port-row" key={p.name}>
-            <Port nodeId={id} side="in" name={p.name} types={portTypes(p)} />
+            <Port nodeId={id} side="in" name={p.name} types={portTypes(p)} list={carriesList(p)} />
             <span>{p.name}</span>
           </div>
         ))}
@@ -44,7 +44,7 @@ export function ComponentNode({ id, data, selected }: NodeProps<GkNode>) {
         {view.outputs.map((p) => (
           <div className="gk-port-row" key={p.name}>
             <span>{p.name}</span>
-            <Port nodeId={id} side="out" name={p.name} types={portTypes(p)} />
+            <Port nodeId={id} side="out" name={p.name} types={portTypes(p)} list={carriesList(p)} />
           </div>
         ))}
       </div>

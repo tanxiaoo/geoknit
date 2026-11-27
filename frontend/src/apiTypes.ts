@@ -27,6 +27,9 @@ export interface PortView {
   like?: string | null;
   /** Output only (`/api/graph`): the type the graph resolved, null while unresolved. */
   resolved_type?: PortType | null;
+  /** Output only (`/api/graph`): "list" when the output carries a list, also a Panel
+   * passing one through (SPEC 3 "List values"). */
+  resolved_access?: "item" | "list";
 }
 
 export interface SettingView {

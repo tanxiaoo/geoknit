@@ -295,3 +295,35 @@ def test_ports_carry_types_like_and_resolved_type(client: TestClient) -> None:
     assert _wire(client, text, "value", up, "text").status_code == 201
     graph = client.get("/api/graph").json()
     assert graph["nodes"][up]["outputs"][0]["resolved_type"] == "Text"  # a plain output
+
+
+NUMBERS = """\
+# geoknit: component
+# name: Numbers
+# category: Test
+# outputs:
+#   values: {type: Number, access: list}
+
+# --- code ---
+values = [3, 1, 2]
+"""
+
+
+def test_outputs_say_whether_they_carry_a_list(client: TestClient) -> None:
+    comps = {c["ref"]: c for c in client.get("/api/components").json()}
+    assert all(p["access"] == "item" for p in comps["builtin/raster/reclassify"]["outputs"])
+
+    nums = _add(client, "inline", source=NUMBERS)
+    panel = _add(client, "param/panel")
+    up = _add(client, "inline", source=UPPER)
+    r = _wire(client, nums, "values", up, "text")
+    assert r.status_code == 400
+    assert r.json()["detail"] == 'Numbers gives a list; "text" takes one value — use List Item'
+    assert _wire(client, nums, "values", panel, "data").status_code == 201
+    nodes = client.get("/api/graph").json()["nodes"]
+    (out,) = nodes[nums]["outputs"]
+    assert out["access"] == "list" and out["resolved_access"] == "list"
+    (through,) = nodes[panel]["outputs"]
+    assert through["access"] == "item" and through["resolved_access"] == "list"
+    assert through["resolved_type"] == "Number"
+    assert nodes[up]["outputs"][0]["resolved_access"] == "item"

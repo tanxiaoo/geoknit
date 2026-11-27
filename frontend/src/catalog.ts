@@ -1,15 +1,16 @@
 // What can be added to the canvas: Params nodes plus the component library.
 
-import type { ComponentEntry, PortType } from "./apiTypes";
+import type { ComponentEntry, PortType, PortView } from "./apiTypes";
 import { strings } from "./strings";
 import {
   CATEGORY_ORDER,
-  canConnectAny,
+  carriesList,
   PARAM_MAP,
   PARAM_PANEL,
   PARAM_SLIDER,
   PARAM_TEXT,
   portTypes,
+  wireError,
 } from "./types";
 
 const PORT_NAMES: Record<string, string> = {
@@ -73,12 +74,21 @@ export interface WireFrom {
   port: string;
   side: "in" | "out";
   types: PortType[];
+  /** The port carries a list: a list output, or an `access: list` input. */
+  list?: boolean;
 }
 
 /** The port on ``entry`` that fits ``from``, or null. */
 export function fittingPort(entry: ComponentEntry, from: WireFrom): string | null {
+  const list = from.list ?? false;
   if (from.side === "out") {
-    return entry.inputs.find((p) => canConnectAny(from.types, portTypes(p)))?.name ?? null;
+    const src = { title: "", types: from.types, list };
+    const fits = (p: PortView) =>
+      !wireError(src, { name: p.name, types: portTypes(p), access: p.access });
+    return entry.inputs.find(fits)?.name ?? null;
   }
-  return entry.outputs.find((p) => canConnectAny(portTypes(p), from.types))?.name ?? null;
+  const dst = { name: from.port, types: from.types, access: list ? "list" : "item" } as const;
+  const fits = (p: PortView) =>
+    !wireError({ title: "", types: portTypes(p), list: carriesList(p) }, dst);
+  return entry.outputs.find(fits)?.name ?? null;
 }

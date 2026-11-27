@@ -76,6 +76,10 @@ export const strings = {
   renameGroup: "Double-click to rename",
   notRunYet: "run to see what this carries",
   cantConnect: (from: string, to: string) => `${from} can't connect to ${to}`,
+  listIntoItem: (title: string, input: string) =>
+    `${title} gives a list; "${input}" takes one value — use List Item`,
+  listOf: (types: string) => `list of ${types}`,
+  moreItems: (n: number) => `… ${n} more`,
   sliderMin: "min",
   sliderMax: "max",
   sliderStep: "step",

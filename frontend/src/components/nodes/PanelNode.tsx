@@ -1,7 +1,7 @@
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { store, useStore } from "../../store";
 import { strings } from "../../strings";
-import { portTypes } from "../../types";
+import { carriesList, portTypes } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
 
@@ -12,6 +12,9 @@ export function PanelNode({ id, data, selected }: NodeProps<GkNode>) {
   const text = useStore((s) => s.summaries[id]?.data);
   const error = useStore((s) => s.errors[id]);
   const state = view.state ?? "never_run";
+  const out = view.outputs[0];
+  // A list passes through whole (SPEC 3 "List values"): both ends are drawn as a list.
+  const list = out ? carriesList(out) : false;
   const body = !wired
     ? strings.panelEmpty
     : state === "done" && text !== undefined
@@ -31,7 +34,7 @@ export function PanelNode({ id, data, selected }: NodeProps<GkNode>) {
           void store.patchNode(id, { size: [Math.round(p.width), Math.round(p.height)] })
         }
       />
-      <Port nodeId={id} side="in" name="data" types={["Any"]} />
+      <Port nodeId={id} side="in" name="data" types={["Any"]} list={list} />
       <pre className="nowheel gk-panel-text" data-testid={`panel-text-${id}`}>
         {body}
       </pre>
@@ -39,7 +42,8 @@ export function PanelNode({ id, data, selected }: NodeProps<GkNode>) {
         nodeId={id}
         side="out"
         name="data"
-        types={view.outputs[0] ? portTypes(view.outputs[0]) : ["Any"]}
+        types={out ? portTypes(out) : ["Any"]}
+        list={list}
       />
     </div>
   );

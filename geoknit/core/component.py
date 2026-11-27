@@ -62,6 +62,8 @@ class Port:
     type: str
     """The first listed type (the only one for an ordinary port)."""
     access: str = "item"
+    """``item`` or ``list``. A list input collects several wires (concatenated); a list
+    output carries a Python list whose elements have ``type`` (SPEC 3)."""
     file: str | None = None
     """``"write"`` for a Text input naming a file the component writes (not fingerprinted)."""
     types: tuple[str, ...] = ()
@@ -191,8 +193,8 @@ def parse_component(source: str) -> ComponentSpec:
     header = _parse_header(lines, blocks.header_end)
     settings = _parse_settings(lines, blocks)
 
-    inputs = _parse_ports(header.get("inputs"), "inputs", allow_list=True)
-    outputs = _parse_ports(header.get("outputs"), "outputs", allow_list=False, inputs=inputs)
+    inputs = _parse_ports(header.get("inputs"), "inputs", is_input=True)
+    outputs = _parse_ports(header.get("outputs"), "outputs", is_input=False, inputs=inputs)
     clash = set(inputs) & set(outputs)
     if clash:
         raise ComponentParseError(
@@ -237,9 +239,9 @@ def _parse_header(lines: list[str], header_end: int) -> dict[str, Any]:
 
 
 def _parse_ports(
-    raw: object, key: str, *, allow_list: bool, inputs: Mapping[str, Port] | None = None
+    raw: object, key: str, *, is_input: bool, inputs: Mapping[str, Port] | None = None
 ) -> dict[str, Port]:
-    """Parse ``inputs:`` (``allow_list``) or ``outputs:`` (``inputs`` given, for ``like:``)."""
+    """Parse ``inputs:`` (``is_input``) or ``outputs:`` (``inputs`` given, for ``like:``)."""
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -262,12 +264,13 @@ def _parse_ports(
         if like is not None:
             port_types = _like_types(key, name, like, type_spec, inputs)
         else:
-            port_types = _port_types(key, name, type_spec, allow_union=allow_list)
+            port_types = _port_types(key, name, type_spec, allow_union=is_input)
         type_name = port_types[0]
-        if access not in ("item", "list") or (access == "list" and not allow_list):
+        # Inputs: ``list`` collects several wires; outputs: ``list`` carries a list (SPEC 3).
+        if access not in ("item", "list"):
             raise ComponentParseError(f'{key}: "{name}" has invalid access "{access}"')
         if file_role is not None:
-            if not allow_list or file_role not in FILE_ROLES or port_types != (types.TEXT,):
+            if not is_input or file_role not in FILE_ROLES or port_types != (types.TEXT,):
                 raise ComponentParseError(
                     f'{key}: "{name}": "file: write" is only allowed on a Text input'
                 )
@@ -564,8 +567,9 @@ def run_component(
             if not isinstance(value, list):
                 result.error = f'input "{name}" expects a list'
                 return result
-            continue
-        problem = types.check_value(port.types, value)
+            problem = types.check_items(port.types, value)
+        else:
+            problem = types.check_value(port.types, value)
         if problem:
             result.error = f'input "{name}": {problem}'
             return result
@@ -598,7 +602,17 @@ def run_component(
             return result
         value = types.as_output(namespace[name])
         expected = (output_types or {}).get(name) or port.types
-        problem = types.check_value(expected, value)
+        if port.access == "list":
+            if isinstance(value, tuple):
+                value = list(value)
+            if isinstance(value, list):
+                value = [types.as_output(v) for v in value]
+                problem = types.check_items(expected, value)
+            else:
+                shown = types.type_of(value) or types.python_type_name(value)
+                problem = f"expected a list of {types.type_label(expected)}, got {shown}"
+        else:
+            problem = types.check_value(expected, value)
         if problem:
             result.error = f'output "{name}": {problem}'
             return result

@@ -129,10 +129,14 @@ class Worker:
                 port = spec.inputs.get(name)
                 if port is None:
                     raise _MissingInput(f'unknown input "{name}"')
-                values = [
-                    types.convert_for_input(self._lookup(k, name), port.types)
-                    for k in ([wired] if isinstance(wired, str) else wired)
-                ]
+                values: list[Any] = []
+                for k in [wired] if isinstance(wired, str) else wired:
+                    value = self._lookup(k, name)
+                    if port.access == "list" and k in msg.list_keys:
+                        # A list wire adds all its elements (decided by the port, SPEC 3).
+                        values.extend(types.convert_for_input(v, port.types) for v in value)
+                    else:
+                        values.append(types.convert_for_input(value, port.types))
                 inputs[name] = values if port.access == "list" else values[0]
         except _MissingInput as exc:
             self.send(p.Error(nid, str(exc)))

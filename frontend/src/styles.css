@@ -522,6 +522,19 @@ button:disabled {
 .gk-handle.gk-misfit {
   opacity: 0.25;
 }
+/* A port carrying a list: a second ring outside the white one (SPEC 3 "List values"). */
+.gk-handle.gk-list {
+  box-shadow: 0 0 0 1.5px var(--gk-port, #64748b);
+}
+.gk-handle.gk-list.gk-fits {
+  box-shadow:
+    0 0 0 1.5px var(--gk-port, #64748b),
+    0 0 0 4.5px #86efac;
+}
+/* A wire carrying a list: the canvas colour down the middle of a wide stroke. */
+.gk-wire-gap {
+  stroke: var(--canvas-bg);
+}
 
 /* text node */
 .gk-text {

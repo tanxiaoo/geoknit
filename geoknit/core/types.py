@@ -375,6 +375,18 @@ def check_value(expected: str | tuple[str, ...] | list[str], value: object) -> s
     return f"expected {type_label(allowed)}, got {shown}"
 
 
+def check_items(expected: str | tuple[str, ...] | list[str], values: list[Any]) -> str | None:
+    """``check_value`` for every element of a list value: ``item 2: expected Raster, …``.
+
+    Indices are 0-based, as the Panel shows them.
+    """
+    for i, value in enumerate(values):
+        problem = check_value(expected, value)
+        if problem:
+            return f"item {i}: {problem}"
+    return None
+
+
 # ── Connection rules ─────────────────────────────────────────────────────────
 
 
@@ -462,10 +474,25 @@ def describe(value: object) -> str:
         assert isinstance(value, ModelBundle)
         return _describe_model(value)
     if isinstance(value, list):
-        return "\n".join(
-            [f"list of {len(value)}"] + [f"[{i}] {describe(v)}" for i, v in enumerate(value)]
-        )
+        return _describe_list(value)
     return f"{python_type_name(value)}: {value!r}"[:500]
+
+
+LIST_SHOWN = 50
+"""Elements of a list that ``describe()`` (and the Panel) show, one line each."""
+
+
+def _describe_list(values: list[Any]) -> str:
+    """``list of 3 Number`` then one line per element (first line of its summary)."""
+    kinds = {type_of(v) for v in values}
+    kind = next(iter(kinds)) if len(kinds) == 1 else None
+    lines = [f"list of {len(values)}" + (f" {kind}" if kind is not None else "")]
+    for i, v in enumerate(values[:LIST_SHOWN]):
+        first = describe(v).split("\n", 1)[0]
+        lines.append(f"[{i}] {first}")
+    if len(values) > LIST_SHOWN:
+        lines.append(f"… {len(values) - LIST_SHOWN} more")
+    return "\n".join(lines)
 
 
 def raster_band_names(da: Any) -> list[str]:

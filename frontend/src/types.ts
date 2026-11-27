@@ -80,6 +80,49 @@ export function connectionError(outs: PortType[], ins: PortType[]): string | nul
   return canConnectAny(outs, ins) ? null : strings.cantConnect(typeLabel(outs), typeLabel(ins));
 }
 
+/** SPEC 3 "List values": an output carrying a list (`resolved_access` from `/api/graph`,
+ * so a Panel passing a list through counts; else `access`), or an `access: list` input. */
+export function carriesList(p: PortView): boolean {
+  return (p.resolved_access ?? p.access) === "list";
+}
+
+/** The output end of a wire being checked. */
+export interface WireSource {
+  /** Node title, for the list refusal ("Numbers gives a list; …"). */
+  title: string;
+  types: PortType[];
+  list: boolean;
+}
+
+/** The input end of a wire being checked. */
+export interface WireTarget {
+  name: string;
+  types: PortType[];
+  access: "item" | "list";
+}
+
+/** Why a wire is refused, as the server words it (type mismatch first), or null if it fits.
+ * A list output only goes into a list input, or into an `Any` item input (Panel) whole. */
+export function wireError(src: WireSource, dst: WireTarget): string | null {
+  const problem = connectionError(src.types, dst.types);
+  if (problem) return problem;
+  const anyItem = dst.types.length === 1 && dst.types[0] === "Any";
+  if (src.list && dst.access === "item" && !anyItem) {
+    return strings.listIntoItem(src.title, dst.name);
+  }
+  return null;
+}
+
+/** A list summary cut for a tooltip: its first line and the first few items. */
+export function tipSummary(summary: string, keep = 5): string {
+  const lines = summary.split("\n");
+  const head = /^list of (\d+)/.exec(lines[0] ?? "");
+  if (!head) return summary;
+  const items = lines.slice(1).filter((l) => l.startsWith("["));
+  if (items.length <= keep) return summary;
+  return [lines[0], ...items.slice(0, keep), strings.moreItems(Number(head[1]) - keep)].join("\n");
+}
+
 /** Nodes that still need a run show the orange dot. */
 export function needsRun(state: NodeState | null | undefined): boolean {
   return state !== "done" && state !== "running";

@@ -323,13 +323,25 @@ class WorkerExecutor:
             return True
 
         inputs: dict[str, str | list[str]] = {}
+        list_keys: set[str] = set()
         for name, upstream in keys.inputs[nid].items():
-            inputs[name] = upstream if node.inputs[name].access == "list" else upstream[0]
+            if node.inputs[name].access == "list":
+                inputs[name] = upstream
+                wires = self.graph.wires_into(nid, name)  # same order as ``upstream``
+                list_keys.update(
+                    k
+                    for k, w in zip(upstream, wires, strict=True)
+                    if self.graph.output_is_list(w.src, w.src_port)
+                )
+            else:
+                inputs[name] = upstream[0]
         node_key = keys.nodes[nid]
         assert node_key is not None
         try:
             output_types = self.graph.resolved_output_types(nid)
-            self._send(p.RunNode(nid, node.source, inputs, node_key, output_types))
+            self._send(
+                p.RunNode(nid, node.source, inputs, node_key, output_types, frozenset(list_keys))
+            )
             while True:
                 msg = self._recv()
                 if isinstance(msg, p.Started):

@@ -16,7 +16,14 @@ import type { ComponentEntry, GraphView, GroupJson, PortType } from "../apiTypes
 import { fittingPort, type WireFrom } from "../catalog";
 import { store, useStore } from "../store";
 import { strings } from "../strings";
-import { needsRun, PARAM_TEXT, PORT_COLOURS, portTypes as viewTypes } from "../types";
+import {
+  carriesList,
+  needsRun,
+  PARAM_PANEL,
+  PARAM_TEXT,
+  PORT_COLOURS,
+  portTypes as viewTypes,
+} from "../types";
 import { ComponentNode } from "./nodes/ComponentNode";
 import { nodeKind, PANEL_SIZE, type GkNode } from "./nodes/kinds";
 import { MapNode } from "./nodes/MapNode";
@@ -75,6 +82,17 @@ function portTypes(graph: GraphView, nodeId: string, side: "in" | "out", name: s
   return port ? viewTypes(port) : ["Any"];
 }
 
+/** Whether a port carries a list (SPEC 3 "List values"); a Panel's input follows its output. */
+function portList(graph: GraphView, nodeId: string, side: "in" | "out", name: string): boolean {
+  const view = graph.nodes[nodeId];
+  if (!view) return false;
+  if (side === "in" && view.component === PARAM_PANEL) {
+    return view.outputs[0] ? carriesList(view.outputs[0]) : false;
+  }
+  const port = (side === "in" ? view.inputs : view.outputs).find((p) => p.name === name);
+  return port ? carriesList(port) : false;
+}
+
 function toEdges(graph: GraphView, previous: GkEdge[]): GkEdge[] {
   const selected = new Set(previous.filter((e) => e.selected).map((e) => e.id));
   return graph.workflow.wires.map((w) => {
@@ -89,6 +107,7 @@ function toEdges(graph: GraphView, previous: GkEdge[]): GkEdge[] {
       selected: selected.has(id),
       data: {
         colour: PORT_COLOURS[portTypes(graph, w.from[0], "out", w.from[1])[0]],
+        list: portList(graph, w.from[0], "out", w.from[1]),
         faded: needsRun(graph.nodes[w.to[0]]?.state),
       },
     };
@@ -189,10 +208,14 @@ export function Canvas() {
     (_: unknown, p: OnConnectStartParams) => {
       if (!graph || !p.nodeId || !p.handleId) return;
       const side = p.handleType === "source" ? "out" : "in";
+      const name = portName(p.handleId);
       setDrag({
         nodeId: p.nodeId,
         side,
-        types: portTypes(graph, p.nodeId, side, portName(p.handleId)),
+        types: portTypes(graph, p.nodeId, side, name),
+        name,
+        title: graph.nodes[p.nodeId]?.title ?? "",
+        list: portList(graph, p.nodeId, side, name),
       });
     },
     [graph],
@@ -219,7 +242,7 @@ export function Canvas() {
       setSearch({
         screen: local(point.clientX, point.clientY),
         flow: flow.screenToFlowPosition({ x: point.clientX, y: point.clientY }),
-        from: { nodeId: from.nodeId, port, side: from.side, types: from.types },
+        from: { nodeId: from.nodeId, port, side: from.side, types: from.types, list: from.list },
       });
     },
     [drag, graph, flow],

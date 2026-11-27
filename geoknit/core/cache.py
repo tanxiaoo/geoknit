@@ -262,12 +262,14 @@ class DiskCache:
 
         After writing a computed raster (e.g. a lazy prediction), the worker
         swaps its in-memory value for this file view, so downstream nodes read
-        the COG instead of computing the raster again.
+        the COG instead of computing the raster again. A list port with a COG
+        element is read back whole (its other elements are cheap: lazy views or
+        small values).
         """
         entry = self._entry(node_key)
         out: dict[str, Any] = {}
         for port, info in self.meta(node_key).get("ports", {}).items():
-            if info.get("type") == types.RASTER and info.get("format") == "cog":
+            if _has_cog(entry, info):
                 out[port] = _read_value(entry, info)
         return out
 
@@ -397,9 +399,57 @@ class DiskCache:
 # ── per-type formats ──
 
 
+JSON_TYPES = (types.NUMBER, types.TEXT, types.BOOLEAN, types.COLOR, types.COLORMAP)
+"""Types stored as JSON (one ``{"value": …}`` file, also for a whole list of them)."""
+
+LIST_INDEX = "index.json"
+
+
+def _write_list(entry: Path, port: str, items: list[Any]) -> dict[str, Any]:
+    """A list output (SPEC 6): one JSON file when every element is the same simple
+    type, else a folder ``<port>/`` with one file per element plus ``index.json``."""
+    kinds = {types.type_of(v) for v in items}
+    kind = next(iter(kinds)) if len(kinds) == 1 else None
+    info: dict[str, Any] = {"type": kind, "access": "list", "count": len(items)}
+    if not items or kind in JSON_TYPES:
+        name = f"{port}.json"
+        data = [types.to_json_value(types.as_output(v)) for v in items]
+        (entry / name).write_text(json.dumps({"value": data}), encoding="utf-8")
+        return {**info, "file": name, "format": "json"}
+    folder = entry / port
+    folder.mkdir()
+    elements = [_write_value(folder, str(i), v) for i, v in enumerate(items)]
+    (folder / LIST_INDEX).write_text(json.dumps({"items": elements}), encoding="utf-8")
+    return {**info, "file": f"{port}/{LIST_INDEX}", "format": "list"}
+
+
+def _read_list(entry: Path, info: dict[str, Any]) -> list[Any]:
+    path = entry / info["file"]
+    if info["format"] == "json":
+        data = json.loads(path.read_text(encoding="utf-8"))["value"]
+        return [types.from_json_value(info.get("type") or "", d) for d in data]
+    if info["format"] != "list":
+        raise CacheMiss(f"unknown list format {info['format']}")
+    index = json.loads(path.read_text(encoding="utf-8"))
+    return [_read_value(path.parent, item) for item in index["items"]]
+
+
+def _has_cog(entry: Path, info: dict[str, Any]) -> bool:
+    """Whether a port (or an element of a list port) is a raster stored as a COG."""
+    if info.get("access") == "list":
+        if info.get("format") != "list":
+            return False
+        path = entry / info["file"]
+        index = json.loads(path.read_text(encoding="utf-8"))
+        return any(_has_cog(path.parent, item) for item in index["items"])
+    return info.get("type") == types.RASTER and info.get("format") == "cog"
+
+
 def _write_value(entry: Path, port: str, value: Any) -> dict[str, Any]:
+    if isinstance(value, list):
+        return _write_list(entry, port, value)
     kind = types.type_of(value)
-    if kind in (types.NUMBER, types.TEXT, types.BOOLEAN, types.COLOR, types.COLORMAP):
+    if kind in JSON_TYPES:
         name = f"{port}.json"
         data = types.to_json_value(types.as_output(value))
         (entry / name).write_text(json.dumps({"value": data}), encoding="utf-8")
@@ -427,6 +477,8 @@ def _write_value(entry: Path, port: str, value: Any) -> dict[str, Any]:
 
 
 def _read_value(entry: Path, info: dict[str, Any]) -> Any:
+    if info.get("access") == "list":
+        return _read_list(entry, info)
     path = entry / info["file"]
     fmt = info["format"]
     if fmt == "json":

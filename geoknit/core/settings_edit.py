@@ -235,14 +235,15 @@ def _port_line(port: Mapping[str, Any], key: str) -> str:
     access = port.get("access") or "item"
     file_role = port.get("file")
     like = port.get("like")
+    if access not in ("item", "list"):
+        raise ValueError(f'port "{name}": access must be item or list')
     if like:
-        if access != "item" or file_role:
-            raise ValueError(f'output "{name}" cannot combine like: with other keys yet')
-        return f"{name}: {{like: {like}}}"
+        if key != "outputs" or file_role:
+            raise ValueError(f'port "{name}": like: is only for outputs, without file:')
+        tail = ", access: list" if access == "list" else ""
+        return f"{name}: {{like: {like}{tail}}}"
     extra: list[str] = []
     if access != "item":
-        if key != "inputs":
-            raise ValueError(f'output "{name}" cannot take a list')
         extra.append(f"access: {access}")
     if file_role:
         extra.append(f"file: {file_role}")

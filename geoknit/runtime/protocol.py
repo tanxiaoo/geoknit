@@ -20,6 +20,9 @@ class RunNode:
     port keys (wire order) for a ``list`` input. Settings are part of ``source``.
     ``output_types`` holds the types the graph resolved for ``like:`` outputs
     (the worker does not know the graph); the outputs are checked against them.
+    ``list_keys`` names the port keys of ``list`` inputs that come from list
+    outputs: their elements are concatenated into the input, where any other
+    key adds one element (SPEC 3 "List values").
     """
 
     node_id: str
@@ -27,6 +30,7 @@ class RunNode:
     inputs: dict[str, str | list[str]]
     cache_key: str
     output_types: dict[str, str] = field(default_factory=dict)
+    list_keys: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

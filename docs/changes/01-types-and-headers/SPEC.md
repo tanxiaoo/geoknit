@@ -242,6 +242,55 @@ Python list, not its elements). This change lets a wire carry a list.
 - Export: list outputs are plain Python lists; list inputs receive
   `[*a, b, *c]` built in wire order (today `wired_value` builds `[a, b, c]`).
 
+Details settled while building step 3:
+
+- Element indices in messages are 0-based, as the Panel shows them:
+  `input "rasters": item 2: expected Raster, got Vector`; an output that is
+  not a list: `output "values": expected a list of Number, got Number`.
+- `Graph.output_is_list(node, port)` says whether an output carries a list:
+  an `access: list` output, or a `like:` output of an `item` input fed by a
+  list (a Panel passing one through, also through chains of Panels). The
+  refusal uses the source node's title:
+  `Numbers gives a list; "x" takes one value — use List Item`. A type
+  mismatch is reported first.
+- The worker does not know the graph, so `RunNode` gets
+  `list_keys: frozenset[str]`: the port keys of list inputs that come from
+  list outputs (their elements are concatenated; any other key adds one
+  element).
+- `describe()` of a list: first line `list of 3 Number` when every element
+  has the same type, `list of 3` otherwise (`list of 0` when empty); then
+  `[i] ` and the first line of each element's `describe()`, for the first 50;
+  then `… N more`.
+- Cache `meta.json` port info of a list: `{type: <element type or null>,
+  access: "list", count, file, format}`. `format: "json"` is the single
+  `<port>.json` (`{"value": [...]}`), used when every element has the same
+  JSON type (Number, Text, Boolean, Color, Colormap) and for an empty list;
+  otherwise `format: "list"` with `file: "<port>/index.json"`
+  (`{"items": [<element info>, ...]}`) and one file per element named by its
+  index. The cache format number is unchanged (single-value entries keep
+  their layout).
+- Until change 03 addresses list elements (`<key>[i]`), the Map Viewer
+  reports a list wired into it as unsupported ("a list of Raster cannot be
+  shown on a map") and the tile, GeoJSON and inspect routes answer `404`.
+- API: outputs in `GET /api/components` carry `access`; outputs in
+  `GET /api/graph` also carry `resolved_access` (`"list"` or `"item"`, from
+  `output_is_list`), so a Panel passing a list through is drawn as a list.
+- Export: a list output is returned as `list(x)` (a tuple becomes a list as
+  in GeoKnit); a list wire that needs the Number/Boolean → Text conversion is
+  spread as `*[str(_v) for _v in a]`.
+- Frontend, drawn as a list (double line): an output whose `resolved_access`
+  is `"list"` (`/api/graph`; `access` for `/api/components` entries), an
+  `access: list` input (also Map Viewer's `layers`), and a Panel's input when
+  its output carries a list. A list port's dot gets a second ring in its
+  type's colour outside the white one; a list wire is a wider stroke with the
+  canvas colour drawn down its middle. Wires take the source output's flag.
+- Frontend drag checks (`wireError` in `types.ts`) give the server's
+  messages, type mismatch first; the search popup for a wire dropped in empty
+  space only offers ports that pass the same check.
+- Hover: a list port's heading is `values: list of Number`; the tooltip
+  shows the summary's first line and its first 5 items, then `… N more`.
+  The Panel shows the whole summary (`describe()`'s 50 items).
+
 ## 6. Editable ports outside the Script tab (SPEC 4)
 
 The Python component can add, remove and rename ports. Today that is a

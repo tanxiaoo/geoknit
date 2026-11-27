@@ -166,7 +166,13 @@ class Registry:
                         for p in spec.inputs.values()
                     ],
                     "outputs": [
-                        {"name": p.name, "type": p.type, "types": list(p.types), "like": p.like}
+                        {
+                            "name": p.name,
+                            "type": p.type,
+                            "types": list(p.types),
+                            "like": p.like,
+                            "access": p.access,
+                        }
                         for p in spec.outputs.values()
                     ],
                     "requires": list(spec.requires),

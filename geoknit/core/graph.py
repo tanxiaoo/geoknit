@@ -397,6 +397,30 @@ class Graph:
         found = self.output_types(node_id, port)
         return found[0] if len(found) == 1 and found[0] != types.ANY else None
 
+    def output_is_list(self, node_id: str, port: str) -> bool:
+        """Whether ``node_id.port`` carries a list (SPEC 3 "List values").
+
+        True for an ``access: list`` output, and for a ``like:`` output of an
+        ``item`` input that is fed by a list (Panel's pass-through of a list).
+        """
+        node = self.node(node_id)
+        out = node.outputs.get(port)
+        if out is None:
+            raise GraphError(f'{node.title} has no output "{port}"')
+        if out.access == "list":
+            return True
+        if out.like is None:
+            return False
+        inp = node.inputs.get(out.like)
+        if inp is None or inp.access == "list":
+            return False
+        return any(
+            w.src in self.nodes
+            and w.src_port in self.nodes[w.src].outputs
+            and self.output_is_list(w.src, w.src_port)
+            for w in self.wires_into(node_id, out.like)
+        )
+
     def resolved_output_types(self, node_id: str) -> dict[str, str]:
         """Resolved types of a node's ``like:`` outputs, for checking values after a run."""
         node = self.node(node_id)
@@ -435,6 +459,10 @@ class Graph:
         problem = types.connection_error(self.output_types(wire.src, wire.src_port), inp.types)
         if problem:
             return problem
+        if inp.access == "item" and inp.types != (types.ANY,):
+            # An ``Any`` item input (Panel's ``data``) takes a list whole.
+            if self.output_is_list(wire.src, wire.src_port):
+                return f'{a.title} gives a list; "{inp.name}" takes one value — use List Item'
         if inp.access == "list" and any(o.like == inp.name for o in b.outputs.values()):
             # An output ``like`` a list input needs one type across its wires.
             mine = self._arriving_types(wire, inp)

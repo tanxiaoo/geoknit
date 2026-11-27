@@ -16,14 +16,27 @@ import type { ComponentEntry, GraphView, GroupJson, PortType } from "../apiTypes
 import { fittingPort, type WireFrom } from "../catalog";
 import { store, useStore } from "../store";
 import { strings } from "../strings";
-import { needsRun, PARAM_TEXT, PORT_COLOURS } from "../types";
+import {
+  carriesList,
+  needsRun,
+  PARAM_PANEL,
+  PARAM_TEXT,
+  PORT_COLOURS,
+  portTypes as viewTypes,
+  sameTypeWires,
+} from "../types";
+import { ColorNode } from "./nodes/ColorNode";
+import { ColormapNode } from "./nodes/ColormapNode";
 import { ComponentNode } from "./nodes/ComponentNode";
 import { nodeKind, PANEL_SIZE, type GkNode } from "./nodes/kinds";
 import { MapNode } from "./nodes/MapNode";
+import { NumberNode } from "./nodes/NumberNode";
 import { PanelNode } from "./nodes/PanelNode";
 import { DragContext, hideTip, portName, type DragFrom } from "./nodes/Port";
 import { SliderNode } from "./nodes/SliderNode";
 import { TextNode } from "./nodes/TextNode";
+import { ToggleNode } from "./nodes/ToggleNode";
+import { ValueListNode } from "./nodes/ValueListNode";
 import { Groups } from "./Groups";
 import { SearchPopup } from "./SearchPopup";
 import { TypedEdge, type GkEdge } from "./TypedEdge";
@@ -34,7 +47,12 @@ export const MIME_PATH = "application/x-geoknit-path";
 const nodeTypes = {
   component: ComponentNode,
   text: TextNode,
+  number: NumberNode,
   slider: SliderNode,
+  toggle: ToggleNode,
+  value_list: ValueListNode,
+  color: ColorNode,
+  colormap: ColormapNode,
   panel: PanelNode,
   map: MapNode,
 };
@@ -67,10 +85,23 @@ function toNodes(graph: GraphView, previous: GkNode[], select: string[] | null):
   });
 }
 
-function portType(graph: GraphView, nodeId: string, side: "in" | "out", name: string): PortType {
+/** What a port can carry; outputs use the type the server resolved (`like:`, SPEC 4). */
+function portTypes(graph: GraphView, nodeId: string, side: "in" | "out", name: string): PortType[] {
   const view = graph.nodes[nodeId];
   const ports = side === "in" ? view?.inputs : view?.outputs;
-  return ports?.find((p) => p.name === name)?.type ?? "Any";
+  const port = ports?.find((p) => p.name === name);
+  return port ? viewTypes(port) : ["Any"];
+}
+
+/** Whether a port carries a list (SPEC 3 "List values"); a Panel's input follows its output. */
+function portList(graph: GraphView, nodeId: string, side: "in" | "out", name: string): boolean {
+  const view = graph.nodes[nodeId];
+  if (!view) return false;
+  if (side === "in" && view.component === PARAM_PANEL) {
+    return view.outputs[0] ? carriesList(view.outputs[0]) : false;
+  }
+  const port = (side === "in" ? view.inputs : view.outputs).find((p) => p.name === name);
+  return port ? carriesList(port) : false;
 }
 
 function toEdges(graph: GraphView, previous: GkEdge[]): GkEdge[] {
@@ -86,7 +117,8 @@ function toEdges(graph: GraphView, previous: GkEdge[]): GkEdge[] {
       targetHandle: `in:${w.to[1]}`,
       selected: selected.has(id),
       data: {
-        colour: PORT_COLOURS[portType(graph, w.from[0], "out", w.from[1])],
+        colour: PORT_COLOURS[portTypes(graph, w.from[0], "out", w.from[1])[0]],
+        list: portList(graph, w.from[0], "out", w.from[1]),
         faded: needsRun(graph.nodes[w.to[0]]?.state),
       },
     };
@@ -187,7 +219,16 @@ export function Canvas() {
     (_: unknown, p: OnConnectStartParams) => {
       if (!graph || !p.nodeId || !p.handleId) return;
       const side = p.handleType === "source" ? "out" : "in";
-      setDrag({ nodeId: p.nodeId, side, type: portType(graph, p.nodeId, side, portName(p.handleId)) });
+      const name = portName(p.handleId);
+      setDrag({
+        nodeId: p.nodeId,
+        side,
+        types: portTypes(graph, p.nodeId, side, name),
+        name,
+        title: graph.nodes[p.nodeId]?.title ?? "",
+        list: portList(graph, p.nodeId, side, name),
+        wired: side === "in" ? sameTypeWires(graph, p.nodeId, name) : undefined,
+      });
     },
     [graph],
   );
@@ -213,7 +254,14 @@ export function Canvas() {
       setSearch({
         screen: local(point.clientX, point.clientY),
         flow: flow.screenToFlowPosition({ x: point.clientX, y: point.clientY }),
-        from: { nodeId: from.nodeId, port, side: from.side, type: from.type },
+        from: {
+          nodeId: from.nodeId,
+          port,
+          side: from.side,
+          types: from.types,
+          list: from.list,
+          wired: from.wired,
+        },
       });
     },
     [drag, graph, flow],
@@ -320,7 +368,8 @@ export function Canvas() {
           onConnectEnd={onConnectEnd}
           onBeforeDelete={onBeforeDelete}
           onNodeDoubleClick={(e, n) => {
-            // Text edits inline and the Slider opens its own window (SPEC 8)
+            // Text and Number edit inline; Slider, Value List, Color Swatch and Colormap
+            // open their own small window (SPEC 8, change 01 section 8)
             if (n.type === "map") {
               e.stopPropagation();
               store.openMap(n.id);

@@ -50,11 +50,12 @@ def test_other_wiring_rules() -> None:
         g.add_wire(rep, "nope", panel, "data")
     g.add_wire(rep, "repeated", panel, "data")  # anything → Any
     half = g.add_component(INLINE, source=TO_NUMBER).id
-    g.add_wire(panel, "data", half, "x")  # Any → typed: checked when run
+    # The Panel's pass-through takes the type of its input (SPEC 4, like: data).
+    with pytest.raises(GraphError, match="Text can't connect to Number"):
+        g.add_wire(panel, "data", half, "x")
     ex = InProcessExecutor(g)
     ex.run()
     assert ex.output(rep, "repeated") == "50-50"
-    assert ex.errors[half] == 'input "x": expected Number, got Text'
 
 
 def test_changing_a_setting_marks_only_node_and_downstream() -> None:

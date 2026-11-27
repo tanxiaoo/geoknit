@@ -22,8 +22,8 @@ def test_builtins_are_registered(tmp_path: Path) -> None:
     meta = {e["ref"]: e for e in reg.entries()}["builtin/raster/write_raster"]
     assert meta["category"] == "Raster" and meta["origin"] == "builtin"
     assert meta["inputs"] == [
-        {"name": "map", "type": "Raster", "access": "item"},
-        {"name": "path", "type": "Text", "access": "item"},
+        {"name": "map", "type": "Raster", "types": ["Raster"], "access": "item"},
+        {"name": "path", "type": "Text", "types": ["Text"], "access": "item"},
     ]
 
 

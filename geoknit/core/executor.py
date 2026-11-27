@@ -11,9 +11,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from geoknit.core import types
+from geoknit.core import types, views
 from geoknit.core.component import PRINT_PORT, run_component
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, VALUE_PARAMS, Graph, Node, param_output
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 
 
@@ -63,13 +63,15 @@ class InProcessExecutor:
         self.on_event = on_event
         self.results: dict[str, dict[str, Any]] = {}
         self.summaries: dict[str, dict[str, str]] = {}
+        self.views: dict[str, dict[str, dict[str, Any]]] = {}
+        """Panel view of each output, per node (change 01, section 11)."""
         self.logs: dict[str, list[str]] = {}
         self.errors: dict[str, str] = {}
         graph.subscribe(self._on_change)
 
     def _on_change(self, changed: set[str], removed: set[str]) -> None:
         for n in removed:
-            for store in (self.results, self.summaries, self.logs, self.errors):
+            for store in (self.results, self.summaries, self.views, self.logs, self.errors):
                 store.pop(n, None)
 
     def _emit(self, kind: str, node_id: str, **data: Any) -> None:
@@ -120,6 +122,8 @@ class InProcessExecutor:
                 log=lambda line: self._log(nid, line),
                 cwd=self.base_dir,
                 print_port=PRINT_PORT,
+                output_types=self.graph.resolved_output_types(nid),
+                list_outputs=self.graph.list_outputs(nid),
             )
             if not result.ok:
                 assert result.error is not None
@@ -129,9 +133,13 @@ class InProcessExecutor:
 
         self.results[nid] = outputs
         self.summaries[nid] = {port: types.describe(v) for port, v in outputs.items()}
+        # Params nodes (also a Panel passing its input through) get theirs here too.
+        self.views[nid] = {
+            port: views.safe_view(v, self.summaries[nid][port]) for port, v in outputs.items()
+        }
         self.solver.states[nid] = DONE
         report.ran.append(nid)
-        self._emit("done", nid, outputs=self.summaries[nid])
+        self._emit("done", nid, outputs=self.summaries[nid], views=self.views[nid])
 
     def _log(self, nid: str, line: str) -> None:
         self.logs[nid].append(line)
@@ -142,6 +150,7 @@ class InProcessExecutor:
         self.errors[nid] = message
         self.results.pop(nid, None)
         self.summaries.pop(nid, None)
+        self.views.pop(nid, None)
         (report.skipped if state == SKIPPED else report.failed).append(nid)
         self._emit("skipped" if state == SKIPPED else "error", nid, traceback=message)
 
@@ -151,18 +160,23 @@ class InProcessExecutor:
             wires = self.graph.wires_into(node.id, name)
             if not wires:
                 continue
-            values = []
+            values: list[Any] = []
             for w in wires:
                 if w.src not in self.results or self.solver.states.get(w.src) != DONE:
                     raise _MissingInput(f'input "{name}": {w.src} has no result yet; run it first')
-                values.append(types.convert_for_input(self.results[w.src][w.src_port], port.type))
+                value = self.results[w.src][w.src_port]
+                if port.access == "list" and self.graph.output_is_list(w.src, w.src_port):
+                    # A list wire adds all its elements (decided by the port, SPEC 3).
+                    values.extend(types.convert_for_input(v, port.types) for v in value)
+                else:
+                    values.append(types.convert_for_input(value, port.types))
             inputs[name] = values if port.access == "list" else values[0]
         return inputs
 
     @staticmethod
     def _run_param(node: Node, inputs: dict[str, Any]) -> dict[str, Any]:
-        if node.component in (PARAM_TEXT, PARAM_SLIDER):
-            return {"value": node.value}
+        if node.component in VALUE_PARAMS:
+            return {"value": param_output(node)}
         if node.component == PARAM_PANEL:
             return {"data": inputs.get("data")}
         if node.component == PARAM_MAP:

@@ -34,18 +34,18 @@ touches.
 
 ## Step 2: Union input types and `like:` outputs
 
-- [ ] Header parser: `type: [A, B]` (`Port.types`), `like: <input>`, errors
+- [x] Header parser: `type: [A, B]` (`Port.types`), `like: <input>`, errors
       for unknown inputs, `Any` in a list, duplicates, `like` + `type`
-- [ ] Graph: wiring checks against union types; `Graph.output_type()`
+- [x] Graph: wiring checks against union types; `Graph.output_type()`
       resolving `like:` through chains; Panel's pass-through becomes
       `{like: data}` (only an unwired Panel is `Any`);
       graph-wide re-check that removes wires when an input's source changes
       type; load and `apply_dict` check wires after all are added
-- [ ] Run: union check on inputs; resolved output types sent in `RunNode`
+- [x] Run: union check on inputs; resolved output types sent in `RunNode`
       (`output_types`) and checked by the worker and the in-process executor
-- [ ] API: ports in `/api/graph` and `/api/components` carry `types`; outputs
+- [x] API: ports in `/api/graph` and `/api/components` carry `types`; outputs
       carry `like` and `resolved_type`
-- [ ] Frontend: two-colour port dot, tooltip "Raster can't connect to
+- [x] Frontend: two-colour port dot, tooltip "Raster can't connect to
       Table | Vector", drag checks use `resolved_type`
 
 **Done when:**
@@ -65,16 +65,16 @@ touches.
 
 ## Step 3: List values
 
-- [ ] Header: `access: list` on outputs (`_parse_ports`, `_port_line`);
+- [x] Header: `access: list` on outputs (`_parse_ports`, `_port_line`);
       element type checks on list outputs and list inputs
-- [ ] Worker and in-process executor: list inputs concatenate single and
+- [x] Worker and in-process executor: list inputs concatenate single and
       list wires in order (by source port)
-- [ ] Refuse list output → item input with the spec message; `Any` item
+- [x] Refuse list output → item input with the spec message; `Any` item
       inputs (Panel) take the list whole
-- [ ] Cache: list folder format with `index.json`; single JSON for simple
+- [x] Cache: list folder format with `index.json`; single JSON for simple
       types; `written_rasters` handles list elements
-- [ ] Panel and hover summaries for lists; double-line ports and wires
-- [ ] Export: lists and `[*a, b, *c]` inputs
+- [x] Panel and hover summaries for lists; double-line ports and wires
+- [x] Export: lists and `[*a, b, *c]` inputs
 
 **Done when** (pytest):
 - a component returning `[3, 1, 2]` as `list Number` feeds a list input
@@ -88,12 +88,12 @@ touches.
 
 ## Step 4: Editable ports for any component
 
-- [ ] Header key `ports: {inputs|outputs: editable, types: [...]}`
-- [ ] `Graph.set_ports` refuses edits the header does not allow
-- [ ] `INPUTS` dict in the namespace (worker, in-process executor, export)
-- [ ] Python component switched to the header key; the frontend
+- [x] Header key `ports: {inputs|outputs: editable, types: [...]}`
+- [x] `Graph.set_ports` refuses edits the header does not allow
+- [x] `INPUTS` dict in the namespace (worker, in-process executor, export)
+- [x] Python component switched to the header key; the frontend
       `category === "Script"` check removed
-- [ ] Settings tab: port editor shown for any component with editable
+- [x] Settings tab: port editor shown for any component with editable
       ports, limited to `types`
 
 **Done when:**
@@ -108,13 +108,13 @@ touches.
 
 ## Step 5: Ribbon groups, tab order, category colours
 
-- [ ] Header key `group:`; `_layout.yaml` (references) for built-ins and
+- [x] Header key `group:`; `_layout.yaml` (references) for built-ins and
       Params nodes; layout test
-- [ ] `GET /api/components` → `{components, tabs}`, Params nodes included;
+- [x] `GET /api/components` → `{components, tabs}`, Params nodes included;
       frontend `paramEntries`, `categories`, `CATEGORY_ORDER`,
       `CATEGORY_COLOURS` removed
-- [ ] Ribbon renders labelled groups; search shows "Tab › Group"
-- [ ] Category colours from SPEC section 7
+- [x] Ribbon renders labelled groups; search shows "Tab › Group"
+- [x] Category colours from SPEC section 7
 
 **Done when:**
 - pytest: removing a built-in from `_layout.yaml` fails the layout test
@@ -124,14 +124,14 @@ touches.
 
 ## Step 6: New Params nodes and integer mode
 
-- [ ] `param/number`, `param/toggle`, `param/value_list`, `param/color`,
+- [x] `param/number`, `param/toggle`, `param/value_list`, `param/color`,
       `param/colormap` (the colormap editor window comes in change 03; until
       then the node offers named ramps only); each through every place listed
       in SPEC section 8
-- [ ] Value List output type computed from its options, with the wire
+- [x] Value List output type computed from its options, with the wire
       re-check from step 2
-- [ ] `integer` on Number and Number Slider (`PATCH` field too)
-- [ ] Save/load, undo, autosave, export for each
+- [x] `integer` on Number and Number Slider (`PATCH` field too)
+- [x] Save/load, undo, autosave, export for each
 
 **Done when:**
 - pytest: save → load → save is byte-identical for a workflow with one of
@@ -144,15 +144,15 @@ touches.
 
 ## Step 7: Icons
 
-- [ ] `frontend/src/icons/registry.tsx` with `gis:`, `lucide:`, `tabler:`
+- [x] `frontend/src/icons/registry.tsx` with `gis:`, `lucide:`, `tabler:`
       names; vendor SVGs (`?raw`, `currentColor`) with licence files;
       `THIRD_PARTY_NOTICES.md` in repo, sdist and wheel (`force-include`)
-- [ ] Built-in headers and Params entries switched to prefixed names
+- [x] Built-in headers and Params entries switched to prefixed names
       (Font-GIS → Lucide → Tabler); `docs/writing-components.md` updated
-- [ ] `.svg` icons: path resolved by the registry,
+- [x] `.svg` icons: path resolved by the registry,
       `GET /api/components/{ref}/icon`, drawn in ribbon and node
-- [ ] `docs/icons.md` generated by a vitest test (`UPDATE_ICONS=1` writes it)
-- [ ] Unknown name → category icon + one console warning
+- [x] `docs/icons.md` generated by a vitest test (`UPDATE_ICONS=1` writes it)
+- [x] Unknown name → category icon + one console warning
 
 **Done when:**
 - vitest: every `icon:` in `geoknit/components/builtin/**/*.py` and every
@@ -165,12 +165,12 @@ touches.
 
 ## Step 8: Panel viewer
 
-- [ ] Worker `done` carries a `view` per port next to `summary` (value,
+- [x] Worker `done` carries a `view` per port next to `summary` (value,
       list of element views, first page of a Table/Vector); Params nodes
       build theirs; `GET /api/nodes/{id}/output` returns it
-- [ ] `GET /api/table/{key}?offset&limit` reading pages from the disk cache
+- [x] `GET /api/table/{key}?offset&limit` reading pages from the disk cache
       (pyarrow row groups; pickle entries memoised); geometry as type name
-- [ ] `PanelNode`: value, swatch, gradient, list rows with index, scrollable
+- [x] `PanelNode`: value, swatch, gradient, list rows with index, scrollable
       grid with index column and headers, "N rows × M columns", paging on
       scroll, "disk cache is off" note; all text in `strings.ts`
 
@@ -186,15 +186,15 @@ touches.
 
 ## Step 9: Renames, merges, examples
 
-- [ ] Merge Train/Test Split into Split Points (`data: [Table, Vector]`,
+- [x] Merge Train/Test Split into Split Points (`data: [Table, Vector]`,
       `like:`, `attrs` kept); delete `sampling/train_test_split.py`
-- [ ] Rename Accuracy → Regression Accuracy
+- [x] Rename Accuracy → Regression Accuracy
       (`validation/regression_accuracy.py`)
-- [ ] Update both example workflows (Split Points wires `points` → `data`,
+- [x] Update both example workflows (Split Points wires `points` → `data`,
       the Accuracy reference), the tests, `docs/ui/SPEC.md`,
       `docs/writing-components.md` (new header keys: `group`, `ports`,
       `INPUTS`, union types, `like`, list outputs, icon names)
-- [ ] Merge this SPEC into `docs/SPEC.md`; mark change 01 done in the index
+- [x] Merge this SPEC into `docs/SPEC.md`; mark change 01 done in the index
 
 **Done when:**
 - `geoknit run examples/synthetic/imd.geoknit` prints the same metrics as

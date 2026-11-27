@@ -1,12 +1,14 @@
 // Typed client for the GeoKnit server (SPEC 9). Every UI action goes through here.
 
 import type {
-  ComponentEntry,
+  Library,
   ExportResult,
   FileNode,
   InspectResult,
   MapView,
+  NamedRamps,
   RasterStats,
+  TablePage,
   GraphView,
   NodeJson,
   NodeOutput,
@@ -49,7 +51,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  components: () => request<ComponentEntry[]>("GET", "/api/components"),
+  components: () => request<Library>("GET", "/api/components"),
+  colormaps: () => request<NamedRamps>("GET", "/api/colormaps"),
   graph: () => request<GraphView>("GET", "/api/graph"),
   status: () => request<Status>("GET", "/api/status"),
   files: () => request<FileNode>("GET", "/api/files"),
@@ -68,6 +71,11 @@ export const api = {
   stop: () => request<unknown>("POST", "/api/stop"),
   output: (id: string) =>
     request<NodeOutput>("GET", `/api/nodes/${encodeURIComponent(id)}/output`),
+  table: (key: string, offset: number, limit: number) =>
+    request<TablePage>(
+      "GET",
+      `/api/table/${encodeURIComponent(key)}?offset=${offset}&limit=${limit}`,
+    ),
   trust: () => request<unknown>("POST", "/api/workflow/trust"),
   save: (path?: string) => request<{ path: string }>("POST", "/api/workflow/save", { path }),
   open: (path: string) => request<GraphView>("POST", "/api/workflow/open", { path }),
@@ -106,3 +114,8 @@ export const api = {
 };
 
 export type Api = typeof api;
+
+/** `GET /api/components/{ref}/icon`: a component's own `.svg` icon (change 01, section 9). */
+export function componentIconUrl(ref: string): string {
+  return `/api/components/${ref.split("/").map(encodeURIComponent).join("/")}/icon`;
+}

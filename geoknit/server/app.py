@@ -21,15 +21,22 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from geoknit import __version__
 from geoknit.components.registry import Registry
+from geoknit.core import types, views
 from geoknit.core.cache import CacheMiss
 from geoknit.core.graph import GraphError
 from geoknit.core.trust import TrustStore
 from geoknit.core.workflow import WorkflowError
-from geoknit.server import tiles
+from geoknit.server import tables, tiles
 from geoknit.server.files import file_tree
 from geoknit.server.session import Session, SessionError
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+ICON_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+}
+"""Headers of a pack's ``.svg`` icon (``GET /api/components/{ref}/icon``)."""
 
 PLACEHOLDER = """<!doctype html>
 <html><head><meta charset="utf-8"><title>GeoKnit</title></head>
@@ -47,7 +54,10 @@ PLACEHOLDER = """<!doctype html>
 
 class NodeCreate(BaseModel):
     component: str = Field(
-        description="library reference, `inline`, or `param/text|slider|panel|map`"
+        description=(
+            "library reference, `inline`, or a Params node: `param/text|number|slider|toggle|"
+            "value_list|color|colormap|panel|map`"
+        )
     )
     position: list[float] = Field(default_factory=lambda: [0.0, 0.0])
     source: str | None = Field(default=None, description="full component file, for `inline`")
@@ -55,15 +65,21 @@ class NodeCreate(BaseModel):
 
 class PortBody(BaseModel):
     name: str
-    type: str = Field(description="Number, Text, Raster, Vector, Table, Model or Any")
+    type: str = Field(description="a data type such as Number or Raster, or Any")
+    types: list[str] | None = Field(
+        default=None, description="an input's types when it accepts several (`type` first)"
+    )
+    like: str | None = Field(default=None, description="an output that takes an input's type")
     access: Literal["item", "list"] = "item"
     file: Literal["write"] | None = None
     was: str | None = Field(default=None, description="old name, when renaming (wires follow)")
 
 
 class PortsBody(BaseModel):
-    inputs: list[PortBody] = Field(default_factory=list)
-    outputs: list[PortBody] = Field(default_factory=list)
+    """A side that is left out stays as it is."""
+
+    inputs: list[PortBody] | None = None
+    outputs: list[PortBody] | None = None
 
 
 class NodePatch(BaseModel):
@@ -72,14 +88,28 @@ class NodePatch(BaseModel):
     settings: dict[str, Any] | None = None
     source: str | None = None
     ports: PortsBody | None = Field(
-        default=None, description="rewrite the header's inputs and outputs (Python component)"
+        default=None,
+        description="rewrite the header's inputs and outputs (components with `ports:`)",
     )
     position: list[float] | None = None
     display: Literal["default", "text", "icon"] | None = None
-    value: Any = None
+    value: Any = Field(
+        default=None,
+        description=(
+            "Params value: text, number, true/false, a colour (`#RRGGBB[AA]` or `r,g,b[,a]`), "
+            "Colormap JSON, or a Value List option's value"
+        ),
+    )
     min: float | None = None
     max: float | None = None
     step: float | None = None
+    integer: bool | None = Field(
+        default=None, description="Number and Number Slider: whole numbers only"
+    )
+    options: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Value List: `[{label, value}]`; the output is Number when every value is one",
+    )
     size: list[float] | None = Field(default=None, description="Panel [width, height]")
     map: dict[str, Any] | None = Field(
         default=None,
@@ -205,15 +235,33 @@ def create_app(
     async def _map_error(request: Request, exc: tiles.MapError) -> JSONResponse:
         return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
+    @app.exception_handler(tables.TableError)
+    async def _table_error(request: Request, exc: tables.TableError) -> JSONResponse:
+        return JSONResponse({"detail": exc.message}, status_code=exc.status)
+
     @app.exception_handler(CacheMiss)
     async def _cache_miss(request: Request, exc: CacheMiss) -> JSONResponse:
         return JSONResponse({"detail": "not in the cache; run first"}, status_code=404)
 
     # ── library and graph ──
     @app.get("/api/components", tags=["library"])
-    def components() -> list[dict[str, Any]]:
-        """Header metadata of every component, for the ribbon."""
+    def components() -> dict[str, Any]:
+        """The ribbon: every component and Params node with its tab and group, and the tabs."""
         return session.components()
+
+    @app.get("/api/components/{ref:path}/icon", tags=["library"])
+    def component_icon(ref: str) -> Response:
+        """A component's own ``.svg`` icon (``icon: icons/x.svg``), only from inside its folder."""
+        path = session.component_icon(ref)
+        # A pack's SVG is served on the app's origin: opened directly it must not run
+        # scripts, load anything or be sniffed as another type (the canvas draws it as
+        # a CSS mask, which never runs scripts either).
+        return Response(path.read_bytes(), media_type="image/svg+xml", headers=ICON_HEADERS)
+
+    @app.get("/api/colormaps", tags=["library"])
+    def colormaps() -> dict[str, list[str]]:
+        """The named ramps a Colormap can use: 11 stops each, low to high (``#RRGGBB``)."""
+        return {name: [f"#{c}" for c in ramp] for name, ramp in types.NAMED_RAMPS.items()}
 
     @app.get("/api/graph", tags=["graph"])
     def graph() -> dict[str, Any]:
@@ -236,7 +284,8 @@ def create_app(
 
     @app.patch("/api/nodes/{node_id}", tags=["graph"])
     def patch_node(node_id: str, body: NodePatch) -> dict[str, Any]:
-        """Change settings, source, position, display, value or slider limits."""
+        """Change settings, source, ports, position, display, a Params value, slider limits,
+        integer mode or Value List options."""
         changes = {k: getattr(body, k) for k in body.model_fields_set}
         if body.ports is not None:
             changes["ports"] = body.ports.model_dump(exclude_none=True)
@@ -332,8 +381,21 @@ def create_app(
 
     @app.get("/api/nodes/{node_id}/output", tags=["run"])
     def output(node_id: str) -> dict[str, Any]:
-        """Output log, error and per-port summaries of one node."""
+        """Output log, error, and per port its summary, Panel view and port key.
+
+        ``disk_cache`` is false when later table pages cannot be read.
+        """
         return session.output(node_id)
+
+    @app.get("/api/table/{key}", tags=["run"])
+    def table(key: str, offset: int = 0, limit: int = views.PAGE_ROWS) -> dict[str, Any]:
+        """A page of a cached Table or Vector: ``{columns, rows, index, total_rows, offset,
+        geometry}``; ``limit`` at most 1000; ``<key>[i]`` names a list element.
+
+        Geometry columns hold the geometry type name. A key not in the disk
+        cache answers 404.
+        """
+        return session.table_page(key, offset, limit)
 
     # ── files ──
     @app.get("/api/files", tags=["files"])

@@ -1,7 +1,8 @@
 # geoknit: component
 # name: Extract Values
 # category: Sampling
-# icon: extract
+# group: Extract
+# icon: gis:poi-info
 # description: Read all bands of a raster at each point (one column per band, attributes kept).
 # inputs:
 #   points: Vector

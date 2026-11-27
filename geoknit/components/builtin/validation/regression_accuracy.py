@@ -1,7 +1,8 @@
 # geoknit: component
-# name: Accuracy
+# name: Regression Accuracy
 # category: Validation
-# icon: accuracy
+# group: Regression
+# icon: lucide:target
 # description: Compare a continuous map with reference points (n, RMSE, MAE, R², bias).
 # inputs:
 #   map: Raster

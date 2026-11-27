@@ -9,9 +9,8 @@ import type {
   NodeView,
   RasterStats,
 } from "../../apiTypes";
-import { store, useStore } from "../../store";
+import { store, useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
-import { categoryColour } from "../../types";
 import { MapCanvas, type VectorHit } from "./MapCanvas";
 import {
   bandsKey,
@@ -49,6 +48,7 @@ interface Inspected {
 function Window({ view }: { view: NodeView }) {
   const id = view.id;
   const runCount = useStore((s) => s.runCount);
+  const colour = useCategoryColour("Params");
   // the wires into the viewer, as a string so the effect below only reruns when they change
   const wired = useStore((s) =>
     (s.graph?.workflow.wires ?? [])
@@ -143,7 +143,7 @@ function Window({ view }: { view: NodeView }) {
         onPointerMove={onHeaderMove}
         onPointerUp={() => (drag.current = null)}
       >
-        <span className="gk-window-category" style={{ color: categoryColour("Params") }}>
+        <span className="gk-window-category" style={{ color: colour }}>
           {strings.paramsTab}
         </span>
         <span className="gk-window-title">{strings.mapViewer}</span>

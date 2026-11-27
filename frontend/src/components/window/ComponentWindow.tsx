@@ -8,15 +8,11 @@ import type {
   PortView,
   SettingView,
 } from "../../apiTypes";
-import { store, useStore } from "../../store";
+import { store, useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
-import {
-  categoryColour,
-  EDITABLE_PORT_TYPES,
-  PARAM_SLIDER,
-  PARAM_TEXT,
-  PORT_COLOURS,
-} from "../../types";
+import type { ColormapJson } from "../../apiTypes";
+import { PARAM_COLORMAP, PARAM_SLIDER, PARAM_TEXT, PARAM_TOGGLE, PORT_COLOURS } from "../../types";
+import { colormapLabel } from "../nodes/ColormapNode";
 import { CodeEditor } from "./CodeEditor";
 import { defaultFor, errorLine, freshName, parseValue, valueText } from "./values";
 
@@ -35,6 +31,7 @@ const WIDTH = 680;
 function Window({ view }: { view: NodeView }) {
   const id = view.id;
   const source = view.source ?? "";
+  const colour = useCategoryColour(view.category);
   const [tab, setTab] = useState<Tab>("settings");
   const [pos, setPos] = useState(() => ({
     x: Math.max(20, window.innerWidth - WIDTH - 320),
@@ -110,7 +107,7 @@ function Window({ view }: { view: NodeView }) {
         onPointerMove={onHeaderMove}
         onPointerUp={() => (drag.current = null)}
       >
-        <span className="gk-window-category" style={{ color: categoryColour(view.category) }}>
+        <span className="gk-window-category" style={{ color: colour }}>
           {view.category}
         </span>
         <span className="gk-window-title" data-testid="window-title">
@@ -204,20 +201,42 @@ export function wiredLabel(graph: GraphView, nodeId: string, port: string): stri
       if (!src) return strings.wiredFrom(w.from[0], w.from[1]);
       if (src.component === PARAM_TEXT) return strings.wiredText(String(src.value ?? ""));
       if (src.component === PARAM_SLIDER) return strings.wiredSlider(String(src.value ?? ""));
+      if (src.component.startsWith("param/") && !src.inputs.length)
+        return strings.wiredParam(src.title, paramValueText(src));
       return strings.wiredFrom(src.title, w.from[1]);
     })
     .join(" · ");
 }
 
+/** A Params node's value as the Settings tab names it (`True`, `#0B7A7C`, `viridis`, `One`). */
+function paramValueText(src: NodeView): string {
+  if (src.component === PARAM_TOGGLE) return src.value ? strings.toggleTrue : strings.toggleFalse;
+  if (src.component === PARAM_COLORMAP) return colormapLabel(src.value as ColormapJson);
+  const option = src.options?.find((o) => o.value === src.value);
+  return option ? option.label : String(src.value ?? "");
+}
+
 function toEdit(p: PortView): PortEdit {
-  return { name: p.name, type: p.type, access: p.access, file: p.file ?? null };
+  const edit: PortEdit = { name: p.name, type: p.type, access: p.access, file: p.file ?? null };
+  if (p.types && p.types.length > 1) edit.types = p.types;
+  if (p.like) edit.like = p.like;
+  return edit;
 }
 
 function SettingsTab({ view }: { view: NodeView }) {
   const graph = useStore((s) => s.graph);
   const settings = view.settings ?? [];
   const broken = !!view.parse_error;
-  const editablePorts = view.category === "Script";
+  // The header's `ports:` key decides what the Settings tab edits (SPEC 4).
+  const editing = view.editable_ports ?? null;
+  const editInputs = !!editing?.inputs;
+  const editOutputs = !!editing?.outputs;
+  const offered = editing?.types ?? [];
+  const offeredIn = editing?.input_types ?? offered;
+  const typesFor = (p: PortView, side: "in" | "out"): PortType[] => {
+    const list = side === "in" ? offeredIn : offered;
+    return list.includes(p.type) ? list : [p.type, ...list];
+  };
   const inputNames = new Set(view.inputs.map((p) => p.name));
   const own = settings.filter((s) => !inputNames.has(s.name));
 
@@ -230,7 +249,15 @@ function SettingsTab({ view }: { view: NodeView }) {
   const outs = view.outputs.map(toEdit);
   const change = (side: "in" | "out", index: number, edit: Partial<PortEdit>) => {
     const list = (side === "in" ? ins : outs).map((p, i) =>
-      i === index ? { ...p, ...edit, was: edit.name ? p.name : undefined } : p,
+      i === index
+        ? {
+            ...p,
+            ...edit,
+            // a type picked from the list replaces a union's types
+            ...(edit.type ? { types: undefined } : {}),
+            was: edit.name ? p.name : undefined,
+          }
+        : p,
     );
     if (side === "in") setPorts(list, outs);
     else setPorts(ins, list);
@@ -249,7 +276,8 @@ function SettingsTab({ view }: { view: NodeView }) {
   };
   const add = (side: "in" | "out") => {
     const taken = [...ins, ...outs].map((p) => p.name);
-    const port: PortEdit = { name: freshName(side === "in" ? "x" : "y", taken), type: "Number" };
+    const type = offered[0] ?? "Number";
+    const port: PortEdit = { name: freshName(side === "in" ? "x" : "y", taken), type };
     if (side === "in") setPorts([...ins, port], outs);
     else setPorts(ins, [...outs, port]);
   };
@@ -271,8 +299,8 @@ function SettingsTab({ view }: { view: NodeView }) {
             <div className="gk-setting-row" key={p.name} data-testid={`input-${p.name}`}>
               <PortLabel
                 port={p}
-                editable={editablePorts}
-                types={[...EDITABLE_PORT_TYPES, "Any"]}
+                editable={editInputs}
+                types={typesFor(p, "in")}
                 onRename={(name) => change("in", i, { name })}
                 onType={(type) => change("in", i, { type })}
                 onRemove={() => remove("in", i)}
@@ -293,12 +321,12 @@ function SettingsTab({ view }: { view: NodeView }) {
             </div>
           );
         })}
-        {editablePorts && (
+        {editInputs && (
           <button className="gk-add-port" onClick={() => add("in")} data-testid="add-input">
             + {strings.addInput}
           </button>
         )}
-        {editablePorts && (
+        {editOutputs && (
           <>
             <h4>{strings.outputsHeading}</h4>
             {view.outputs.map((p, i) => (
@@ -306,7 +334,7 @@ function SettingsTab({ view }: { view: NodeView }) {
                 <PortLabel
                   port={p}
                   editable
-                  types={EDITABLE_PORT_TYPES}
+                  types={typesFor(p, "out")}
                   onRename={(name) => change("out", i, { name })}
                   onType={(type) => change("out", i, { type })}
                   onRemove={() => remove("out", i)}
@@ -372,6 +400,12 @@ interface PortLabelProps {
 function PortLabel({ port, editable, types, onRename, onType, onRemove }: PortLabelProps) {
   const [name, setName] = useState(port.name);
   const dot = <span className="gk-type-dot" style={{ background: PORT_COLOURS[port.type] }} />;
+  // A `like:` output takes its input's type: no type to pick (SPEC 4).
+  const fixedType = port.like ? (
+    <span className="gk-setting-type" data-testid={`port-like-${port.name}`}>
+      {strings.likeInput(port.like)}
+    </span>
+  ) : null;
   if (!editable)
     return (
       <>
@@ -379,7 +413,7 @@ function PortLabel({ port, editable, types, onRename, onType, onRemove }: PortLa
           {dot}
           {port.name}
         </span>
-        <span className="gk-setting-type">{port.type}</span>
+        {fixedType ?? <span className="gk-setting-type">{port.type}</span>}
       </>
     );
   const commit = () => {
@@ -401,17 +435,19 @@ function PortLabel({ port, editable, types, onRename, onType, onRemove }: PortLa
           data-testid={`port-name-${port.name}`}
         />
       </span>
-      <select
-        className="gk-setting-type"
-        value={port.type}
-        aria-label={strings.portType}
-        onChange={(e) => onType(e.currentTarget.value as PortType)}
-        data-testid={`port-type-${port.name}`}
-      >
-        {types.map((t) => (
-          <option key={t}>{t}</option>
-        ))}
-      </select>
+      {fixedType ?? (
+        <select
+          className="gk-setting-type"
+          value={port.type}
+          aria-label={strings.portType}
+          onChange={(e) => onType(e.currentTarget.value as PortType)}
+          data-testid={`port-type-${port.name}`}
+        >
+          {types.map((t) => (
+            <option key={t}>{t}</option>
+          ))}
+        </select>
+      )}
       <button
         className="gk-icon-button"
         onClick={onRemove}

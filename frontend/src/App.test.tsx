@@ -1,17 +1,19 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { ComponentEntry, GraphView, NodeView } from "./apiTypes";
-import { categories, fittingPort, paramEntries } from "./catalog";
+import type { ComponentEntry, GraphView, NodeView, PortView } from "./apiTypes";
+import { fittingPort, groupsOf, placeOf } from "./catalog";
 import { fileBadge } from "./components/FolderTree";
+import { Ribbon } from "./components/Ribbon";
 import { TextNode } from "./components/nodes/TextNode";
 import { groupBox } from "./components/Groups";
 import type { GkNode } from "./components/nodes/kinds";
 import { exportPath, workflowFiles } from "./components/TopBar";
 import { clipOf, initialState, portSummary, reduceEvent, Store, store } from "./store";
 import { strings } from "./strings";
-import { canConnect } from "./types";
+import { canConnect, connectionError, portTypes } from "./types";
 import { ApiError, type Api } from "./api";
+import { PARAM_ENTRIES, paramEntry } from "./testFixtures";
 
 function node(id: string, extra: Partial<NodeView> = {}): NodeView {
   return {
@@ -49,6 +51,7 @@ function entry(ref: string, category: string, extra: Partial<ComponentEntry> = {
     origin: "builtin",
     name: ref,
     category,
+    group: "Other",
     icon: null,
     description: "",
     inputs: [],
@@ -76,16 +79,93 @@ describe("connection rules (SPEC 3)", () => {
   ] as const)("%s → %s: %s", (out, input, ok) => {
     expect(canConnect(out, input)).toBe(ok);
   });
+
+  test("union inputs and resolved like: outputs", () => {
+    expect(connectionError(["Raster"], ["Table", "Vector"])).toBe(
+      "Raster can't connect to Table | Vector",
+    );
+    expect(connectionError(["Vector"], ["Table", "Vector"])).toBeNull();
+    expect(connectionError(["Table", "Vector"], ["Vector"])).toBeNull();
+    const out: PortView = { name: "o", type: "Table", types: ["Table", "Vector"], access: "item" };
+    expect(portTypes(out)).toEqual(["Table", "Vector"]);
+    expect(portTypes({ ...out, resolved_type: "Vector" })).toEqual(["Vector"]);
+  });
+
+  test("an unresolved Panel fed by an unwired union like: output checks the server's set", () => {
+    // Split Points (unwired) → Panel: the server can say ("Table", "Vector") for the
+    // Panel's output, whose declared type is Any; the drag check must use that set.
+    const panelOut: PortView = {
+      name: "data",
+      type: "Any",
+      types: ["Any"],
+      access: "item",
+      like: "data",
+      resolved_type: null,
+      resolved_types: ["Table", "Vector"],
+    };
+    expect(portTypes(panelOut)).toEqual(["Table", "Vector"]);
+    expect(connectionError(portTypes(panelOut), ["Raster"])).toBe(
+      "Table | Vector can't connect to Raster",
+    );
+    expect(connectionError(portTypes(panelOut), ["Vector"])).toBeNull();
+    // an unwired Panel still connects anywhere
+    expect(portTypes({ ...panelOut, resolved_types: ["Any"] })).toEqual(["Any"]);
+  });
 });
 
 describe("catalog", () => {
-  test("ribbon tabs: Params, built-ins in SPEC order, then packs", () => {
+  test("ribbon groups follow the tab's order; search shows Tab › Group", () => {
     const lib = [
-      entry("fake/zeta/a", "Zeta"),
-      entry("builtin/model/rf", "Model"),
-      entry("builtin/raster/read", "Raster"),
+      entry("builtin/raster/read", "Raster", { group: "Files" }),
+      entry("builtin/raster/clip", "Raster", { group: "Extent" }),
+      entry("builtin/raster/write", "Raster", { group: "Files" }),
+      entry("fake/raster/x", "Raster"),
+      entry("builtin/model/rf", "Model", { group: "Train" }),
     ];
-    expect(categories(lib)).toEqual(["Params", "Raster", "Model", "Zeta"]);
+    const tab = { name: "Raster", colour: "#0B7A7C", groups: ["Files", "Bands", "Extent", "Other"] };
+    expect(
+      groupsOf(lib, tab).map((g) => [g.group, g.entries.map((e) => e.ref)]),
+    ).toEqual([
+      ["Files", ["builtin/raster/read", "builtin/raster/write"]],
+      ["Extent", ["builtin/raster/clip"]],
+      ["Other", ["fake/raster/x"]],
+    ]);
+    expect(placeOf(lib[1])).toBe("Raster › Extent");
+    expect(placeOf(PARAM_ENTRIES[0])).toBe("Params › Input");
+  });
+
+  test("the ribbon draws the server's tabs and labelled groups", () => {
+    const raster = [
+      entry("builtin/raster/read", "Raster", { name: "Read Raster", group: "Files" }),
+      entry("builtin/raster/clip", "Raster", { name: "Clip", group: "Extent" }),
+    ];
+    store.set({
+      ...initialState,
+      components: [...PARAM_ENTRIES, ...raster],
+      tabs: [
+        { name: "Params", colour: "#475569", groups: ["Input", "Inspect", "Map"] },
+        { name: "Raster", colour: "#0B7A7C", groups: ["Files", "Extent"] },
+      ],
+    });
+    const { unmount } = render(
+      <ReactFlowProvider>
+        <Ribbon />
+      </ReactFlowProvider>,
+    );
+    const labels = () =>
+      [...document.querySelectorAll(".gk-ribbon-group-label")].map((el) => el.textContent);
+    expect(screen.getAllByRole("button", { name: /^(Params|Raster)$/ }).map((b) => b.textContent))
+      .toEqual(["Params", "Raster"]);
+    expect(labels()).toEqual(["Input", "Inspect", "Map"]);
+    fireEvent.click(screen.getByTestId("tab-Raster"));
+    expect(labels()).toEqual(["Files", "Extent"]);
+    expect(screen.getByTestId("ribbon-group-Extent").textContent).toContain("Clip");
+    const icon = screen.getByTestId("ribbon-builtin/raster/clip").querySelector(".gk-button-icon");
+    expect((icon as HTMLElement).style.color).toBe("rgb(11, 122, 124)");
+    fireEvent.change(screen.getByTestId("ribbon-search"), { target: { value: "clip" } });
+    expect(document.querySelector(".gk-search-results")?.textContent).toContain("Raster › Extent");
+    unmount();
+    store.set({ ...initialState });
   });
 
   test("a wire dropped in empty space fits the first compatible port", () => {
@@ -96,13 +176,18 @@ describe("catalog", () => {
       ],
       outputs: [{ name: "model", type: "Model", access: "item" }],
     });
-    const from = { nodeId: "n1", port: "value", side: "out" as const, type: "Number" as const };
+    const from = {
+      nodeId: "n1",
+      port: "value",
+      side: "out" as const,
+      types: ["Number" as const],
+    };
     expect(fittingPort(rf, from)).toBe("n_trees");
-    expect(fittingPort(rf, { ...from, type: "Raster" })).toBeNull();
-    const [slider, text, panel] = paramEntries();
-    expect(fittingPort(slider, { ...from, side: "in", type: "Text" })).toBe("value");
-    expect(fittingPort(text, { ...from, side: "in", type: "Number" })).toBeNull();
-    expect(fittingPort(panel, { ...from, type: "Raster" })).toBe("data");
+    expect(fittingPort(rf, { ...from, types: ["Raster"] })).toBeNull();
+    const [text, slider, panel] = ["param/text", "param/slider", "param/panel"].map(paramEntry);
+    expect(fittingPort(slider, { ...from, side: "in", types: ["Text"] })).toBe("value");
+    expect(fittingPort(text, { ...from, side: "in", types: ["Number"] })).toBeNull();
+    expect(fittingPort(panel, { ...from, types: ["Raster"] })).toBe("data");
   });
 });
 
@@ -125,7 +210,13 @@ describe("events from /ws", () => {
     expect(s.graph?.nodes.n1.state).toBe("out_of_date");
     s = reduceEvent(s, { type: "started", node: "n1" });
     expect(s.graph?.nodes.n1.state).toBe("running");
-    s = reduceEvent(s, { type: "done", node: "n1", outputs: { value: "hi" }, cached: false });
+    s = reduceEvent(s, {
+      type: "done",
+      node: "n1",
+      outputs: { value: "hi" },
+      views: {},
+      cached: false,
+    });
     expect(s.graph?.nodes.n1.state).toBe("done");
     expect(s.summaries.n1).toEqual({ value: "hi" });
     s = reduceEvent(s, { type: "error", node: "n2", traceback: "boom" });

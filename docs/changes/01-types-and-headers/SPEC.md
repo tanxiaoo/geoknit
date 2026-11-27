@@ -1,11 +1,19 @@
 # Change 01: Types and component headers
 
-Status: agreed (checked against the code, 26 Nov 2026) · Touches `docs/SPEC.md`
+Status: done (merged into `docs/SPEC.md`, 27 Nov 2026) · Touches `docs/SPEC.md`
 sections 3, 4, 5, 6, 7, 8, 9, 10
 
 ## Questions for Xiao
 
-None open. Answered on 26 Nov 2026 (`docs/changes/README.md`, "Decisions on
+None open. Answered on 27 Nov 2026 (raised while building step 4):
+
+3. The default `types` of `ports:` offers `Any` for inputs only, so the
+   Python component keeps `Any` inputs (option b; section 6).
+4. The export writes `INPUTS = {…}` as the last line of the settings block,
+   only in functions whose code uses it, so unwired inputs already hold their
+   setting values (section 6).
+
+Answered on 26 Nov 2026 (`docs/changes/README.md`, "Decisions on
 the review questions"):
 
 1. Components see their inputs through an `INPUTS` dict (section 6).
@@ -200,7 +208,13 @@ An input's `type` can be a list:
   ("all wires into "items" must have the same type").
 - API: output ports in `GET /api/graph` carry `like` and `resolved_type`; the
   frontend uses `resolved_type` for colours and its own `canConnect` checks
-  while dragging.
+  while dragging. `resolved_type` is the output's own type for an ordinary
+  output, and `null` while a `like:` output is unresolved. Outputs also carry
+  `resolved_types` (`Graph.output_types`), which the frontend then uses: an
+  unwired Panel's are `["Any"]`, but a Panel fed by an unwired Split Points
+  has `Table | Vector` (fixed after the review of 27 Nov 2026; before, the
+  frontend fell back to the declared `["Any"]` and let a drag through that the
+  server then refused).
 
 ## 5. List values (SPEC 3, 4, 6, 10)
 
@@ -240,6 +254,55 @@ Python list, not its elements). This change lets a wire carry a list.
 - Export: list outputs are plain Python lists; list inputs receive
   `[*a, b, *c]` built in wire order (today `wired_value` builds `[a, b, c]`).
 
+Details settled while building step 3:
+
+- Element indices in messages are 0-based, as the Panel shows them:
+  `input "rasters": item 2: expected Raster, got Vector`; an output that is
+  not a list: `output "values": expected a list of Number, got Number`.
+- `Graph.output_is_list(node, port)` says whether an output carries a list:
+  an `access: list` output, or a `like:` output of an `item` input fed by a
+  list (a Panel passing one through, also through chains of Panels). The
+  refusal uses the source node's title:
+  `Numbers gives a list; "x" takes one value — use List Item`. A type
+  mismatch is reported first.
+- The worker does not know the graph, so `RunNode` gets
+  `list_keys: frozenset[str]`: the port keys of list inputs that come from
+  list outputs (their elements are concatenated; any other key adds one
+  element).
+- `describe()` of a list: first line `list of 3 Number` when every element
+  has the same type, `list of 3` otherwise (`list of 0` when empty); then
+  `[i] ` and the first line of each element's `describe()`, for the first 50;
+  then `… N more`.
+- Cache `meta.json` port info of a list: `{type: <element type or null>,
+  access: "list", count, file, format}`. `format: "json"` is the single
+  `<port>.json` (`{"value": [...]}`), used when every element has the same
+  JSON type (Number, Text, Boolean, Color, Colormap) and for an empty list;
+  otherwise `format: "list"` with `file: "<port>/index.json"`
+  (`{"items": [<element info>, ...]}`) and one file per element named by its
+  index. The cache format number is unchanged (single-value entries keep
+  their layout).
+- Until change 03 addresses list elements (`<key>[i]`), the Map Viewer
+  reports a list wired into it as unsupported ("a list of Raster cannot be
+  shown on a map") and the tile, GeoJSON and inspect routes answer `404`.
+- API: outputs in `GET /api/components` carry `access`; outputs in
+  `GET /api/graph` also carry `resolved_access` (`"list"` or `"item"`, from
+  `output_is_list`), so a Panel passing a list through is drawn as a list.
+- Export: a list output is returned as `list(x)` (a tuple becomes a list as
+  in GeoKnit); a list wire that needs the Number/Boolean → Text conversion is
+  spread as `*[str(_v) for _v in a]`.
+- Frontend, drawn as a list (double line): an output whose `resolved_access`
+  is `"list"` (`/api/graph`; `access` for `/api/components` entries), an
+  `access: list` input (also Map Viewer's `layers`), and a Panel's input when
+  its output carries a list. A list port's dot gets a second ring in its
+  type's colour outside the white one; a list wire is a wider stroke with the
+  canvas colour drawn down its middle. Wires take the source output's flag.
+- Frontend drag checks (`wireError` in `types.ts`) give the server's
+  messages, type mismatch first; the search popup for a wire dropped in empty
+  space only offers ports that pass the same check.
+- Hover: a list port's heading is `values: list of Number`; the tooltip
+  shows the summary's first line and its first 5 items, then `… N more`.
+  The Panel shows the whole summary (`describe()`'s 50 items).
+
 ## 6. Editable ports outside the Script tab (SPEC 4)
 
 The Python component can add, remove and rename ports. Today that is a
@@ -255,7 +318,9 @@ types. New header key:
 
 - `inputs: editable` makes the inputs editable in the Settings tab as for
   Script components; `types` limits the types offered (default: every type
-  except Layer and Any). `outputs: editable` is allowed as well.
+  except Layer and Any, and inputs may also be `Any`; Q3, answered 27 Nov
+  2026). `outputs: editable` is allowed as well. The API sends the input
+  side's list as `input_types`.
 - The server enforces it: `set_ports` refuses a change to a side that is not
   editable ("the inputs of Reclassify cannot be edited") and a type outside
   `types` ("Raster Calculator inputs are Raster or Number"). A component
@@ -270,13 +335,58 @@ types. New header key:
   default), in header order. It is set for every component, and the format
   docs reserve the name. Expression, Format and Raster Calculator pass it to
   `safe_eval` / `str.format`. The export defines
-  `INPUTS = {"a": a, "b": b}` at the top of each function body. The name is
+  `INPUTS = {"a": a, "b": b}` as the last line of the settings block, only in
+  functions whose code uses the name (Q4, answered 27 Nov 2026). The name is
   reserved: a port or setting called `INPUTS` is a header parse error.
 - The Python component's header gets `ports: {inputs: editable, outputs: editable}`
   so the behaviour has one rule instead of a Script special case. "Script
   component" in SPEC 4 becomes "a component with editable ports". A
   component saved from the Python component keeps the line, so it stays
   editable whatever its category.
+
+Details settled while building step 4:
+
+- `ports:` takes the keys `inputs`, `outputs` (value `editable` only) and
+  `types` (a list of port types, or one name). At least one side must be
+  editable; an unknown key or type, a type listed twice, or another value is
+  a header parse error. Listing `Any` or `Layer` in `types` explicitly is
+  allowed; only the default leaves them out.
+- API: component nodes in `GET /api/graph` (and `PATCH` replies) and entries
+  of `GET /api/components` carry `editable_ports: {inputs, outputs, types}`,
+  or `null` without `ports:`.
+- `PATCH /api/nodes/{id}` `ports`: a side left out stays as it is
+  (`Graph.set_ports(node, inputs | None, outputs | None)`). Ports in the
+  body also take `types` and `like`, so a side sent back unchanged keeps
+  its union types and `like:` outputs.
+- A side that is not editable may be sent, but what it declares (names,
+  order, types, `access`, `file`, `like`) must not change; otherwise
+  `the inputs of Reclassify cannot be edited` (`400`). The same applies to
+  both sides of a component without `ports:`.
+- On an editable side, every port's types must be in `types`:
+  `Raster Calculator inputs are Raster or Number` (three or more:
+  `A, B or C`). A port the header already declares outside `types` may stay,
+  also renamed, as long as its type does not change. `like:` outputs are not
+  checked against `types`. `access` and `file` stay editable as before.
+- `INPUTS` is set after the settings block and the wired values, so an
+  unwired input holds its setting's value. A port named `INPUTS`:
+  `"INPUTS" is reserved and cannot name a port`; a setting named `INPUTS`:
+  the same for a setting, with its line number.
+- Export: `INPUTS = {"a": a, "b": b}` is written only in functions whose code
+  reads the name `INPUTS`, as the last line of the settings block (after the
+  settings, so unwired inputs have their values), so exports of components
+  that do not use it are unchanged.
+- The default `types` leave out `Any` and `Layer`, but the input side also
+  offers `Any` (Q3, option b): the Python component's inputs can still be
+  made `Any` from the Settings tab, as before this change, and the API sends
+  that list as `input_types` (`types` plus `Any`); outputs are not offered
+  `Any`.
+  A Python node whose saved source predates the `ports:` line has fixed
+  ports until the line is added in its code.
+- Frontend: the Settings tab shows the inputs editor when
+  `editable_ports.inputs`, the outputs section when `editable_ports.outputs`;
+  the type list offers `types` (plus the port's own type when it is outside
+  them); a new port gets the first of `types`; picking a type for a union
+  input replaces its types.
 
 ## 7. Ribbon groups and layout (SPEC 4, 7, 8, 9)
 
@@ -327,6 +437,46 @@ tab, the ribbon shows components in labelled groups, Grasshopper style.
   from `CATEGORY_COLOURS` in `frontend/src/types.ts` to the `tabs` answer
   above (change 02 then turns them into theme tokens).
 
+Details settled while building step 5:
+
+- **Only what exists is listed.** `_layout.yaml` names only the built-ins
+  and Params nodes that exist now (`param/text`, `param/slider`,
+  `param/panel`, `param/map` and the 20 built-in files). The Params nodes of
+  step 6, the `builtin/params/*` geometry components and the other change 04
+  components are added to the layout by the step that adds them; the layout
+  test (`tests/components/test_layout.py`) fails until they are. Today's
+  Params groups: Input (Text, Number Slider), Inspect (Panel), Map (Map
+  Viewer). Map Viewer stays in Params, in a group named after its future
+  Display group, until change 03 moves it (the check allows `param/map` in
+  Params or Display). Train/Test Split sits in Sampling › Split next to
+  Split Points until step 9 merges them; Accuracy is Validation › Regression.
+  Groups of the existing built-ins follow change 04's tables.
+- **Tabs.** The tab order and colours are `TABS` in
+  `geoknit/components/layout.py`; the layout's tabs must be a subset of it in
+  that order. A tab appears only when it has at least one entry (so Maths,
+  Sets, Table and Display are not shown yet); pack and user categories
+  follow alphabetically (case-insensitive), coloured `#475569`.
+- **Built-in headers carry `group:`.** Every built-in declares
+  `group:` and the layout test checks it (and `category:`) equals its place.
+  At run time a reference listed in the layout takes the layout's tab and
+  group. `group:` must be a non-empty scalar (a list or mapping is a header
+  parse error). A pack component whose `group:` names a built-in group of
+  the same tab joins that group, after the built-ins.
+- **Order of `components`.** `GET /api/components` lists entries sorted by
+  tab, then group, then layout position (built-ins), then name
+  (case-insensitive) and reference; the frontend keeps this order. Params
+  entries have `origin: "param"`, `version: ""`, `settings: []`,
+  `editable_ports: null`, `description: ""` and the same port views as
+  header components (the Panel's output has `like: data`). Their icon is
+  `null` except Map Viewer (`map-viewer`) until step 7.
+- **Frontend.** The store holds `tabs`; `categoryColour(tabs, category)`
+  (and the `useCategoryColour` hook) look the colour up there, with
+  `#475569` for a category that is no tab (an inline component's own
+  category). `allEntries` went with `paramEntries`, since the library now
+  includes the Params nodes. The search box and the search popup show
+  "Tab › Group" (`strings.tabGroup`); search also matches the group name.
+  The Map Viewer node and window still use the Params colour until change 03.
+
 ## 8. New Params nodes (SPEC 5, 6, 7)
 
 Handled by the server like Text and Slider: no worker run, cache key
@@ -370,6 +520,106 @@ Slider, value sent to the worker with `put_value`, and exported as constants
   section comes before the values section instead of after it (step 1).
   Boolean → Text wires become `str(...)`, like Number → Text.
 
+Details settled while building step 6 (backend):
+
+- **Ribbon.** Params › Input: Text, Number, Number Slider, Boolean Toggle,
+  Value List; Params › Style: Color Swatch, Colormap (change 04's group
+  name; change 03 keeps them there); then Inspect and Map. Change 04's
+  Geometry group goes between Input and Style.
+- **New nodes start as** Number `0`; Toggle `false`; Value List options
+  One = 1, Two = 2, Three = 3 with `1` chosen; Color Swatch `#0B7A7C`;
+  Colormap `viridis` (named, 2–98 % stretch).
+- **Values in the graph.** `Node.value` holds the Python value (`Color`,
+  `Colormap`, `bool`, number, text); the workflow file, the cache key and the
+  API use the JSON form (`to_json()`): Color `"#RRGGBB[AA]"`, Colormap its
+  JSON object. `PATCH value` of a Color Swatch takes any `Color.parse` form
+  (`#0b7a7c`, `11,122,124`); of a Colormap any valid Colormap JSON (the
+  node offers named ramps until change 03, but the server already stores and
+  checks the full form). Errors (`400`): `a Number value must be a number`
+  (a `bool` is not one), `a Boolean Toggle value must be true or false`, the
+  Color parse message, `not a colormap: …`, `'x' is not one of the Value
+  List's options`. A file with such a value is refused on load, naming the
+  node.
+- **Value List.** `options` is a non-empty list of `{label, value}` (exactly
+  these keys); `label` is text, `value` a number (not a Boolean) or text,
+  each value listed once (`1` and `1.0` are the same value, `1` and `"1"`
+  are not). The output is Number when every value is a number, else Text;
+  in a Text list a number option's value is given as text (`str`, as a
+  Number → Text wire does), and the cache key and export constant use that
+  text. Its value names a file like a Text node's (fingerprinted for the
+  cache key). Changing the options keeps the chosen value when it is still
+  an option, otherwise chooses the first; `PATCH` may send `options` and
+  `value` together. `Graph.set_options` re-checks wires graph-wide, so a
+  wire into a Number input is removed when the list becomes Text (and the
+  receiving node goes out of date).
+- **Integer mode** rounds half up (`2.5` → `3`, `-2.5` → `-2`, like the
+  frontend's `Math.round`). On a Slider it rounds `min`, `max` and `value`
+  and makes `step` a whole number of at least 1; a range that collapses
+  (`0.2..0.4`) is refused (`slider min must be below max`). Turning it off
+  keeps the rounded values. `PATCH integer` on any other node: `Text has no
+  integer mode` (`400`); `options` on a node other than a Value List:
+  `Text has no options`. A Slider whose value only changes type
+  (`5` → `5.0`) counts as changed, since its cache key does.
+- **Cache keys** keep their recipe and name the output type:
+  `{"format", <kind>: <JSON value>, "files"}` with kind `text`, `number`,
+  `boolean`, `color` or `colormap`. Text and Slider keys are unchanged; a
+  Number and a Slider with the same value share a key, a Toggle `true` and a
+  Number `1` do not.
+- **Export.** Constants are named as before; the comment says where they
+  come from: `# n3 Number (integer)`, `# n4 Boolean Toggle → n5 Flip.flag`,
+  `# n6 Value List (One=1, Two=2, Three=3)`, `# n7 Color Swatch`,
+  `# n8 Colormap`, and a Slider in integer mode `(0..10, step 1, integer)`.
+- **API** (`GET /api/graph` nodes, `POST /api/nodes` and `PATCH` replies):
+  Number `{value, integer}`; Number Slider gains `integer`; Boolean Toggle
+  `{value: bool}`; Value List `{options: [{label, value}], value}`, with its
+  current type in `outputs[0].type` / `resolved_type` (`Number` or `Text`);
+  Color Swatch `{value: "#RRGGBB[AA]"}`; Colormap `{value: <Colormap JSON>}`.
+  `PATCH /api/nodes/{id}` takes `integer` and `options` next to `value`.
+  `GET /api/components` lists the five nodes (`origin: "param"`); the Value
+  List entry shows the default `Number` output.
+
+Details settled while building step 6 (frontend):
+
+- **Named ramps for the canvas.** `GET /api/colormaps` (new, tag `library`)
+  answers `{name: ["#RRGGBB", …11]}` straight from `NAMED_RAMPS` in
+  `core/types.py`, in its order. The frontend loads it once, when the first
+  Colormap node is drawn (`store.loadRamps`), and draws a named ramp's
+  gradient from those 11 stops (a custom colormap from its own `stops`;
+  `reverse` flips them). One source of truth for the stops; the Map Viewer
+  keeps drawing tiles and legends from rio-tiler's tables
+  (`GET /api/map/{id}` `colormaps`), which the step 1 test keeps within ±1.
+  SPEC 9 gains the row when this SPEC is merged.
+- **Number** edits inline like Text (double-click, Enter or blur sends,
+  Escape cancels). Text that is not a number (`abc`) is not sent; a toast
+  says `"abc" is not a number`. While editing, a "whole numbers" box next
+  to the field switches integer mode at once (its own undo step).
+- **Number Slider** integer mode is a "whole numbers" box in its min / max /
+  step / value window; OK sends it with the limits in one `PATCH`.
+- **Boolean Toggle**: the switch and its `True` / `False` label are one
+  button; a click sends `PATCH value: !value` (one undo step).
+- **Value List**: the dropdown on the node lists the labels and sends the
+  chosen option's `value`. Double-click on the node (outside the dropdown)
+  opens a small options window (label and value per row, add, remove, OK /
+  Cancel), like the Slider's, rather than the component window (Params
+  nodes have no Settings / Code tabs). OK sends `options` only, so the
+  server keeps the chosen value when it is still an option. A value typed as
+  a number (`3`, `-0.5`, `1e3`) is a number, anything else text; a row whose
+  value text was not touched keeps its value as it was (so text `"1"` stays
+  text). A blank label takes the value's text. The port colour follows the
+  server's `outputs[0].type`.
+- **Color Swatch**: double-click opens a window with `<input type=color>`
+  and a hex field. The picker has no alpha, so picking keeps the field's
+  `AA`; the field also takes `r,g,b[,a]`, checked by the server.
+- **Colormap**: a gradient strip (class chips for a classes colormap) with
+  the ramp's name (`custom` for own stops, `N classes`). Double-click lists
+  the named ramps with a "Reversed" box; picking one sends
+  `{kind: continuous, name, min, max, reverse}`, keeping a continuous
+  colormap's `min` / `max`. A classes or custom colormap made through the API
+  is drawn but can only be replaced by a named ramp until change 03.
+- **Settings tab** shows a wired Params value as `wired: Boolean Toggle =
+  True`, `wired: Value List = One` (the option's label), `wired: Colormap =
+  viridis`, `wired: Number = 3`, `wired: Color Swatch = #0B7A7C`.
+
 ## 9. Icons (SPEC 4 "Header", SPEC 8)
 
 `icon:` takes one of:
@@ -412,6 +662,78 @@ Rules:
   aliases, because nothing is published yet. `docs/writing-components.md`
   lists the bare names today and changes with them.
 - Icons are drawn with `currentColor`, so they follow the theme (change 02).
+
+Details settled while building step 7:
+
+- **Names.** A Font-GIS name is the file name of its SVG in the Font-GIS
+  sources without the code-point prefix (`uEA85-map-legend.svg` →
+  `gis:map-legend`, the same as its `fg-map-legend` CSS class); Lucide and
+  Tabler use their kebab-case names (`lucide:grid-2x2-check`,
+  `tabler:brand-python`). The registry (`ICONS` in
+  `frontend/src/icons/registry.tsx`) holds only the icons in use: built-in
+  headers, Params entries and the tab fallbacks.
+- **Chosen icons.** Built-ins: Read Raster `gis:mosaic`, Write Raster and
+  Write Vector `gis:layer-download`, Band Select `gis:layers`, Reclassify
+  `gis:map-legend`, Clip `gis:select-extent`, Align Raster `gis:snap`, Read
+  Vector `gis:polygon-pt`, Reproject `gis:proj-geo`, Random Sample
+  `gis:multipoint`, Stratified Sample `gis:layers-poi`, Split Points and
+  Train/Test Split `gis:split`, Extract Values `gis:poi-info`, Random Forest
+  `lucide:trees`, SVM `lucide:sigma`, Predict Raster `lucide:wand-sparkles`,
+  Confusion Matrix `lucide:grid-2x2-check`, Accuracy `lucide:target`, Python
+  `tabler:brand-python` (neither Font-GIS nor Lucide has a Python icon).
+  Params (`PARAM_ICONS` in `geoknit/components/layout.py`, one per kind):
+  Text `lucide:type`, Number `lucide:hash`, Number Slider
+  `lucide:sliders-horizontal`, Boolean Toggle `lucide:toggle-right`, Value
+  List `lucide:list`, Color Swatch `gis:color`, Colormap `lucide:rainbow`,
+  Panel `lucide:sticky-note`, Map Viewer `gis:map`. Tab fallbacks
+  (`CATEGORY_ICONS`): Params `lucide:sliders-horizontal`, Maths
+  `lucide:calculator`, Sets `lucide:list`, Table `lucide:table`, Vector
+  `gis:polygon-pt`, Raster `gis:mosaic`, Sampling `gis:multipoint`, Model
+  `lucide:trees`, Validation `lucide:target`, Display `gis:map`, Script and
+  pack or user tabs `lucide:code`.
+- **Vendored files.** Font-GIS SVGs come from the `font-gis` npm package
+  1.0.6 (`svg/`), Tabler from `@tabler/icons` 3.53.0 (`icons/outline/`);
+  neither is a dependency. On copy, Font-GIS files lose their Inkscape
+  metadata and ids and get a `viewBox`; every fill and stroke colour becomes
+  `currentColor`; a comment at the top credits the author and licence and
+  says what changed (CC BY 4.0 asks for both). `gis/` holds Font-GIS's
+  `LICENSE.md` and `LICENSE-CC-BY.md`, `tabler/` Tabler's `LICENSE`. Lucide
+  is not vendored (it comes from `lucide-react`); its ISC licence and the
+  MIT licence of its Feather-derived icons are quoted in
+  `THIRD_PARTY_NOTICES.md`. Vendored SVGs are inserted inline, so
+  `currentColor` follows the text colour.
+- **Wheel.** `force-include` puts the file at
+  `geoknit/THIRD_PARTY_NOTICES.md` inside the wheel (the package folder,
+  since the wheel has no other place for it besides `dist-info`);
+  `scripts/smoke_test.py` checks it is in the installed package.
+- **`.svg` icons.** The path is relative to the component file and must stay
+  inside the folder the component was loaded from: the pack folder (for a
+  pack), the user folder or the built-in folder. So `icons/x.svg` and
+  `../shared/x.svg` both work in a pack; an absolute path, a path that
+  leaves the pack, a missing file or a `<set>:<name>` icon answer `404`, as
+  does an unknown reference (`Registry.icon_path`). The file is served as
+  `image/svg+xml` with its bytes unchanged. The icon is the one in the
+  library header: a node whose source was edited uses its library
+  component's file, an inline node the file of the component it is
+  `based_on` (none: the category icon). The ribbon, search and node draw it
+  as a CSS mask filled with `currentColor` (so it is one colour, like the
+  other icons, and an SVG's scripts never run); if it fails to load, the
+  category icon is drawn instead. The frontend builds the URL with
+  `componentIconUrl(ref)` (`api.ts`).
+- **`docs/icons.md`** has one row per name (preview, name, set and licence)
+  and a short note for pack authors. GitHub does not render inline SVG, so
+  the previews are files in `docs/icons/` (`gis-map.svg`, …) drawn in
+  `#64748b`, readable on light and dark backgrounds; the test checks both the
+  Markdown and the folder (no missing, changed or extra file). Command:
+  `UPDATE_ICONS=1 npx vitest run src/icons` in `frontend/`. The test reads
+  the built-in headers with `import.meta.glob(…, {query: "?raw"})` and the
+  `PARAM_ICONS` block of `layout.py` with `?raw`, so `PARAM_ICONS` keeps
+  literal keys and values; the few Node APIs it uses are declared in
+  `frontend/src/icons/node.d.ts` instead of adding `@types/node`.
+- **Unknown names** (including the old bare names) draw the category's icon
+  and log `GeoKnit: unknown icon "x"; using the category icon (see
+  docs/icons.md)` once per name (`strings.unknownIcon`). A missing `icon:`
+  draws the category icon silently.
 
 ## 10. Renames and merges before release (SPEC 5, 7)
 
@@ -475,6 +797,102 @@ sends with `done`. It becomes a viewer that depends on the type:
   and the first page.
 - `geoknit run` and the export keep printing the `describe()` text (SPEC 10);
   only the canvas changes.
+
+Details settled while building step 8 (backend):
+
+- **Views** are built by `geoknit/core/views.py` (`view(value)`), in the
+  worker next to `describe()` (also for results read back from the disk
+  cache and for `put_value` values), in `_finish_param` and in the
+  in-process executor. A Panel's view is the view of the value passing
+  through (an unwired Panel: the `None` summary view). A view that fails to
+  build becomes a summary view; it never fails a run. `kind` says the shape:
+  - `{kind: "value", type: "Number" | "Text" | "Boolean", value}`;
+  - `{kind: "color", type: "Color", value: "#RRGGBB[AA]"}`;
+  - `{kind: "colormap", type: "Colormap", value: <Colormap JSON>}` (as in
+    the workflow file; a named ramp's stops come from `GET /api/colormaps`);
+  - `{kind: "list", type: <element type, or null when mixed>, count,
+    items: [<element view>, …]}`, the first 50 elements. An element view is
+    a `value` / `color` / `colormap` view as above, otherwise
+    `{kind: "summary", type, text}` with the first line of its `describe()`
+    (also for a Table or Vector element: no grid inside a list);
+  - `{kind: "table", type: "Table" | "Vector", columns, rows, index,
+    total_rows, offset, geometry}`: the first page (200 rows) in the page
+    shape below;
+  - `{kind: "summary", type: <type or null>, text: <describe()>}` for Raster,
+    Model and anything else.
+- **Where views travel.** The worker's `done` carries
+  `{cache_key, summary, view}` per port. The `done` event on `/ws` gains
+  `views: {port: view}` next to `outputs: {port: summary}` (`outputs` keeps
+  its shape). `GET /api/nodes/{id}/output` answers `{state, log, error,
+  outputs: {port: summary}, views: {port: view}, keys: {port: port key or
+  null}, disk_cache: bool}`. `keys` is what `/api/table/{key}` takes; a
+  Panel's `data` key is the key of the output feeding it.
+- **`GET /api/table/{key}?offset=0&limit=200`** (tag `run`) →
+  `{columns, rows, index, total_rows, offset, geometry}`: `columns` the
+  column names (geometry columns included, in frame order), `rows` one array
+  per row in column order, `index` the index labels of those rows (a
+  RangeIndex continues from `offset`), `total_rows` the table's length,
+  `offset` as asked, `geometry` the names of the geometry columns (`[]` for a
+  Table). `offset` past the end gives `rows: []`. `limit` 0–1000 and
+  `offset` ≥ 0, otherwise `400`. `404` for: a key that is not a port key, a
+  key not in the disk cache (`not in the cache; run first`), a list element
+  out of range or of a list stored as one JSON file, a port that is not a
+  Table or Vector (also a whole list), and any key when the disk cache is off
+  (`the disk cache is off: …`).
+- **The disk cache is off** when `disk_cache` is false in the output reply
+  (the server always runs with it today; `geoknit run --no-cache` has no
+  Panel). The Panel then shows the view's first page with the note "the disk
+  cache is off: only the first 200 rows". A `404` while paging (an entry
+  evicted since) is shown as an error in the grid, not as that note.
+- **Reading pages.** The cache now writes Tables and Vectors with Parquet
+  row groups of 10 000 rows (`ROW_GROUP_ROWS`; same layout and format
+  number, old entries still read), and a page reads only the row groups it
+  overlaps (`pyarrow.parquet.ParquetFile.read_row_groups`, the file opened
+  and closed per request so Windows can delete it). GeoParquet WKB geometry
+  is decoded with shapely only to get its type name. A pickle fallback entry
+  is loaded once and memoised (the last 4, by path). This lives in
+  `geoknit/server/tables.py`; pandas, pyarrow and shapely are imported on the
+  first page request.
+- **JSON-safe values.** Cells and index labels: `None`, NaN, `NaT`, `pd.NA`
+  → `null`; booleans (also `numpy.bool_`) and integers (also numpy ints) as
+  they are; finite floats as numbers, infinities as `"inf"` / `"-inf"`;
+  dates, times and timestamps → ISO 8601 text (`2026-01-02T03:04:05`, with
+  the offset when time-zoned); `bytes` → `"<N bytes>"`; a shapely geometry →
+  its type name (`Point`, `LineString`, …; a missing geometry `null`);
+  `Decimal` → number; anything else → its `str()`. Text cells longer than
+  1000 characters are cut and end in `…`. A Number *value* view sends NaN
+  and infinities as `"nan"`, `"inf"`, `"-inf"`, as `describe()` prints them.
+
+Details settled while building step 8 (frontend):
+
+- **Where the Panel gets its view.** The store keeps `views` per node and
+  port (from `done` events and from `GET /api/nodes/{id}/output` after a
+  reload). A Panel that is wired and `done` draws `views[id].data`
+  (`components/nodes/PanelView.tsx`); otherwise it shows "(empty)", "run to
+  update" or the error as before, and a result without a view falls back to
+  the `describe()` text.
+- **Simple values.** Number and Text as sent (so NaN shows `nan`); a Boolean
+  as `True` / `False`, like the Toggle. A Colormap's classes: one row per
+  class, a chip and its label (the class value when the label is empty), and
+  a last chip labelled `other` when the colormap has an `other` colour.
+- **Lists** show the header line `list of N Type` (as `describe()`'s first
+  line; `list of N` when mixed), then one row per element: its index and its
+  one-line view (a Color: a small chip and the hex; a Colormap: a small strip
+  and its name), and `… N more` past the first 50.
+- **The grid.** Missing cells are blank, booleans `True` / `False`,
+  geometry cells in italics. Column widths are set once per result in
+  characters (monospace) from the header and the first page, between 3 and
+  32 characters; longer text is cut with `…` and shown whole on hover. The
+  header row and the index column stay in view while scrolling. Later pages
+  are 200 rows, asked for when the grid is within 120 px of its end (also
+  right after a page arrives, so a Panel taller than its rows fills itself).
+- **The paging key** (`keys.data`) and `disk_cache` come from
+  `GET /api/nodes/{id}/output`, fetched once per result when a Panel shows a
+  table (the `done` event does not carry them).
+- **The disk-cache note** shows under the grid only when the table has more
+  rows than the first page. A failed page shows `could not load more rows:
+  <detail>` at the end of the grid, and the Panel stops paging until the
+  next result.
 
 ---
 

@@ -17,9 +17,23 @@ export type Display = "default" | "text" | "icon";
 
 export interface PortView {
   name: string;
+  /** The first listed type. */
   type: PortType;
+  /** Every type an input accepts (SPEC 3); one element for an ordinary port. */
+  types?: PortType[];
   access: "item" | "list";
   file?: string | null;
+  /** Output only: the input whose wired type it follows (`{like: data}`). */
+  like?: string | null;
+  /** Output only (`/api/graph`): the type the graph resolved, null while unresolved. */
+  resolved_type?: PortType | null;
+  /** Output only (`/api/graph`): every type the graph says it can carry, from the wires
+   * (`Graph.output_types`): one when resolved, `["Any"]` for an unwired Panel, else the
+   * types its unwired source could have. Drag checks use these. */
+  resolved_types?: PortType[];
+  /** Output only (`/api/graph`): "list" when the output carries a list, also a Panel
+   * passing one through (SPEC 3 "List values"). */
+  resolved_access?: "item" | "list";
 }
 
 export interface SettingView {
@@ -43,6 +57,10 @@ export interface NodeView {
   min?: number;
   max?: number;
   step?: number;
+  /** Number and Number Slider: whole numbers only (change 01, section 2). */
+  integer?: boolean;
+  /** Value List: its options; the chosen one is `value` (change 01, section 8). */
+  options?: ValueOption[];
   size?: [number, number] | null;
   source?: string;
   version?: string | null;
@@ -52,8 +70,42 @@ export interface NodeView {
   category?: string | null;
   icon?: string | null;
   settings?: SettingView[];
+  /** The header's `ports:` key; `null` when the ports cannot be edited (SPEC 4). */
+  editable_ports?: EditablePorts | null;
   /** Map Viewer: saved basemap and per-layer styles (SPEC 8). */
   map?: MapSettings;
+}
+
+/** One option of a Value List: a number or text value under a label. */
+export interface ValueOption {
+  label: string;
+  value: number | string;
+}
+
+/** A Colormap as the API and the workflow file give it (`Colormap.to_json()`, change 01).
+ * A named ramp's `stops` are left out: they follow from `name` (`GET /api/colormaps`). */
+export type ColormapJson =
+  | {
+      kind: "continuous";
+      name: string | null;
+      stops?: [number, string][];
+      min: number | null;
+      max: number | null;
+      reverse: boolean;
+    }
+  | { kind: "classes"; classes: [number, string, string][]; other: string | null };
+
+/** `GET /api/colormaps`: the named ramps, 11 `#RRGGBB` stops each, low to high. */
+export type NamedRamps = Record<string, string[]>;
+
+/** Which sides of a component the Settings tab edits, and the types it offers. */
+export interface EditablePorts {
+  inputs: boolean;
+  outputs: boolean;
+  /** The first is a new port's type. */
+  types: PortType[];
+  /** The types offered for inputs: `types`, plus `Any` when the header lists no types. */
+  input_types?: PortType[];
 }
 
 export interface WireJson {
@@ -102,13 +154,30 @@ export interface ComponentEntry {
   version: string;
   origin: string;
   name: string;
+  /** The ribbon tab. */
   category: string;
+  /** The group inside the tab ("Other" for a pack component without `group:`). */
+  group: string;
   icon: string | null;
   description: string;
   inputs: PortView[];
   outputs: PortView[];
   requires: string[];
   settings: SettingView[];
+  editable_ports?: EditablePorts | null;
+}
+
+/** A ribbon tab: its centre-strip colour and its groups in order (change 01, section 7). */
+export interface TabView {
+  name: string;
+  colour: string;
+  groups: string[];
+}
+
+/** `GET /api/components`: components and Params nodes in ribbon order, and the tabs. */
+export interface Library {
+  components: ComponentEntry[];
+  tabs: TabView[];
 }
 
 export interface FileNode {
@@ -124,11 +193,68 @@ export interface Status {
   pid: number | null;
 }
 
+/** A table cell or index label as the server sends it (change 01, section 11): missing
+ * values are null, infinities "inf" / "-inf", dates ISO text, geometries their type name. */
+export type CellValue = string | number | boolean | null;
+
+/** A page of a Table or Vector (`GET /api/table/{key}`, and the first page of a view). */
+export interface TablePage {
+  columns: string[];
+  rows: CellValue[][];
+  index: CellValue[];
+  total_rows: number;
+  offset: number;
+  /** The geometry columns (`[]` for a Table); their cells hold the geometry type name. */
+  geometry: string[];
+}
+
+export interface ValueView {
+  kind: "value";
+  type: "Number" | "Text" | "Boolean";
+  /** A Number's NaN and infinities come as "nan", "inf", "-inf". */
+  value: number | string | boolean;
+}
+export interface ColorView {
+  kind: "color";
+  type?: "Color";
+  value: string;
+}
+export interface ColormapView {
+  kind: "colormap";
+  type?: "Colormap";
+  value: ColormapJson;
+}
+export interface SummaryView {
+  kind: "summary";
+  type: PortType | null;
+  text: string;
+}
+/** One list element: a simple value as such, anything else the first line of describe(). */
+export type ElementView = ValueView | ColorView | ColormapView | SummaryView;
+export interface ListView {
+  kind: "list";
+  /** The element type, null when the elements are of mixed types. */
+  type: PortType | null;
+  count: number;
+  /** The first 50 elements. */
+  items: ElementView[];
+}
+export type TableView = { kind: "table"; type: "Table" | "Vector" } & TablePage;
+/** What a Panel draws for a value (change 01, section 11). */
+export type PanelView = ElementView | ListView | TableView;
+
 export interface NodeOutput {
   state: NodeState | null;
   log: string[];
   error: string | null;
   outputs: Record<string, string>;
+  /** Per port, the Panel view of its value. */
+  views: Record<string, PanelView>;
+  /** Per port, its port key (what `GET /api/table/{key}` takes); a Panel's `data` is the
+   * key of the output feeding it. */
+  keys: Record<string, string | null>;
+  /** False when later table pages cannot be read (the disk cache is off). */
+  disk_cache: boolean;
 }
 
 export interface RunReport {
@@ -147,6 +273,8 @@ export type ServerEvent =
       type: "done";
       node: string;
       outputs: Record<string, string>;
+      /** Per port, the Panel view of its value (change 01, section 11). */
+      views: Record<string, PanelView>;
       cached: boolean;
     }
   | { type: "error" | "skipped"; node: string; traceback: string }
@@ -159,6 +287,8 @@ export type ServerEvent =
 export interface PortEdit {
   name: string;
   type: PortType;
+  types?: PortType[];
+  like?: string | null;
   access?: "item" | "list";
   file?: string | null;
   was?: string;
@@ -174,6 +304,8 @@ export interface NodePatch {
   min?: number;
   max?: number;
   step?: number;
+  integer?: boolean;
+  options?: ValueOption[];
   size?: [number, number] | null;
   map?: { basemap?: Basemap; styles?: Record<string, Partial<LayerStyle> | null> };
 }

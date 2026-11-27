@@ -18,12 +18,22 @@ class RunNode:
 
     ``inputs`` maps each wired input to the port key feeding it, or to a list of
     port keys (wire order) for a ``list`` input. Settings are part of ``source``.
+    ``output_types`` holds the types the graph resolved for ``like:`` outputs
+    (the worker does not know the graph); the outputs are checked against them.
+    ``list_keys`` names the port keys of ``list`` inputs that come from list
+    outputs: their elements are concatenated into the input, where any other
+    key adds one element (SPEC 3 "List values"). ``list_outputs`` names the
+    ``like:`` outputs that carry a list although declared ``item`` (an ``Any``
+    item input fed by a list): their value is checked as a list.
     """
 
     node_id: str
     source: str
     inputs: dict[str, str | list[str]]
     cache_key: str
+    output_types: dict[str, str] = field(default_factory=dict)
+    list_keys: frozenset[str] = frozenset()
+    list_outputs: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -65,10 +75,13 @@ class Log:
 
 @dataclass(frozen=True)
 class Done:
-    """``outputs`` maps each port to ``{"cache_key": ..., "summary": ...}``."""
+    """``outputs`` maps each port to ``{"cache_key": ..., "summary": ..., "view": ...}``.
+
+    ``view`` is the Panel view of the value (``geoknit.core.views``).
+    """
 
     node_id: str
-    outputs: dict[str, dict[str, str]] = field(default_factory=dict)
+    outputs: dict[str, dict[str, Any]] = field(default_factory=dict)
     cached: bool = False
 
 

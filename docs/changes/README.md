@@ -49,7 +49,7 @@ code.
 
 | # | Change | Status | Needs | Release |
 |---|--------|--------|-------|---------|
-| 01 | [Types and component headers](01-types-and-headers/SPEC.md) | in progress | – | 0.1.0 |
+| 01 | [Types and component headers](01-types-and-headers/SPEC.md) | **done** | – | 0.1.0 |
 | 02 | [Light and dark theme](02-theme-light-dark/SPEC.md) | agreed | – (01 for the new type colours) | 0.1.0 |
 | 03 | [Map layers and colormaps](03-map-layers/SPEC.md) | agreed | 01, 02 | 0.1.0 |
 | 04 | [Component library](04-component-library/SPEC.md) | agreed | 01 (03 for Display) | core set in 0.1.0, the rest in 0.1.x |
@@ -108,6 +108,11 @@ the code. They are fixed like the decisions above.
 - 01 Q2: Panel's pass-through output becomes `{like: data}`
   (Grasshopper-style). It takes the type of its input, `like:` chains resolve
   through Panels, and only an unwired Panel stays `Any`.
+- 01 Q3 (27 Nov 2026, while building): option (b). The default `types` of
+  `ports:` offers `Any` for inputs only, so the Python component keeps `Any`
+  inputs.
+- 01 Q4 (27 Nov 2026): the export writes `INPUTS = {…}` as the last line of
+  the settings block, only where the code uses it.
 - 03 Q1: as proposed. Wires into Map Layer style inputs don't carry
   out-of-date, and Map Layer and Map Viewer never need a Run.
 - 04 Q1: option (c). No XLSX; Read Table supports CSV/TSV and Parquet only.

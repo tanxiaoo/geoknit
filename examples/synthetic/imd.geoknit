@@ -261,7 +261,7 @@
       "value": "IMD"
     },
     {
-      "component": "builtin/validation/accuracy",
+      "component": "builtin/validation/regression_accuracy",
       "display": "default",
       "id": "n21",
       "position": [
@@ -400,7 +400,7 @@
       ],
       "to": [
         "n10",
-        "points"
+        "data"
       ]
     },
     {

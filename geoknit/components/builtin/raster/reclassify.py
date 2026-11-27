@@ -1,7 +1,8 @@
 # geoknit: component
 # name: Reclassify
 # category: Raster
-# icon: reclassify
+# group: Calculate
+# icon: gis:map-legend
 # description: Turn a continuous raster into classes using break rules such as 0 | 0-20 | 20-40.
 # inputs:
 #   raster: Raster

@@ -8,7 +8,10 @@ be keyed in topological order without running anything:
   sorted by name, wires in wire order), and a fingerprint of every file named
   by a text setting;
 - ``param/text``: its value plus the fingerprint of the file it names, if any;
-- ``param/slider``: its value;
+- ``param/slider`` and ``param/number``: its value;
+- ``param/toggle``, ``param/color``, ``param/colormap``: its value (JSON form);
+- ``param/value_list``: the value it outputs (text when its type is Text, then
+  also the fingerprint of the file it names, as for ``param/text``);
 - ``param/panel``: no key of its own; its ``data`` output reuses the key of the
   wire feeding it;
 - ``param/map``: no key and no outputs (the Map Viewer reads its inputs' entries).
@@ -30,7 +33,16 @@ from pathlib import Path
 from typing import Any
 
 from geoknit.core import types
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.graph import (
+    PARAM_MAP,
+    PARAM_PANEL,
+    PARAM_TEXT,
+    PARAM_VALUE_LIST,
+    VALUE_PARAMS,
+    Graph,
+    Node,
+    param_output,
+)
 from geoknit.core.types import RASTER_CHUNKS
 
 CACHE_FORMAT = 1
@@ -90,9 +102,9 @@ def node_files(node: Node, base_dir: Path | None, graph: Graph | None = None) ->
     the write itself would otherwise change the key on every Run.
     """
     texts: list[str] = []
-    if node.component == PARAM_TEXT:
+    if node.component in (PARAM_TEXT, PARAM_VALUE_LIST):
         if graph is None or not _feeds_only_written_files(graph, node.id):
-            texts = _strings(node.value)
+            texts = _strings(param_output(node))  # a Value List of numbers names no file
     elif node.spec is not None and not node.is_param:
         for s in node.spec.settings.values():
             port = node.spec.inputs.get(s.name)
@@ -113,7 +125,7 @@ class GraphKeys:
     inputs: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     """Upstream port keys feeding each input, in wire order."""
     values: dict[str, Any] = field(default_factory=dict)
-    """Port key → value for Text, Slider and empty Panel outputs."""
+    """Port key → value for the Params values (``VALUE_PARAMS``) and empty Panel outputs."""
 
 
 def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
@@ -142,17 +154,19 @@ def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
             keys.ports[nid] = {}
             continue
 
-        if node.component in (PARAM_TEXT, PARAM_SLIDER):
-            kind = "text" if node.component == PARAM_TEXT else "number"
+        if node.component in VALUE_PARAMS:
+            # ``text``, ``number``, ``boolean``, ``color`` or ``colormap``: the output type
+            kind = node.outputs["value"].type.lower()
+            value = param_output(node)
             nkey = _sha(
                 {
                     "format": CACHE_FORMAT,
-                    kind: node.value,
+                    kind: types.to_json_value(value),
                     "files": node_files(node, base_dir, graph),
                 }
             )
             pkey = port_key(nkey, "value")
-            keys.values[pkey] = node.value
+            keys.values[pkey] = value
         else:
             nkey = _sha(
                 {
@@ -262,12 +276,14 @@ class DiskCache:
 
         After writing a computed raster (e.g. a lazy prediction), the worker
         swaps its in-memory value for this file view, so downstream nodes read
-        the COG instead of computing the raster again.
+        the COG instead of computing the raster again. A list port with a COG
+        element is read back whole (its other elements are cheap: lazy views or
+        small values).
         """
         entry = self._entry(node_key)
         out: dict[str, Any] = {}
         for port, info in self.meta(node_key).get("ports", {}).items():
-            if info.get("type") == types.RASTER and info.get("format") == "cog":
+            if _has_cog(entry, info):
                 out[port] = _read_value(entry, info)
         return out
 
@@ -397,9 +413,76 @@ class DiskCache:
 # ── per-type formats ──
 
 
+JSON_TYPES = (types.NUMBER, types.TEXT, types.BOOLEAN, types.COLOR, types.COLORMAP)
+"""Types stored as JSON (one ``{"value": …}`` file, also for a whole list of them)."""
+
+LIST_INDEX = "index.json"
+
+ROW_GROUP_ROWS = 10_000
+"""Rows per Parquet row group of a Table or Vector, so a page of it (the Panel,
+change 01 section 11) reads at most a couple of groups, not the whole file."""
+
+
+def _write_list(entry: Path, port: str, items: list[Any]) -> dict[str, Any]:
+    """A list output (SPEC 6): one JSON file when every element is the same simple
+    type, else a folder ``<port>/`` with one file per element plus ``index.json``."""
+    kinds = {types.type_of(v) for v in items}
+    kind = next(iter(kinds)) if len(kinds) == 1 else None
+    info: dict[str, Any] = {"type": kind, "access": "list", "count": len(items)}
+    if not items or kind in JSON_TYPES:
+        name = f"{port}.json"
+        data = [types.to_json_value(types.as_output(v)) for v in items]
+        (entry / name).write_text(json.dumps({"value": data}), encoding="utf-8")
+        return {**info, "file": name, "format": "json"}
+    folder = entry / port
+    folder.mkdir()
+    elements = [_write_value(folder, str(i), v) for i, v in enumerate(items)]
+    (folder / LIST_INDEX).write_text(json.dumps({"items": elements}), encoding="utf-8")
+    return {**info, "file": f"{port}/{LIST_INDEX}", "format": "list"}
+
+
+def _read_list(entry: Path, info: dict[str, Any]) -> list[Any]:
+    path = entry / info["file"]
+    if info["format"] == "json":
+        data = json.loads(path.read_text(encoding="utf-8"))["value"]
+        return [types.from_json_value(info.get("type") or "", d) for d in data]
+    if info["format"] != "list":
+        raise CacheMiss(f"unknown list format {info['format']}")
+    index = json.loads(path.read_text(encoding="utf-8"))
+    return [_read_value(path.parent, item) for item in index["items"]]
+
+
+def list_element_info(entry: Path, info: dict[str, Any], i: int) -> tuple[Path, dict[str, Any]]:
+    """``(folder, info)`` of element ``i`` of a list port stored as a folder
+    (``format: "list"``); raises ``CacheMiss`` for any other port or index."""
+    if info.get("access") != "list" or info.get("format") != "list":
+        raise CacheMiss(f"element {i}: not a list stored one file per element")
+    path = entry / info["file"]
+    try:
+        items = json.loads(path.read_text(encoding="utf-8"))["items"]
+    except (OSError, ValueError, KeyError):
+        raise CacheMiss(f"element {i}") from None
+    if not 0 <= i < len(items):
+        raise CacheMiss(f"element {i}: the list has {len(items)}")
+    return path.parent, items[i]
+
+
+def _has_cog(entry: Path, info: dict[str, Any]) -> bool:
+    """Whether a port (or an element of a list port) is a raster stored as a COG."""
+    if info.get("access") == "list":
+        if info.get("format") != "list":
+            return False
+        path = entry / info["file"]
+        index = json.loads(path.read_text(encoding="utf-8"))
+        return any(_has_cog(path.parent, item) for item in index["items"])
+    return info.get("type") == types.RASTER and info.get("format") == "cog"
+
+
 def _write_value(entry: Path, port: str, value: Any) -> dict[str, Any]:
+    if isinstance(value, list):
+        return _write_list(entry, port, value)
     kind = types.type_of(value)
-    if kind in (types.NUMBER, types.TEXT, types.BOOLEAN, types.COLOR, types.COLORMAP):
+    if kind in JSON_TYPES:
         name = f"{port}.json"
         data = types.to_json_value(types.as_output(value))
         (entry / name).write_text(json.dumps({"value": data}), encoding="utf-8")
@@ -409,7 +492,7 @@ def _write_value(entry: Path, port: str, value: Any) -> dict[str, Any]:
     if kind in (types.VECTOR, types.TABLE):
         name = f"{port}.parquet"
         try:
-            value.to_parquet(entry / name)
+            value.to_parquet(entry / name, row_group_size=ROW_GROUP_ROWS)
             fmt = "geoparquet" if kind == types.VECTOR else "parquet"
         except Exception:  # noqa: BLE001  (Parquet refuses some dtypes)
             (entry / name).unlink(missing_ok=True)
@@ -427,6 +510,8 @@ def _write_value(entry: Path, port: str, value: Any) -> dict[str, Any]:
 
 
 def _read_value(entry: Path, info: dict[str, Any]) -> Any:
+    if info.get("access") == "list":
+        return _read_list(entry, info)
     path = entry / info["file"]
     fmt = info["format"]
     if fmt == "json":

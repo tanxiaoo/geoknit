@@ -22,8 +22,22 @@ from typing import Any
 
 from geoknit import __version__
 from geoknit.core import types
-from geoknit.core.component import PRINT_PORT, ComponentSpec
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, Node
+from geoknit.core.component import INPUTS_NAME, PRINT_PORT, ComponentSpec
+from geoknit.core.graph import (
+    PARAM_COLOR,
+    PARAM_COLORMAP,
+    PARAM_MAP,
+    PARAM_NUMBER,
+    PARAM_PANEL,
+    PARAM_SLIDER,
+    PARAM_TEXT,
+    PARAM_TOGGLE,
+    PARAM_VALUE_LIST,
+    VALUE_PARAMS,
+    Graph,
+    Node,
+    param_output,
+)
 from geoknit.core.workflow import relativize
 
 INDENT = "    "
@@ -175,6 +189,13 @@ def _rewrite_imports(code: str, where: str) -> tuple[str, _Imports]:
     return "".join(lines), found
 
 
+def _uses_name(code: str, name: str) -> bool:
+    """Whether the code reads the variable ``name``."""
+    with contextlib.suppress(SyntaxError):
+        return any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(ast.parse(code)))
+    return False
+
+
 def _vendor_source(module: str) -> tuple[str, set[str]]:
     """A vendored module without its docstring, ``__all__`` and geoknit imports."""
     path = PACKAGE_DIR / VENDOR_FILES[module]
@@ -238,7 +259,8 @@ class _Exporter:
         self.order = graph.topological_order()
         self.names = _id_names(list(graph.nodes))
         self.exprs: dict[tuple[str, str], str] = {}
-        self.out_types: dict[tuple[str, str], str] = {}
+        self.out_types: dict[tuple[str, str], tuple[str, ...]] = {}
+        """Resolved output types (``like:`` outputs follow the graph, SPEC 4)."""
         self.warnings: list[str] = []
         self.needs_as_text = False
         self.needs_capture = False
@@ -250,21 +272,33 @@ class _Exporter:
 
     # ── inputs ──
     def wired_value(self, node: Node, port: str) -> str:
+        """The argument for an input; a list input gets ``[*a, b, *c]`` in wire order
+        (a list wire adds its elements, any other wire one element, SPEC 3)."""
         wires = self.graph.wires_into(node.id, port)
-        in_type = node.inputs[port].type
-        values = [self._convert(self.exprs[(w.src, w.src_port)], w, in_type) for w in wires]
-        if node.inputs[port].access == "list":
-            return "[" + ", ".join(values) + "]"
-        return values[0]
+        in_types = node.inputs[port].types
+        if node.inputs[port].access != "list":
+            return self._convert(self.exprs[(wires[0].src, wires[0].src_port)], wires[0], in_types)
+        values: list[str] = []
+        for w in wires:
+            expr = self.exprs[(w.src, w.src_port)]
+            if self.graph.output_is_list(w.src, w.src_port):
+                each = self._convert("_v", w, in_types)
+                values.append(f"*{expr}" if each == "_v" else f"*[{each} for _v in {expr}]")
+            else:
+                values.append(self._convert(expr, w, in_types))
+        return "[" + ", ".join(values) + "]"
 
-    def _convert(self, expr: str, wire: Any, in_type: str) -> str:
+    def _convert(self, expr: str, wire: Any, in_types: tuple[str, ...]) -> str:
         """Number/Boolean → Text wires get ``str()`` (SPEC 3), like ``convert_for_input``."""
-        if in_type != types.TEXT:
+        if types.TEXT not in in_types:
             return expr
-        out_type = self.out_types[(wire.src, wire.src_port)]
-        if out_type in types.TO_TEXT:
+        out_types = self.out_types[(wire.src, wire.src_port)]
+        if types.ANY in out_types:  # an unwired Panel, or an unresolved ``like:`` output
+            self.needs_as_text = True
+            return f"_as_text({expr})"
+        if len(out_types) == 1 and out_types[0] in types.TO_TEXT and out_types[0] not in in_types:
             return f"str({expr})"
-        if out_type == types.ANY:
+        if any(t in types.TO_TEXT and t not in in_types for t in out_types):
             self.needs_as_text = True
             return f"_as_text({expr})"
         return expr
@@ -274,18 +308,35 @@ class _Exporter:
         wires = [w for w in self.graph.wires if w.src == node.id]
         suffix = slug(wires[0].dst_port).upper() if wires else "VALUE"
         name = f"{self.names[node.id].upper()}_{suffix}"
-        value = node.value
+        value = param_output(node)
         if node.component == PARAM_TEXT and isinstance(value, str):
             value = relativize(value, self.base_dir)
-        if node.component == PARAM_SLIDER:
-            note = f"Number Slider ({_num(node.min)}..{_num(node.max)}, step {_num(node.step)})"
-        else:
-            note = "Text"
+        note = self.constant_note(node)
         targets = ", ".join(f"{w.dst} {self.graph.nodes[w.dst].title}.{w.dst_port}" for w in wires)
         comment = f"# {node.id} {note}" + (f" → {targets}" if targets else "")
         self.exprs[(node.id, "value")] = name
-        self.out_types[(node.id, "value")] = node.outputs["value"].type
+        self.out_types[(node.id, "value")] = self.graph.output_types(node.id, "value")
         return f"{comment}\n{name} = {self.literal(value)}\n"
+
+    @staticmethod
+    def constant_note(node: Node) -> str:
+        """What the constant comes from, for its comment."""
+        integer = ", integer" if node.integer else ""
+        if node.component == PARAM_SLIDER:
+            limits = f"{_num(node.min)}..{_num(node.max)}, step {_num(node.step)}"
+            return f"Number Slider ({limits}{integer})"
+        if node.component == PARAM_NUMBER:
+            return f"Number{' (integer)' if node.integer else ''}"
+        if node.component == PARAM_VALUE_LIST:
+            options = ", ".join(f"{o['label']}={o['value']}" for o in node.options or [])
+            return f"Value List ({options})"
+        if node.component == PARAM_TOGGLE:
+            return "Boolean Toggle"
+        if node.component == PARAM_COLOR:
+            return "Color Swatch"
+        if node.component == PARAM_COLORMAP:
+            return "Colormap"
+        return "Text"
 
     def literal(self, value: Any) -> str:
         """Source for a constant; a Color or Colormap needs the vendored types."""
@@ -314,6 +365,10 @@ class _Exporter:
                 f"{where} imports {module}: the script still needs GeoKnit installed"
             )
 
+        if _uses_name(code, INPUTS_NAME):
+            # GeoKnit sets INPUTS before the code: every input, wired or from its setting.
+            pairs = ", ".join(f'"{n}": {n}' for n in spec.inputs)
+            settings.append(f"{INPUTS_NAME} = {{{pairs}}}\n")
         body = "# --- settings ---\n" + "".join(settings) + "# --- code ---\n" + code
         outputs = list(spec.outputs)
         prints = PRINT_PORT in spec.outputs and spec.outputs[PRINT_PORT].type == types.TEXT
@@ -331,13 +386,24 @@ class _Exporter:
         else:
             text = head + indent(body)
         if outputs:
-            text += f"{INDENT}return {', '.join(outputs)}\n"
+            # List outputs are plain lists, as in GeoKnit (a tuple is converted).
+            returned = [self._returned(node, p) for p in outputs]
+            text += f"{INDENT}return {', '.join(returned)}\n"
         for port in outputs:
             var = f"{self.names[node.id]}_{port}"
             # An output named like its component (Half → half) must not hide the function.
             self.exprs[(node.id, port)] = f"{var}_value" if var == fname else var
-            self.out_types[(node.id, port)] = spec.outputs[port].type
+            self.out_types[(node.id, port)] = self.graph.output_types(node.id, port)
         return _Function(node, fname, wired, outputs, text, imports)
+
+    def _returned(self, node: Node, port: str) -> str:
+        """How a function returns an output, as GeoKnit keeps it (SPEC 10): a list
+        output as ``list(x)``; a Boolean output through ``bool`` (so ``numpy.bool_``
+        becomes ``bool``, as ``as_output`` does), per element for a list of them."""
+        is_list = self.graph.output_is_list(node.id, port)  # also a like: output of a list
+        if self.graph.output_types(node.id, port) == (types.BOOLEAN,):
+            return f"[bool(_v) for _v in {port}]" if is_list else f"bool({port})"
+        return f"list({port})" if is_list else port
 
     def header_comment(self, node: Node) -> str:
         if node.component == "inline":
@@ -356,13 +422,13 @@ class _Exporter:
 
         for nid in self.order:
             node = self.graph.nodes[nid]
-            if node.component in (PARAM_TEXT, PARAM_SLIDER):
+            if node.component in VALUE_PARAMS:
                 constants.append(self.constant(node))
             elif node.component == PARAM_PANEL:
                 wires = self.graph.wires_into(nid, "data")
                 value = self.exprs[(wires[0].src, wires[0].src_port)] if wires else "None"
                 self.exprs[(nid, "data")] = value
-                self.out_types[(nid, "data")] = types.ANY
+                self.out_types[(nid, "data")] = self.graph.output_types(nid, "data")
                 panel_values[nid] = value if wires else None
             elif node.component == PARAM_MAP:
                 steps.append(f"# {nid} Map Viewer: view only, not exported")

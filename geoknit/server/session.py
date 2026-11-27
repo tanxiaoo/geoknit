@@ -23,17 +23,24 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from geoknit.components.layout import library
 from geoknit.components.registry import Registry, default_registry
+from geoknit.core import types
 from geoknit.core.cache import CacheMiss, DiskCache
 from geoknit.core.component import ComponentParseError, parse_component
 from geoknit.core.executor import Event, RunReport
 from geoknit.core.export import ExportError, export_script
 from geoknit.core.graph import (
     INLINE,
+    PARAM_COLOR,
+    PARAM_COLORMAP,
     PARAM_MAP,
+    PARAM_NUMBER,
     PARAM_PANEL,
     PARAM_SLIDER,
     PARAM_TEXT,
+    PARAM_TOGGLE,
+    PARAM_VALUE_LIST,
     Graph,
     GraphError,
     Node,
@@ -50,7 +57,7 @@ from geoknit.core.workflow import (
     node_from_dict,
 )
 from geoknit.runtime.client import WorkerExecutor
-from geoknit.server import tiles
+from geoknit.server import tables, tiles
 from geoknit.server.editor import EditorError, ExternalEditors, slugify
 from geoknit.server.events import Broadcaster
 
@@ -87,7 +94,24 @@ class Conflict(SessionError):
 
 
 def _ports(ports: Iterable[Any]) -> list[dict[str, Any]]:
-    return [{"name": p.name, "type": p.type, "access": p.access, "file": p.file} for p in ports]
+    return [
+        {"name": p.name, "type": p.type, "types": list(p.types), "access": p.access, "file": p.file}
+        for p in ports
+    ]
+
+
+def _output_ports(graph: Graph, node: Node) -> list[dict[str, Any]]:
+    """Outputs with ``like``, the type the graph resolved (``None`` while unresolved),
+    ``resolved_types`` (every type it can carry, ``Graph.output_types``, which the
+    wiring checks use) and ``resolved_access``: ``list`` when the output carries a
+    list, also a Panel passing one through (SPEC 3 "List values")."""
+    out = _ports(node.outputs.values())
+    for view, port in zip(out, node.outputs.values(), strict=True):
+        view["like"] = port.like
+        view["resolved_type"] = graph.output_type(node.id, port.name)
+        view["resolved_types"] = list(graph.output_types(node.id, port.name))
+        view["resolved_access"] = "list" if graph.output_is_list(node.id, port.name) else "item"
+    return out
 
 
 def _setting_view(s: Any) -> dict[str, Any]:
@@ -352,12 +376,21 @@ class Session:
             "position": node.position,
             "display": node.display,
             "inputs": _ports(node.inputs.values()),
-            "outputs": _ports(node.outputs.values()),
+            "outputs": _output_ports(self.graph, node),
         }
         if node.component == PARAM_TEXT:
             view["value"] = node.value
         elif node.component == PARAM_SLIDER:
-            view.update(min=node.min, max=node.max, step=node.step, value=node.value)
+            view.update(
+                min=node.min, max=node.max, step=node.step, value=node.value, integer=node.integer
+            )
+        elif node.component == PARAM_NUMBER:
+            view.update(value=node.value, integer=node.integer)
+        elif node.component == PARAM_VALUE_LIST:
+            # The output type follows the options: ``outputs[0].type`` (change 01, 8).
+            view.update(options=[dict(o) for o in node.options or []], value=node.value)
+        elif node.component in (PARAM_TOGGLE, PARAM_COLOR, PARAM_COLORMAP):
+            view["value"] = types.to_json_value(node.value)
         elif node.component == PARAM_PANEL:
             view["size"] = node.extra.get("size")
         elif node.component == PARAM_MAP:
@@ -373,6 +406,7 @@ class Session:
                 category=spec.category if spec else None,
                 icon=spec.icon if spec else None,
                 settings=[_setting_view(s) for s in spec.settings.values()] if spec else [],
+                editable_ports=spec.ports.as_dict() if spec and spec.ports else None,
             )
         return view
 
@@ -412,22 +446,44 @@ class Session:
                 "recovery": self.recovery,
             }
 
-    def components(self) -> list[dict[str, Any]]:
+    def components(self) -> dict[str, Any]:
+        """``{components, tabs}``: the library and Params nodes in ribbon order (change 01, 7)."""
         out = self.registry.entries()
         for entry in out:
             spec = self.registry.spec(entry["ref"])
             entry["settings"] = [_setting_view(s) for s in spec.settings.values()]
-        return out
+        return library(out)
+
+    def component_icon(self, ref: str) -> Path:
+        """The ``.svg`` file a component's ``icon:`` names (change 01, section 9)."""
+        path = self.registry.icon_path(ref)
+        if path is None:
+            raise NotFound(f'"{ref}" has no .svg icon inside its folder')
+        return path
 
     def output(self, node_id: str) -> dict[str, Any]:
+        """State, log, error, and per port: the summary, the Panel view and the
+        port key (for ``GET /api/table/{key}``); ``disk_cache`` says whether later
+        table pages can be read (change 01, section 11)."""
         self._node(node_id)
         ex = self.executor
+        summaries = dict(ex.summaries.get(node_id, {}))
         return {
             "state": self.solver.states.get(node_id),
             "log": list(ex.logs.get(node_id, [])),
             "error": ex.errors.get(node_id),
-            "outputs": dict(ex.summaries.get(node_id, {})),
+            "outputs": summaries,
+            "views": dict(ex.views.get(node_id, {})),
+            "keys": {port: ex.done_port_key(node_id, port) for port in summaries},
+            "disk_cache": ex.cache_dir is not None,
         }
+
+    def table_page(self, key: str, offset: int, limit: int) -> dict[str, Any]:
+        """A page of a cached Table or Vector (``GET /api/table/{key}``)."""
+        folder = self.executor.cache_dir
+        if folder is None:
+            raise NotFound("the disk cache is off: only the first page of a table is shown")
+        return tables.table_page(DiskCache(folder), key, offset, limit)
 
     # ── edits ──
     def add_node(
@@ -466,19 +522,15 @@ class Session:
             g.set_source(node_id, changes["source"])
         if changes.get("ports") is not None:
             ports = changes["ports"]
-            g.set_ports(node_id, list(ports.get("inputs", [])), list(ports.get("outputs", [])))
+            ins, outs = ports.get("inputs"), ports.get("outputs")
+            g.set_ports(
+                node_id,
+                None if ins is None else list(ins),
+                None if outs is None else list(outs),
+            )
         for name, value in (changes.get("settings") or {}).items():
             g.set_setting(node_id, name, value)
-        slider = {k: changes[k] for k in ("min", "max", "step") if k in changes}
-        if slider:
-            if "value" in changes:
-                slider["value"] = changes["value"]
-            g.set_slider(node_id, **slider)
-        elif "value" in changes:
-            if node.component == PARAM_SLIDER:
-                g.set_slider(node_id, value=changes["value"])
-            else:
-                g.set_value(node_id, changes["value"])
+        self._apply_value_patch(node, changes)
         if "position" in changes:
             g.set_position(node_id, changes["position"])
         if "display" in changes:
@@ -502,6 +554,27 @@ class Session:
                 raise BadRequest(exc.message) from None
             if not node.extra["map"]:
                 del node.extra["map"]
+
+    def _apply_value_patch(self, node: Node, changes: dict[str, Any]) -> None:
+        """``min``/``max``/``step``, ``integer``, ``options`` and ``value`` of a Params node."""
+        node_id, g = node.id, self.graph
+        limits = {k: changes[k] for k in ("min", "max", "step") if k in changes}
+        integer = changes.get("integer")
+        value = changes.get("value")
+        if "integer" in changes and node.component not in (PARAM_SLIDER, PARAM_NUMBER):
+            raise BadRequest(f"{node.title} has no integer mode")
+        if "options" in changes and node.component != PARAM_VALUE_LIST:
+            raise BadRequest(f"{node.title} has no options")
+        if node.component == PARAM_SLIDER or limits:
+            if limits or "value" in changes or "integer" in changes:
+                g.set_slider(node_id, **limits, value=value, integer=integer)
+        elif node.component == PARAM_NUMBER:
+            if "value" in changes or "integer" in changes:
+                g.set_number(node_id, value=value, integer=integer)
+        elif "options" in changes:
+            g.set_options(node_id, changes["options"], value=value)
+        elif "value" in changes:
+            g.set_value(node_id, value)
 
     def remove_node(self, node_id: str) -> None:
         with self.lock:
@@ -859,6 +932,8 @@ class Session:
                 else:
                     _, info = cache.port_info(key)
                     layer["type"] = info.get("type")
+                    if info.get("access") == "list":  # elements as layers: change 03
+                        layer["type"] = f"list of {layer['type'] or 'values'}"
                     if layer["type"] == "Raster":
                         layer["raster"] = tiles.describe_raster(cache, key)
                         default = layer["raster"]["default_style"]
@@ -896,7 +971,7 @@ class Session:
             cache = DiskCache(folder)
             try:
                 _, info = cache.port_info(layer["key"])
-                if info.get("type") != "Raster":
+                if info.get("type") != "Raster" or info.get("access") == "list":
                     continue
                 found = tiles.inspect_raster(cache, layer["key"], lon, lat)
             except (CacheMiss, tiles.MapError):

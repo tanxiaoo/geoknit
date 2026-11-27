@@ -180,7 +180,8 @@ def test_set_ports_keeps_crlf() -> None:
         ([{"name": "x", "type": "Rastr"}], [], 'unknown type "Rastr"'),
         ([{"name": "x", "type": "Text"}], [{"name": "x", "type": "Text"}], "both input and output"),
         ([{"name": "x", "type": "Text"}, {"name": "x", "type": "Text"}], [], "used twice"),
-        ([], [{"name": "x", "type": "Text", "access": "list"}], "cannot take a list"),
+        ([], [{"name": "x", "type": "Text", "file": "write"}], "only allowed on a Text input"),
+        ([], [{"name": "x", "type": "Text", "access": "many"}], "access must be item or list"),
     ],
 )
 def test_set_ports_refuses_bad_ports(inputs: list, outputs: list, message: str) -> None:

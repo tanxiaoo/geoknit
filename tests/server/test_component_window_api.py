@@ -85,7 +85,11 @@ def test_save_as_component_appears_in_the_library(tmp_path: Path, trust_file: Pa
         assert r.status_code == 200, r.text
         assert r.json()["ref"] == "user/script/my_ndvi"
         assert (user / "script" / "my_ndvi.py").read_text(encoding="utf-8") == source
-        entry = next(c for c in client.get("/api/components").json() if c["ref"] == r.json()["ref"])
+        entry = next(
+            c
+            for c in client.get("/api/components").json()["components"]
+            if c["ref"] == r.json()["ref"]
+        )
         assert entry["origin"] == "user" and entry["name"] == "My NDVI!"
 
         again = client.post(f"/api/nodes/{py}/save_component", json={})
@@ -145,3 +149,77 @@ def test_open_in_vscode_without_vscode_is_a_clear_error(
     rc = _add(client, RECLASSIFY)
     r = client.post(f"/api/nodes/{rc}/vscode")
     assert r.status_code == 400 and "VS Code was not found" in r.json()["detail"]
+
+
+CALC = """\
+# geoknit: component
+# name: Raster Calculator
+# category: Raster
+# ports: {inputs: editable, types: [Raster, Number]}
+# inputs:
+#   a: Raster
+# outputs:
+#   result: Raster
+
+# --- code ---
+result = a
+"""
+
+
+def test_ports_patch_follows_the_ports_header_key(client: TestClient) -> None:
+    r = client.post("/api/nodes", json={"component": "inline", "position": [0, 0], "source": CALC})
+    assert r.status_code == 201, r.text
+    calc = r.json()["id"]
+    assert r.json()["editable_ports"] == {
+        "inputs": True,
+        "outputs": False,
+        "types": ["Raster", "Number"],
+        "input_types": ["Raster", "Number"],
+    }
+    a = {"name": "a", "type": "Raster"}
+    r = client.patch(
+        f"/api/nodes/{calc}", json={"ports": {"inputs": [a, {"name": "b", "type": "Raster"}]}}
+    )
+    assert r.status_code == 200, r.text
+    assert [(p["name"], p["type"]) for p in r.json()["inputs"]] == [
+        ("a", "Raster"),
+        ("b", "Raster"),
+    ]
+
+    r = client.patch(
+        f"/api/nodes/{calc}",
+        json={"ports": {"inputs": [a, {"name": "b", "type": "Text", "was": "b"}]}},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Raster Calculator inputs are Raster or Number"
+    assert client.get("/api/graph").json()["nodes"][calc]["inputs"][1]["type"] == "Raster"
+
+    rc = _add(client, RECLASSIFY)
+    assert client.get("/api/graph").json()["nodes"][rc]["editable_ports"] is None
+    r = client.patch(
+        f"/api/nodes/{rc}", json={"ports": {"inputs": [{"name": "raster", "type": "Raster"}]}}
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "the inputs of Reclassify cannot be edited"
+
+
+def test_renaming_an_input_a_like_output_follows(client: TestClient) -> None:
+    py = _add(client, PYTHON)
+    ports = {
+        "inputs": [{"name": "data", "type": "Any"}],
+        "outputs": [{"name": "out", "type": "Any", "like": "data"}],
+    }
+    assert client.patch(f"/api/nodes/{py}", json={"ports": ports}).status_code == 200
+    # what the Settings tab sends on a rename: the outputs as they were, `was` on the input
+    ports["inputs"] = [{"name": "items", "type": "Any", "was": "data"}]
+    r = client.patch(f"/api/nodes/{py}", json={"ports": ports})
+    assert r.status_code == 200, r.text
+    assert [p["name"] for p in r.json()["inputs"]] == ["items"]
+    assert r.json()["outputs"][0]["like"] == "items"
+
+
+def test_components_list_says_which_ports_are_editable(client: TestClient) -> None:
+    entries = {e["ref"]: e for e in client.get("/api/components").json()["components"]}
+    python = entries[PYTHON]["editable_ports"]
+    assert python["inputs"] and python["outputs"] and python["types"][0] == "Number"
+    assert entries[RECLASSIFY]["editable_ports"] is None

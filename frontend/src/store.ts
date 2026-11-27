@@ -12,14 +12,19 @@ import type {
   FileNode,
   GraphView,
   NodeJson,
+  NodeOutput,
   NodePatch,
   NodeState,
+  NamedRamps,
+  PanelView,
   RunReport,
   ServerEvent,
   Status,
+  TabView,
   WireJson,
 } from "./apiTypes";
 import { strings } from "./strings";
+import { categoryColour } from "./types";
 
 export interface Toast {
   id: number;
@@ -38,11 +43,18 @@ export type FileMenu = "closed" | "menu" | "saveAs";
 
 export interface AppState {
   graph: GraphView | null;
+  /** Components and Params nodes in ribbon order (`GET /api/components`). */
   components: ComponentEntry[];
+  /** Ribbon tabs with their colours and groups. */
+  tabs: TabView[];
   files: FileNode | null;
   status: Status | null;
   connected: boolean;
   summaries: Record<string, Record<string, string>>;
+  /** Per node and port, the Panel view of the last result (change 01, section 11). */
+  views: Record<string, Record<string, PanelView>>;
+  /** Per Panel, where later table pages come from (`GET /api/nodes/{id}/output`). */
+  paging: Record<string, Paging>;
   errors: Record<string, string>;
   lastChange: string | null;
   toast: Toast | null;
@@ -60,15 +72,27 @@ export interface AppState {
   windowNode: string | null;
   /** The Map Viewer whose map window is open (SPEC 8). */
   mapNode: string | null;
+  /** The named colormap ramps (`GET /api/colormaps`), loaded when a Colormap node needs them. */
+  ramps: NamedRamps | null;
+}
+
+/** A Panel's table paging: the port key of the table feeding it, and whether the disk
+ * cache can serve later pages. */
+export interface Paging {
+  key: string | null;
+  diskCache: boolean;
 }
 
 export const initialState: AppState = {
   graph: null,
   components: [],
+  tabs: [],
   files: null,
   status: null,
   connected: false,
   summaries: {},
+  views: {},
+  paging: {},
   errors: {},
   lastChange: null,
   toast: null,
@@ -80,6 +104,7 @@ export const initialState: AppState = {
   logs: {},
   windowNode: null,
   mapNode: null,
+  ramps: null,
 };
 
 /** What a port carries after a run: its own output, or the output wired into it. */
@@ -150,10 +175,14 @@ export function reduceEvent(state: AppState, ev: ServerEvent): AppState {
     case "done": {
       const errors = { ...state.errors };
       delete errors[ev.node];
+      const paging = { ...state.paging };
+      delete paging[ev.node]; // a new result: fetched again when a Panel pages it
       return {
         ...state,
         graph: g ? withStates(g, { [ev.node]: "done" }) : g,
         summaries: { ...state.summaries, [ev.node]: ev.outputs },
+        views: { ...state.views, [ev.node]: ev.views ?? {} },
+        paging,
         errors,
       };
     }
@@ -161,11 +190,14 @@ export function reduceEvent(state: AppState, ev: ServerEvent): AppState {
     case "skipped": {
       const summaries = { ...state.summaries };
       delete summaries[ev.node];
+      const views = { ...state.views };
+      delete views[ev.node];
       return {
         ...state,
         graph: g ? withStates(g, { [ev.node]: ev.type === "error" ? "error" : "skipped" }) : g,
         errors: { ...state.errors, [ev.node]: ev.traceback },
         summaries,
+        views,
       };
     }
     case "run_finished":
@@ -175,6 +207,10 @@ export function reduceEvent(state: AppState, ev: ServerEvent): AppState {
     default:
       return state;
   }
+}
+
+function pagingOf(out: NodeOutput): Paging {
+  return { key: out.keys?.data ?? null, diskCache: out.disk_cache ?? true };
 }
 
 let toastId = 0;
@@ -214,6 +250,8 @@ export class Store {
     } else if (ev.type === "workflow_opened") {
       this.set({
         summaries: {},
+        views: {},
+        paging: {},
         errors: {},
         logs: {},
         lastChange: null,
@@ -229,13 +267,13 @@ export class Store {
   // ── loading ──
   async load(): Promise<void> {
     try {
-      const [components, graph, files, status] = await Promise.all([
+      const [library, graph, files, status] = await Promise.all([
         this.api.components(),
         this.api.graph(),
         this.api.files(),
         this.api.status(),
       ]);
-      this.set({ components, graph, files, status });
+      this.set({ components: library.components, tabs: library.tabs, graph, files, status });
       await this.loadResults();
     } catch (e) {
       this.showToast(e instanceof Error ? e.message : String(e));
@@ -280,14 +318,37 @@ export class Store {
       wanted.map((n) => this.api.output(n.id).then((o) => [n.id, o] as const, () => null)),
     );
     const summaries = { ...this.state.summaries };
+    const views = { ...this.state.views };
+    const paging = { ...this.state.paging };
     const errors = { ...this.state.errors };
     for (const r of results) {
       if (!r) continue;
       const [id, out] = r;
       if (out.error) errors[id] = out.error;
-      else summaries[id] = out.outputs;
+      else {
+        summaries[id] = out.outputs;
+        views[id] = out.views ?? {};
+        paging[id] = pagingOf(out);
+      }
     }
-    this.set({ summaries, errors });
+    this.set({ summaries, views, paging, errors });
+  }
+
+  private pagingLoading = new Map<string, Promise<void>>();
+
+  /** Where a Panel's later table pages come from: fetched once per result. */
+  loadPaging(id: string): Promise<void> {
+    if (this.state.paging[id]) return Promise.resolve();
+    let p = this.pagingLoading.get(id);
+    if (!p) {
+      p = this.api
+        .output(id)
+        .then((out) => this.set({ paging: { ...this.state.paging, [id]: pagingOf(out) } }))
+        .catch(() => undefined)
+        .finally(() => this.pagingLoading.delete(id));
+      this.pagingLoading.set(id, p);
+    }
+    return p;
   }
 
   /** The Output of one node (log and error), for the component window. */
@@ -303,9 +364,24 @@ export class Store {
     }
   }
 
+  private rampsLoading: Promise<void> | null = null;
+
+  /** Load the named colormap ramps once (Colormap nodes draw their gradient from them). */
+  loadRamps(): Promise<void> {
+    if (this.state.ramps) return Promise.resolve();
+    this.rampsLoading ??= this.api
+      .colormaps()
+      .then((ramps) => this.set({ ramps }))
+      .catch(() => {
+        this.rampsLoading = null; // try again next time
+      });
+    return this.rampsLoading;
+  }
+
   async refreshComponents(): Promise<void> {
     try {
-      this.set({ components: await this.api.components() });
+      const library = await this.api.components();
+      this.set({ components: library.components, tabs: library.tabs });
     } catch {
       /* the ribbon stays as it was */
     }
@@ -432,7 +508,8 @@ export class Store {
     const node = g?.nodes[id];
     if (!g || !node) return null;
     if (patch.settings) return Object.keys(patch.settings)[0] ?? node.title;
-    if ("value" in patch || "min" in patch || "max" in patch || "step" in patch) {
+    const keys = ["value", "min", "max", "step", "integer", "options"] as const;
+    if (keys.some((k) => k in patch)) {
       const wire = g.workflow.wires.find((w) => w.from[0] === id);
       return wire ? wire.to[1] : node.title;
     }
@@ -602,4 +679,10 @@ if (typeof window !== "undefined") window.__geoknit = store; // for end-to-end t
 
 export function useStore<T>(select: (s: AppState) => T, s: Store = store): T {
   return useSyncExternalStore(s.subscribe, () => select(s.getState()));
+}
+
+/** The centre-strip colour of a category, from the server's tabs (SPEC 8). */
+export function useCategoryColour(category: string | null | undefined): string {
+  const tabs = useStore((s) => s.tabs);
+  return categoryColour(tabs, category);
 }

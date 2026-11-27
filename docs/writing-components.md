@@ -26,7 +26,7 @@ band):
 # geoknit: component
 # name: Normalized Difference
 # category: Raster
-# icon: bands
+# icon: gis:layers
 # description: (a - b) / (a + b) of two bands, e.g. NDVI from NIR and red.
 # inputs:
 #   raster: Raster
@@ -72,21 +72,74 @@ line and parses the rest.
 |-----|----------|---------|
 | `name` | yes | Shown on the node and in the ribbon. |
 | `category` | no (`Script`) | The ribbon tab. A new category becomes a new tab. |
-| `icon` | no | A built-in icon name (below); otherwise the category's icon is used. |
+| `group` | no (`Other`) | The labelled group inside the tab, e.g. `Overlay`. |
+| `icon` | no | An icon name such as `gis:layers` (below), or a relative `.svg` path; otherwise the category's icon is used. |
 | `description` | no | One sentence, shown in the ribbon and search. |
-| `inputs` | no | Port name → type, or a mapping with `type`, `access`, `file`. |
-| `outputs` | no | Port name → type. |
+| `inputs` | no | Port name → type, or a mapping with `type` (one type or a list), `access`, `file`. |
+| `outputs` | no | Port name → type, or a mapping with `type` or `like`, and `access`. |
+| `ports` | no | Lets the user add, remove and rename ports in the Settings tab (below). |
 | `requires` | no | pip package names the code needs, e.g. `[scikit-learn]`. |
 
-Built-in icon names: `accuracy`, `align`, `bands`, `clip`,
-`confusion-matrix`, `extract`, `map-viewer`, `predict`, `python`,
-`random-forest`, `random-sample`, `read-raster`, `read-vector`, `reclassify`,
-`reproject`, `split`, `split-points`, `stratified-sample`, `svm`,
-`write-raster`, `write-vector`.
+In the ribbon, a pack's groups come after the built-in groups of the same
+tab, in alphabetical order, and components are alphabetical inside a group. A
+`group:` that names a built-in group of the tab (such as `Split` in Sampling)
+joins it. A component without `group:` goes to the group *Other*, shown last.
+
+Icon names are `<set>:<name>`, from [Font-GIS](https://github.com/Viglino/font-gis)
+(`gis:`), [Lucide](https://lucide.dev) (`lucide:`) or
+[Tabler](https://tabler.io/icons) (`tabler:`), for example `icon: gis:map-legend`.
+GeoKnit bundles only the icons it uses; [icons.md](icons.md) lists every
+available name with a preview. A name that is not in that list falls back to
+the category's icon (with a warning in the browser console). For any other
+icon, ship an `.svg` file with your component and give its path relative to
+the component file, e.g. `icon: icons/my-icon.svg`; it must stay inside your
+pack's folder. Icons are drawn in one colour, so draw them in black or
+`currentColor` on a transparent background.
 
 Port names must be valid Python names, and an output cannot share its name
 with an input. A component that returns a changed copy of an input names its
-output after the result: `clipped`, `selected`, `reprojected`.
+output after the result: `clipped`, `selected`, `reprojected`. The name
+`INPUTS` is reserved (see [The code block](#the-code-block)).
+
+### Inputs that take several types, outputs that follow them
+
+An input can accept several types, and an output can take the type of the
+value wired into an input with `like:`. A component that keeps the first rows
+of a table or of a vector layer:
+
+```python
+# geoknit: component
+# name: First Rows
+# category: Table
+# group: Select
+# icon: lucide:table
+# description: Keep the first n rows of a table or vector layer.
+# inputs:
+#   data: {type: [Table, Vector]}
+#   n: Number
+# outputs:
+#   first: {like: data}
+
+# --- settings ---
+n = 10  # range: 1..100000
+
+# --- code ---
+first = data.head(int(n))
+print(f"kept {len(first)} of {len(data)} rows")
+```
+
+- `type: [Table, Vector]`: a wire connects when its type is one of the listed
+  ones. A value of another type is refused with
+  `input "data": expected Table | Vector, got Raster`. `Any` cannot be in a
+  list, and a type cannot be listed twice. Only inputs take a list.
+- `like: data`: the output's type is the type of whatever is wired into
+  `data`. Wired from a Vector, `first` is a Vector and connects only where a
+  Vector can go; re-wiring `data` from a Table re-checks the wires leaving
+  `first` and removes those that no longer fit. Before `data` is wired, `first`
+  can go wherever one of `data`'s types can. The code must then return a
+  value of that type: a GeoDataFrame for a Vector, a plain DataFrame for a
+  Table. `like:` names an input of the same component and cannot be combined
+  with `type:`.
 
 ## The settings block
 
@@ -133,7 +186,8 @@ When the node runs, GeoKnit:
 
 1. starts from a fresh namespace and runs the settings block;
 2. assigns every wired input to its variable (overriding a same-named
-   setting), checking its type;
+   setting), checking its type, and sets `INPUTS`, a dict of every input name
+   → its value (wired, or the setting's) in header order;
 3. runs the code with the **project folder as working directory**, so a
    relative path such as `data/aoi.gpkg` works;
 4. reads every declared output back from the variables, checking its type.
@@ -144,6 +198,10 @@ exception shows its traceback there, with line numbers of the component file.
 A missing output (`output "count" was not set by the code`) or a value of the
 wrong type (`output "count": expected Number, got Text`) is an error too.
 
+`INPUTS` is handy when the inputs are not known in advance, for example in a
+component with editable ports that evaluates an expression over them
+(`eval(expression, {}, INPUTS)`). A port or setting cannot be called `INPUTS`.
+
 Imports go in the code block, not the settings block. Import what the code
 needs each time: every run starts from a fresh namespace.
 
@@ -152,12 +210,23 @@ needs each time: every run starts from a fresh namespace.
 | Type | Python object | Notes |
 |------|---------------|-------|
 | `Number` | `int` or `float` | not `bool` |
-| `Text` | `str` | a Number wired into a Text input becomes `str(value)` |
+| `Text` | `str` | a Number or Boolean wired into a Text input becomes `str(value)` |
+| `Boolean` | `bool` | `numpy.bool_` counts too (`flag = a > b` works); `0`/`1` is not a Boolean |
+| `Color` | `geoknit.core.types.Color` | `Color("#0B7A7C")` or `Color.parse("11,122,124")`; `.hex`, `.rgba` |
+| `Colormap` | `geoknit.core.types.Colormap` | `Colormap.named("viridis")`, or `stops` / `classes`; see below |
 | `Raster` | `xarray.DataArray`, dims `(band, y, x)`, opened with rioxarray | lazy (dask) |
 | `Vector` | `geopandas.GeoDataFrame` | |
 | `Table` | `pandas.DataFrame` | not geographic |
 | `Model` | `geoknit.core.types.ModelBundle` | `estimator`, `task`, `target`, `feature_names`, `info` |
 | `Any` | anything | only for inputs that accept every type |
+
+A `Colormap` is continuous (`kind="continuous"`: a `name` from the ten named
+ramps viridis, magma, plasma, cividis, turbo, greys_r, terrain, rdylgn,
+spectral, blues, or `stops=((0, Color(...)), (1, Color(...)))`; `min`/`max`,
+`None` for the layer's 2–98 % stretch; `reverse`) or a set of classes
+(`kind="classes"`, `classes=((1, Color(...), "urban"), ...)`, and `other` for
+values not listed). There is also a `Layer` type, made only by the Map Layer
+component.
 
 **Keep rasters lazy.** Rasters come in as dask-backed arrays and may be
 larger than memory (a city at 10 m with 64 bands is several GB). Prefer
@@ -189,9 +258,39 @@ nodes that read it again. Mark an input that names a file the component
 #   path: {type: Text, file: write}
 ```
 
-**`access: list`, several wires.** An input with `access: list` takes any
-number of wires and receives a Python list, in wire order. The Map Viewer's
-`layers: {type: Any, access: list}` is the built-in example.
+**`access: list`, lists.** An input with `access: list` takes any number of
+wires and receives a Python list, in wire order. The Map Viewer's
+`layers: {type: Any, access: list}` is the built-in example. An output can be
+a list too:
+
+```python
+# outputs:
+#   values: {type: Number, access: list}
+#   sorted: {like: items, access: list}
+```
+
+Its value must be a Python `list` (a tuple is turned into one), and every
+element is checked against the type: `output "values": item 2: expected
+Number, got Text`. A list output connects only to a list input; there the
+lists of all its wires are joined in wire order (a single-value wire adds one
+element), so the receiver gets `[3, 1, 2, 7]` from a list `[3, 1, 2]` and a
+Number `7`. A list wired into an ordinary input is refused
+(`Numbers gives a list; "x" takes one value — use List Item`); only a Panel
+takes a whole list. List ports and wires are drawn with a double line.
+
+**`ports:`, editable ports.** The Python component lets the user add, remove,
+rename and retype its ports in the Settings tab. Any component can allow the
+same:
+
+```python
+# ports: {inputs: editable, types: [Raster, Number]}
+```
+
+`inputs: editable` and/or `outputs: editable` say which side can be edited;
+`types` limits the types offered (by default every type except `Layer`, and
+`Any` on inputs). Edits to a side that is not editable, or to a type outside
+`types`, are refused. A new port gets a free name and the first of `types`.
+Combine it with `INPUTS` to use ports whose names you do not know in advance.
 
 ## Helpers
 

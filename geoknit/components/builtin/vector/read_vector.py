@@ -1,7 +1,8 @@
 # geoknit: component
 # name: Read Vector
 # category: Vector
-# icon: read-vector
+# group: Files
+# icon: gis:polygon-pt
 # description: Read a vector file (GeoPackage, Shapefile, GeoJSON, GeoParquet).
 # inputs:
 #   path: Text

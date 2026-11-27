@@ -25,6 +25,8 @@ test("Export .py writes the script next to the workflow and asks before replacin
   await api(page, "POST", "/api/wires", { from: [text.id, "value"], to: [panel.id, "data"] });
   await api(page, "POST", "/api/workflow/save", { path: "exported.geoknit" });
   await page.reload();
+  // The export name defaults from the open workflow: wait until the page knows it.
+  await expect(page.getByTestId("file-name")).toContainText("exported.geoknit");
 
   await page.getByTestId("export-py").click();
   await expect(page.getByTestId("export-input")).toHaveValue("exported.py");

@@ -109,7 +109,7 @@ community packs. This is the central idea of GeoKnit.
 # geoknit: component
 # name: Reclassify
 # category: Raster
-# icon: reclassify
+# icon: gis:map-legend
 # description: Turn a continuous raster into classes using break rules.
 # inputs:
 #   raster: Raster
@@ -337,11 +337,11 @@ with 7 classes.
 | Sampling | Stratified Sample | classes: Raster, value: Raster, aoi: Vector, n: Number, seed: Number | points: Vector | equal n per class (warn if a class has fewer pixels); points at pixel centres; value_field="value", class_field="cls" |
 | Sampling | Random Sample | raster, aoi: Vector, n, seed | points: Vector | only valid (non-nodata) pixels |
 | Sampling | Extract Values | points: Vector, raster: Raster | table: Table | columns from band descriptions, else b01…; keeps point attributes; drops nodata rows with a warning; sets `table.attrs["feature_columns"]` |
-| Sampling | Train/Test Split | table | train: Table, test: Table | test_fraction=0.3, seed=42, stratify_by=None |
+| Sampling | Split Points | data: Table or Vector | train, test: like data | test_fraction=0.3, seed=42, stratify_by=None; a table's attrs (feature_columns) are kept |
 | Model | Random Forest | table, target: Text, n_trees, max_depth, min_leaf, seed | model: Model | task="regression", max_features="sqrt", features="auto" (feature_columns attr, else numeric columns except target) |
 | Model | SVM | table, target: Text | model: Model | task, kernel="rbf", C=1.0, gamma="scale", standardize=True |
 | Model | Predict Raster | model, raster | map: Raster | window=512; band names must equal `model.feature_names`, else error listing the missing ones; float32 for regression, smallest int type for classes |
-| Validation | Accuracy | map: Raster, reference: Vector, field: Text | metrics: Table | n, RMSE, MAE, R², bias (observed − predicted); nearest pixel; points outside or on nodata dropped and counted |
+| Validation | Regression Accuracy | map: Raster, reference: Vector, field: Text | metrics: Table | n, RMSE, MAE, R², bias (observed − predicted); nearest pixel; points outside or on nodata dropped and counted |
 | Validation | Confusion Matrix | map, reference: Vector, field: Text | matrix: Table, metrics: Table | overall accuracy, kappa, producer's/user's accuracy and F1 per class |
 | Script | Python | user-defined | user-defined + out: Text | ports added/removed in the component window |
 
@@ -358,7 +358,7 @@ Slider n, Slider seed ───────────────────�
 Text data/alphaearth_2018.tif ─ Read Raster ──┬─ Extract Values ← points
                                                │        └─ Random Forest ← Text "IMD", Slider n_trees
                                                └─ Predict Raster ← model ─┬─ Write Raster ← Text outputs/imd_rf.tif
-Text data/earthlabel_2018.gpkg ─ Read Vector ─────────── reference ───────┴─ Accuracy ← Text field ─ Panel
+Text data/earthlabel_2018.gpkg ─ Read Vector ─────────── reference ───────┴─ Regression Accuracy ← Text field ─ Panel
 ```
 
 The data files are copied into `examples/milan_imd/data/` by the user and are

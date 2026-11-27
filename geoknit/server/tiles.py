@@ -193,7 +193,7 @@ def _raster_file(cache: DiskCache, key: str) -> tuple[Path, Path]:
     """``(cache entry folder, file with overviews)``: the cached COG, the source
     file, or a viewing VRT of the source (``viewable``)."""
     entry, info = cache.port_info(check_key(key))
-    if info.get("type") != types.RASTER:
+    if info.get("type") != types.RASTER or info.get("access") == "list":
         raise MapError(f"{key} is not a raster", 404)
     if info["format"] == "cog":
         return entry, entry / info["file"]
@@ -603,7 +603,7 @@ def render_tile(
 
 def _vector(cache: DiskCache, key: str) -> Any:
     _, info = cache.port_info(check_key(key))
-    if info.get("type") != types.VECTOR:
+    if info.get("type") != types.VECTOR or info.get("access") == "list":
         raise MapError(f"{key} is not a vector", 404)
     gdf = cache.read_port(key)
     if gdf.crs is None:
@@ -651,7 +651,7 @@ def inspect_raster(cache: DiskCache, key: str, lon: float, lat: float) -> dict[s
     from geoknit.helpers.sampling import values_at_points
 
     _, info = cache.port_info(check_key(key))
-    if info.get("type") != types.RASTER:
+    if info.get("type") != types.RASTER or info.get("access") == "list":
         raise MapError(f"{key} is not a raster", 404)
     raster = cache.read_port(key)
     point = geopandas.GeoDataFrame(geometry=[Point(lon, lat)], crs="EPSG:4326")

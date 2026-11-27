@@ -1,7 +1,8 @@
 # geoknit: component
 # name: Clip
 # category: Raster
-# icon: clip
+# group: Extent
+# icon: gis:select-extent
 # description: Cut a raster to the extent of polygons; pixels outside them become nodata.
 # inputs:
 #   raster: Raster

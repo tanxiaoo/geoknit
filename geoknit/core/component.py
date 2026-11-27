@@ -23,7 +23,7 @@ import logging
 import tokenize
 import traceback
 import warnings
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -38,6 +38,9 @@ CODE_MARK = "# --- code ---"
 
 PRINT_PORT = "out"
 """A Text output with this name that the code does not set receives everything printed."""
+
+INPUTS_NAME = "INPUTS"
+"""The dict of input name → value set before the code runs; reserved as a port or setting name."""
 
 LogFn = Callable[[str], None]
 
@@ -60,12 +63,63 @@ class Port:
 
     name: str
     type: str
+    """The first listed type (the only one for an ordinary port)."""
     access: str = "item"
+    """``item`` or ``list``. A list input collects several wires (concatenated); a list
+    output carries a Python list whose elements have ``type`` (SPEC 3)."""
     file: str | None = None
     """``"write"`` for a Text input naming a file the component writes (not fingerprinted)."""
+    types: tuple[str, ...] = ()
+    """Every type an input accepts, ``(type,)`` for an ordinary port (SPEC 3)."""
+    like: str | None = None
+    """For an output: the input whose wired type it takes (``{like: data}``, SPEC 4).
+
+    ``type`` / ``types`` are then the input's declared types, used while it is unwired."""
+
+    def __post_init__(self) -> None:
+        if not self.types:
+            object.__setattr__(self, "types", (self.type,))
 
 
 FILE_ROLES = ("write",)
+
+EDITABLE = "editable"
+
+
+@dataclass(frozen=True)
+class EditablePorts:
+    """The header's ``ports:`` key: which sides the Settings tab can edit (SPEC 4)."""
+
+    inputs: bool = False
+    outputs: bool = False
+    types: tuple[str, ...] = ()
+    """The types offered for edited ports; the first is a new port's type."""
+    any_inputs: bool = False
+    """Inputs may also be ``Any``: true when the header lists no ``types``."""
+
+    def editable(self, side: str) -> bool:
+        """``side`` is ``inputs`` or ``outputs``."""
+        return self.inputs if side == "inputs" else self.outputs
+
+    def types_for(self, side: str) -> tuple[str, ...]:
+        """The types a port on ``side`` may have (``Any`` only for inputs, by default)."""
+        if side == "inputs" and self.any_inputs and types.ANY not in self.types:
+            return (*self.types, types.ANY)
+        return self.types
+
+    def as_dict(self) -> dict[str, Any]:
+        """``{inputs, outputs, types, input_types}`` for the API."""
+        return {
+            "inputs": self.inputs,
+            "outputs": self.outputs,
+            "types": list(self.types),
+            "input_types": list(self.types_for("inputs")),
+        }
+
+
+DEFAULT_EDITABLE_TYPES: tuple[str, ...] = tuple(
+    t for t in types.PORT_TYPES if t not in (types.LAYER, types.ANY)
+)
 
 
 @dataclass(frozen=True)
@@ -109,6 +163,10 @@ class ComponentSpec:
     header: dict[str, Any]
     settings: dict[str, Setting]
     blocks: Blocks
+    ports: EditablePorts | None = None
+    """``ports: {inputs: editable, ...}``; ``None``: the ports cannot be edited."""
+    group: str | None = None
+    """``group:``, the ribbon group inside the tab; ``None``: group "Other"."""
 
     @property
     def settings_values(self) -> dict[str, Any]:
@@ -180,13 +238,21 @@ def parse_component(source: str) -> ComponentSpec:
     header = _parse_header(lines, blocks.header_end)
     settings = _parse_settings(lines, blocks)
 
-    inputs = _parse_ports(header.get("inputs"), "inputs", allow_list=True)
-    outputs = _parse_ports(header.get("outputs"), "outputs", allow_list=False)
+    inputs = _parse_ports(header.get("inputs"), "inputs", is_input=True)
+    outputs = _parse_ports(header.get("outputs"), "outputs", is_input=False, inputs=inputs)
     clash = set(inputs) & set(outputs)
     if clash:
         raise ComponentParseError(
             f"ports used as both input and output: {', '.join(sorted(clash))}"
         )
+    if INPUTS_NAME in inputs or INPUTS_NAME in outputs:
+        raise ComponentParseError(f'"{INPUTS_NAME}" is reserved and cannot name a port')
+    if INPUTS_NAME in settings:
+        raise ComponentParseError(
+            f'settings block: "{INPUTS_NAME}" is reserved and cannot name a setting',
+            settings[INPUTS_NAME].line,
+        )
+    editable = _parse_editable(header.get("ports"))
 
     requires = header.get("requires") or []
     if not isinstance(requires, list) or not all(isinstance(r, str) for r in requires):
@@ -196,6 +262,9 @@ def parse_component(source: str) -> ComponentSpec:
     if not isinstance(name, str) or not name.strip():
         raise ComponentParseError("the header needs a name")
     icon = header.get("icon")
+    group = header.get("group")
+    if group is not None and (isinstance(group, (dict, list)) or not str(group).strip()):
+        raise ComponentParseError("group must be a name, e.g. group: Overlay")
     return ComponentSpec(
         source=source,
         name=name,
@@ -208,6 +277,51 @@ def parse_component(source: str) -> ComponentSpec:
         header=header,
         settings=settings,
         blocks=blocks,
+        ports=editable,
+        group=None if group is None else str(group).strip(),
+    )
+
+
+def _parse_editable(raw: object) -> EditablePorts | None:
+    """``ports: {inputs: editable, outputs: editable, types: [Raster, Number]}``."""
+    if raw is None:
+        return None
+    usage = "ports must look like {inputs: editable, outputs: editable, types: [Raster, Number]}"
+    if not isinstance(raw, dict):
+        raise ComponentParseError(usage)
+    unknown = [str(k) for k in raw if k not in ("inputs", "outputs", "types")]
+    if unknown:
+        raise ComponentParseError(f'ports: unknown key "{unknown[0]}" ({usage})')
+    sides: dict[str, bool] = {}
+    for side in ("inputs", "outputs"):
+        value = raw.get(side)
+        if value is not None and value != EDITABLE:
+            raise ComponentParseError(f'ports: {side} can only be "{EDITABLE}", not "{value}"')
+        sides[side] = value == EDITABLE
+    if not any(sides.values()):
+        raise ComponentParseError(f"ports: needs inputs: {EDITABLE} or outputs: {EDITABLE}")
+    listed = raw.get("types")
+    if listed is None:
+        port_types = DEFAULT_EDITABLE_TYPES
+    else:
+        if isinstance(listed, str):
+            listed = [listed]
+        if not isinstance(listed, list) or not listed:
+            raise ComponentParseError("ports: types must be a list such as [Raster, Number]")
+        for t in listed:
+            if t not in types.PORT_TYPES:
+                raise ComponentParseError(
+                    f'ports: unknown type "{t}" (use one of {", ".join(types.PORT_TYPES)})'
+                )
+        dup = next((t for t in listed if listed.count(t) > 1), None)
+        if dup is not None:
+            raise ComponentParseError(f'ports: types lists "{dup}" twice')
+        port_types = tuple(str(t) for t in listed)
+    return EditablePorts(
+        inputs=sides["inputs"],
+        outputs=sides["outputs"],
+        types=port_types,
+        any_inputs=listed is None,
     )
 
 
@@ -225,7 +339,10 @@ def _parse_header(lines: list[str], header_end: int) -> dict[str, Any]:
     return data
 
 
-def _parse_ports(raw: object, key: str, *, allow_list: bool) -> dict[str, Port]:
+def _parse_ports(
+    raw: object, key: str, *, is_input: bool, inputs: Mapping[str, Port] | None = None
+) -> dict[str, Port]:
+    """Parse ``inputs:`` (``is_input``) or ``outputs:`` (``inputs`` given, for ``like:``)."""
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -236,32 +353,76 @@ def _parse_ports(raw: object, key: str, *, allow_list: bool) -> dict[str, Port]:
         if not name.isidentifier():
             raise ComponentParseError(f'port name "{name}" is not a valid Python name')
         file_role: object = None
-        if isinstance(spec, str):
-            type_name, access = spec, "item"
+        like: object = None
+        if isinstance(spec, str | list):
+            type_spec, access = spec, "item"
         elif isinstance(spec, dict):
-            type_name, access = spec.get("type"), spec.get("access", "item")
+            type_spec, access = spec.get("type"), spec.get("access", "item")
             file_role = spec.get("file")
+            like = spec.get("like")
         else:
             raise ComponentParseError(f'{key}: "{name}" needs a type such as Raster')
-        if type_name not in types.PORT_TYPES:
-            raise ComponentParseError(
-                f'{key}: "{name}" has unknown type "{type_name}" '
-                f"(use one of {', '.join(types.PORT_TYPES)})"
-            )
-        if access not in ("item", "list") or (access == "list" and not allow_list):
+        if like is not None:
+            port_types = _like_types(key, name, like, type_spec, inputs)
+        else:
+            port_types = _port_types(key, name, type_spec, allow_union=is_input)
+        type_name = port_types[0]
+        # Inputs: ``list`` collects several wires; outputs: ``list`` carries a list (SPEC 3).
+        if access not in ("item", "list"):
             raise ComponentParseError(f'{key}: "{name}" has invalid access "{access}"')
         if file_role is not None:
-            if not allow_list or file_role not in FILE_ROLES or type_name != types.TEXT:
+            if not is_input or file_role not in FILE_ROLES or port_types != (types.TEXT,):
                 raise ComponentParseError(
                     f'{key}: "{name}": "file: write" is only allowed on a Text input'
                 )
         ports[name] = Port(
             name=name,
-            type=str(type_name),
+            type=type_name,
             access=str(access),
             file=None if file_role is None else str(file_role),
+            types=port_types,
+            like=None if like is None else str(like),
         )
     return ports
+
+
+def _port_types(key: str, name: str, spec: object, *, allow_union: bool) -> tuple[str, ...]:
+    """``Raster`` → ``("Raster",)``; ``[Table, Vector]`` (inputs only) → both."""
+    listed = spec if isinstance(spec, list) else [spec]
+    if isinstance(spec, list) and not allow_union:
+        raise ComponentParseError(
+            f'{key}: "{name}": only inputs can list several types; '
+            "an output that follows an input uses like:"
+        )
+    if not listed:
+        raise ComponentParseError(f'{key}: "{name}" needs a type such as Raster')
+    for type_name in listed:
+        if type_name not in types.PORT_TYPES:
+            raise ComponentParseError(
+                f'{key}: "{name}" has unknown type "{type_name}" '
+                f"(use one of {', '.join(types.PORT_TYPES)})"
+            )
+    if len(listed) > 1:
+        if types.ANY in listed:
+            raise ComponentParseError(f'{key}: "{name}": Any cannot be part of a list of types')
+        dup = next((t for t in listed if listed.count(t) > 1), None)
+        if dup is not None:
+            raise ComponentParseError(f'{key}: "{name}" lists the type "{dup}" twice')
+    return tuple(str(t) for t in listed)
+
+
+def _like_types(
+    key: str, name: str, like: object, type_spec: object, inputs: Mapping[str, Port] | None
+) -> tuple[str, ...]:
+    """The declared types of the input an output is ``like``."""
+    if inputs is None:
+        raise ComponentParseError(f'{key}: "{name}": only outputs can use like:')
+    if type_spec is not None:
+        raise ComponentParseError(f'{key}: "{name}": use either like: or type:, not both')
+    source = inputs.get(str(like)) if isinstance(like, str) else None
+    if source is None:
+        raise ComponentParseError(f'{key}: "{name}": like: must name an input, not "{like}"')
+    return source.types
 
 
 def is_allowed_literal(value: object) -> bool:
@@ -474,11 +635,18 @@ def run_component(
     log: LogFn | None = None,
     cwd: Path | None = None,
     print_port: str | None = None,
+    output_types: Mapping[str, str] | None = None,
+    list_outputs: Collection[str] = (),
 ) -> RunResult:
     """Run one component, following SPEC 4 "Running one component".
 
     ``inputs`` holds the wired inputs only. ``print_port`` names a Text output
     that receives everything printed (the Python component's ``out``).
+    ``output_types`` holds the types the graph resolved for ``like:`` outputs;
+    an output not listed is checked against its declared type(s).
+    ``list_outputs`` names outputs that carry a list although declared ``item``:
+    a ``like:`` output of an ``Any`` item input fed by a list (``Graph.list_outputs``);
+    like ``access: list`` outputs, their value must be a list whose elements are checked.
     """
     result = RunResult()
     filename = filename or f"<component {spec.name}>"
@@ -504,8 +672,9 @@ def run_component(
             if not isinstance(value, list):
                 result.error = f'input "{name}" expects a list'
                 return result
-            continue
-        problem = types.check_value(port.type, value)
+            problem = types.check_items(port.types, value)
+        else:
+            problem = types.check_value(port.types, value)
         if problem:
             result.error = f'input "{name}": {problem}'
             return result
@@ -522,6 +691,8 @@ def run_component(
             if missing:
                 result.error = f'input "{missing[0]}" is not connected'
                 return result
+            # Wired value or setting default, in header order (SPEC 4).
+            namespace[INPUTS_NAME] = {n: namespace[n] for n in spec.inputs}
             exec(_compile_block(spec, "code", filename), namespace)
         except BaseException as exc:  # noqa: BLE001  (user code: report everything)
             if isinstance(exc, KeyboardInterrupt):
@@ -537,7 +708,18 @@ def run_component(
             result.error = f'output "{name}" was not set by the code'
             return result
         value = types.as_output(namespace[name])
-        problem = types.check_value(port.type, value)
+        expected = (output_types or {}).get(name) or port.types
+        if port.access == "list" or name in list_outputs:
+            if isinstance(value, tuple):
+                value = list(value)
+            if isinstance(value, list):
+                value = [types.as_output(v) for v in value]
+                problem = types.check_items(expected, value)
+            else:
+                shown = types.type_of(value) or types.python_type_name(value)
+                problem = f"expected a list of {types.type_label(expected)}, got {shown}"
+        else:
+            problem = types.check_value(expected, value)
         if problem:
             result.error = f'output "{name}": {problem}'
             return result

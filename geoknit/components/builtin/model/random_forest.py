@@ -1,7 +1,8 @@
 # geoknit: component
 # name: Random Forest
 # category: Model
-# icon: random-forest
+# group: Train
+# icon: lucide:trees
 # description: Train a random forest (regression or classification) on a table.
 # inputs:
 #   table: Table

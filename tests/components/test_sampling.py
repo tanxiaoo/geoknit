@@ -1,4 +1,4 @@
-"""Sampling tab: Stratified Sample, Random Sample, Extract Values, Train/Test Split."""
+"""Sampling tab: Stratified Sample, Random Sample, Extract Values, Split Points."""
 
 from pathlib import Path
 
@@ -108,19 +108,31 @@ def test_extract_values(layers: dict, synthetic_data: dict[str, Path]) -> None:
     assert np.allclose(table.loc[0, [f"A{i:02d}" for i in range(8)]].to_numpy(float), direct)
 
 
-def test_train_test_split() -> None:
+def test_split_points_splits_a_table_and_keeps_attrs() -> None:
     table = pd.DataFrame({"a": range(100), "cls": [i % 4 for i in range(100)]})
     table.attrs["feature_columns"] = ["a"]
-    out = ok("sampling/train_test_split", table=table, test_fraction=0.25, stratify_by="cls")
+    out = ok("sampling/split_points", data=table, test_fraction=0.25, stratify_by="cls")
     train, test = out["train"], out["test"]
+    assert type(train) is pd.DataFrame and type(test) is pd.DataFrame
     assert (len(train), len(test)) == (75, 25)
     assert set(train["a"]).isdisjoint(test["a"])
     assert test["cls"].value_counts().tolist() == [7, 6, 6, 6] or test["cls"].nunique() == 4
     assert train.attrs["feature_columns"] == ["a"]
-    again = ok("sampling/train_test_split", table=table, test_fraction=0.25, stratify_by="cls")
+    assert test.attrs["feature_columns"] == ["a"]
+    again = ok("sampling/split_points", data=table, test_fraction=0.25, stratify_by="cls")
     assert again["test"].equals(test)
-    bad = run_builtin("sampling/train_test_split", table=table, stratify_by="nope")
+    bad = run_builtin("sampling/split_points", data=table, stratify_by="nope")
     assert 'no column "nope"' in (bad.error or "")
+
+
+def test_split_points_table_feeds_random_forest_auto_features() -> None:
+    rng = np.random.default_rng(0)
+    table = pd.DataFrame({"A00": rng.random(60), "A01": rng.random(60), "other": range(60)})
+    table["IMD"] = 100 * table["A00"]
+    table.attrs["feature_columns"] = ["A00", "A01"]
+    train = ok("sampling/split_points", data=table)["train"]
+    model = ok("model/random_forest", table=train, target="IMD", n_trees=10)["model"]
+    assert model.feature_names == ["A00", "A01"]  # from attrs, not every numeric column
 
 
 def test_split_points_holds_out_test_points(layers: dict) -> None:
@@ -128,7 +140,7 @@ def test_split_points_holds_out_test_points(layers: dict) -> None:
         "sampling/stratified_sample",
         classes=layers["classes"], value=layers["imd"], aoi=layers["aoi"], n=10, seed=1,
     )["points"]  # fmt: skip
-    out = ok("sampling/split_points", points=points, stratify_by="cls")
+    out = ok("sampling/split_points", data=points, stratify_by="cls")
     train, test = out["train"], out["test"]
     assert (len(train), len(test)) == (49, 21)
     assert train.crs == points.crs and test.crs == points.crs
@@ -139,7 +151,7 @@ def test_split_points_holds_out_test_points(layers: dict) -> None:
 
     assert keys(train).isdisjoint(keys(test))
     assert keys(train) | keys(test) == keys(points)
-    again = ok("sampling/split_points", points=points, stratify_by="cls")
+    again = ok("sampling/split_points", data=points, stratify_by="cls")
     assert again["test"].geometry.equals(test.geometry)  # same seed, same split
-    bad = run_builtin("sampling/split_points", points=points, test_fraction=1.5)
+    bad = run_builtin("sampling/split_points", data=points, test_fraction=1.5)
     assert "between 0 and 1" in (bad.error or "")

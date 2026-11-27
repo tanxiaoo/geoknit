@@ -279,9 +279,13 @@ class Colormap:
 
 
 def to_json_value(value: Any) -> Any:
-    """``value`` as plain JSON data: Color and Colormap by their ``to_json()``."""
+    """``value`` as plain JSON data: Color and Colormap by their ``to_json()``, numpy
+    scalars (``np.int64``, ``np.float32``, ``np.bool_``) as the Python number or ``bool``
+    they hold, so ``json.dumps`` takes them."""
     if isinstance(value, Color | Colormap):
         return value.to_json()
+    if type(value).__module__ == "numpy" and getattr(value, "shape", None) == ():
+        return value.item()
     return value
 
 
@@ -349,18 +353,42 @@ def python_type_name(value: object) -> str:
     return cls.__name__ if module == "builtins" else f"{module}.{cls.__name__}"
 
 
-def check_value(expected: str, value: object) -> str | None:
+def _as_types(spec: str | tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    return (spec,) if isinstance(spec, str) else tuple(spec)
+
+
+def type_label(spec: str | tuple[str, ...] | list[str]) -> str:
+    """``Table | Vector`` for a port that accepts several types."""
+    return " | ".join(_as_types(spec))
+
+
+def check_value(expected: str | tuple[str, ...] | list[str], value: object) -> str | None:
     """``None`` if ``value`` fits a port of type ``expected``, else an error message.
 
-    No conversions: a ``bool`` is not a Number and ``0``/``1`` is not a Boolean.
+    ``expected`` may list several types (a union input): the value must have
+    one of them. No conversions: a ``bool`` is not a Number and ``0``/``1`` is
+    not a Boolean.
     """
-    if expected == ANY:
+    allowed = _as_types(expected)
+    if ANY in allowed:
         return None
     actual = type_of(value)
-    if actual == expected:
+    if actual in allowed:
         return None
     shown = actual if actual is not None else python_type_name(value)
-    return f"expected {expected}, got {shown}"
+    return f"expected {type_label(allowed)}, got {shown}"
+
+
+def check_items(expected: str | tuple[str, ...] | list[str], values: list[Any]) -> str | None:
+    """``check_value`` for every element of a list value: ``item 2: expected Raster, …``.
+
+    Indices are 0-based, as the Panel shows them.
+    """
+    for i, value in enumerate(values):
+        problem = check_value(expected, value)
+        if problem:
+            return f"item {i}: {problem}"
+    return None
 
 
 # ── Connection rules ─────────────────────────────────────────────────────────
@@ -384,16 +412,44 @@ TO_TEXT: tuple[str, ...] = (NUMBER, BOOLEAN)
 """Output types converted with ``str`` when wired into a Text input."""
 
 
-def connection_error(out_type: str, in_type: str) -> str | None:
+def can_connect_any(
+    out_types: str | tuple[str, ...] | list[str], in_types: str | tuple[str, ...] | list[str]
+) -> bool:
+    """Whether some possible output type fits some listed input type (SPEC 3, union ports)."""
+    return any(can_connect(o, i) for o in _as_types(out_types) for i in _as_types(in_types))
+
+
+def connection_error(
+    out_type: str | tuple[str, ...] | list[str], in_type: str | tuple[str, ...] | list[str]
+) -> str | None:
     """``None`` if the wire is allowed, else the tooltip text for refusing it."""
-    if can_connect(out_type, in_type):
+    if can_connect_any(out_type, in_type):
         return None
-    return f"{out_type} can't connect to {in_type}"
+    return f"{type_label(out_type)} can't connect to {type_label(in_type)}"
 
 
-def convert_for_input(value: object, in_type: str) -> object:
-    """Apply the Number → Text and Boolean → Text conversions."""
-    if in_type == TEXT and type_of(value) in TO_TEXT:
+def arriving_type(out_type: str, in_types: str | tuple[str, ...] | list[str]) -> str:
+    """The type a value of ``out_type`` has once it reaches an input of ``in_types``.
+
+    Unchanged when the input lists it (or takes ``Any``); ``Text`` when the
+    Number/Boolean → Text conversion applies. ``out_type`` must connect.
+    """
+    allowed = _as_types(in_types)
+    if out_type in allowed or ANY in allowed or out_type == ANY:
+        return out_type
+    if TEXT in allowed and out_type in TO_TEXT:
+        return TEXT
+    return out_type
+
+
+def convert_for_input(value: object, in_type: str | tuple[str, ...] | list[str]) -> object:
+    """Apply the Number → Text and Boolean → Text conversions.
+
+    For a union input, a value whose own type is listed is never converted.
+    """
+    allowed = _as_types(in_type)
+    actual = type_of(value)
+    if TEXT in allowed and actual in TO_TEXT and actual not in allowed:
         return str(value)
     return value
 
@@ -422,10 +478,25 @@ def describe(value: object) -> str:
         assert isinstance(value, ModelBundle)
         return _describe_model(value)
     if isinstance(value, list):
-        return "\n".join(
-            [f"list of {len(value)}"] + [f"[{i}] {describe(v)}" for i, v in enumerate(value)]
-        )
+        return _describe_list(value)
     return f"{python_type_name(value)}: {value!r}"[:500]
+
+
+LIST_SHOWN = 50
+"""Elements of a list that ``describe()`` (and the Panel) show, one line each."""
+
+
+def _describe_list(values: list[Any]) -> str:
+    """``list of 3 Number`` then one line per element (first line of its summary)."""
+    kinds = {type_of(v) for v in values}
+    kind = next(iter(kinds)) if len(kinds) == 1 else None
+    lines = [f"list of {len(values)}" + (f" {kind}" if kind is not None else "")]
+    for i, v in enumerate(values[:LIST_SHOWN]):
+        first = describe(v).split("\n", 1)[0]
+        lines.append(f"[{i}] {first}")
+    if len(values) > LIST_SHOWN:
+        lines.append(f"… {len(values) - LIST_SHOWN} more")
+    return "\n".join(lines)
 
 
 def raster_band_names(da: Any) -> list[str]:

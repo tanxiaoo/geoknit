@@ -1,9 +1,9 @@
 import { createContext, useContext } from "react";
 import { Handle, Position } from "@xyflow/react";
 import type { PortType } from "../../apiTypes";
-import { portSummary, store } from "../../store";
+import { portSummary, store, useStore } from "../../store";
 import { strings } from "../../strings";
-import { canConnect, PORT_COLOURS } from "../../types";
+import { PORT_COLOURS, sameTypeWires, tipSummary, typeLabel, wireError } from "../../types";
 
 /** Show what a port or wire carries next to the pointer (SPEC 8). */
 export function showTip(
@@ -14,7 +14,7 @@ export function showTip(
   store.set({
     tip: {
       text: `${head}
-${summary ?? strings.notRunYet}`,
+${summary === null ? strings.notRunYet : tipSummary(summary)}`,
       x: e.clientX,
       y: e.clientY,
     },
@@ -29,7 +29,13 @@ export function hideTip() {
 export interface DragFrom {
   nodeId: string;
   side: "in" | "out";
-  type: PortType;
+  types: PortType[];
+  /** Port name, node title and whether it carries a list (SPEC 3 "List values"). */
+  name?: string;
+  title?: string;
+  list?: boolean;
+  /** Dragged from an input: the same-type rule's wired types (`sameTypeWires`). */
+  wired?: PortType[][];
 }
 
 export const DragContext = createContext<DragFrom | null>(null);
@@ -42,32 +48,84 @@ export function portName(handle: string | null | undefined): string {
   return (handle ?? "").replace(/^(in|out):/, "");
 }
 
+/** The refusal for a wire between ``drag`` and this port, or null if it fits. */
+export function dragRefusal(
+  drag: DragFrom,
+  port: {
+    side: "in" | "out";
+    name: string;
+    types: PortType[];
+    list: boolean;
+    title: string;
+    /** An input: the same-type rule's wired types (`sameTypeWires`). */
+    wired?: PortType[][];
+  },
+): string | null {
+  if (port.side === "in") {
+    return wireError(
+      { title: drag.title ?? "", types: drag.types, list: drag.list ?? false },
+      { name: port.name, types: port.types, access: port.list ? "list" : "item", wired: port.wired },
+    );
+  }
+  return wireError(
+    { title: port.title, types: port.types, list: port.list },
+    {
+      name: drag.name ?? "",
+      types: drag.types,
+      access: drag.list ? "list" : "item",
+      wired: drag.wired,
+    },
+  );
+}
+
 interface Props {
   nodeId: string;
   side: "in" | "out";
   name: string;
-  type: PortType;
+  /** What the port can carry (several for a union input or an unresolved `like:` output). */
+  types: PortType[];
+  /** Carries a list: drawn with a double line (an `access: list` input, or a list output). */
+  list?: boolean;
 }
 
-export function Port({ nodeId, side, name, type }: Props) {
+export function Port({ nodeId, side, name, types, list = false }: Props) {
   const drag = useContext(DragContext);
+  const title = useStore((s) => s.graph?.nodes[nodeId]?.title ?? "");
+  const graph = useStore((s) => s.graph);
+  let refusal: string | null = null;
   let fit = "";
   if (drag && drag.nodeId !== nodeId && drag.side !== side) {
-    const ok = side === "in" ? canConnect(drag.type, type) : canConnect(type, drag.type);
-    fit = ok ? "gk-fits" : "gk-misfit";
+    const wired = side === "in" && graph ? sameTypeWires(graph, nodeId, name) : undefined;
+    refusal = dragRefusal(drag, { side, name, types, list, title, wired });
+    fit = refusal ? "gk-misfit" : "gk-fits";
   }
+  // SPEC 3: first type's colour, a thin ring of the second.
+  const style = { background: PORT_COLOURS[types[0]] } as React.CSSProperties &
+    Record<"--gk-port", string>;
+  if (types.length > 1) style.borderColor = PORT_COLOURS[types[1]];
+  if (list) style["--gk-port"] = PORT_COLOURS[types[0]];
+  const label = typeLabel(types);
   return (
     <Handle
       id={handleId(side, name)}
       type={side === "in" ? "target" : "source"}
       position={side === "in" ? Position.Left : Position.Right}
-      className={`gk-handle ${fit}`}
-      style={{ background: PORT_COLOURS[type] }}
+      className={`gk-handle ${fit}${types.length > 1 ? " gk-union" : ""}${list ? " gk-list" : ""}`}
+      style={style}
       data-testid={`port-${nodeId}-${side}-${name}`}
-      data-type={type}
-      onMouseEnter={(e) =>
-        showTip(e, `${name}: ${type}`, portSummary(store.getState(), nodeId, side, name))
-      }
+      data-type={types.join("|")}
+      data-access={list ? "list" : "item"}
+      onMouseEnter={(e) => {
+        if (refusal) {
+          store.set({ tip: { text: refusal, x: e.clientX, y: e.clientY } });
+          return;
+        }
+        showTip(
+          e,
+          `${name}: ${list ? strings.listOf(label) : label}`,
+          portSummary(store.getState(), nodeId, side, name),
+        );
+      }}
       onMouseLeave={hideTip}
     />
   );

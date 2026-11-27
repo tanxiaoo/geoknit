@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import type { GraphView, MapLayer, MapView, NodeView } from "../../apiTypes";
-import { paramEntries } from "../../catalog";
+import { paramEntry } from "../../testFixtures";
 import { initialState, store } from "../../store";
 import { nodeKind } from "../nodes/kinds";
 import {
@@ -204,9 +204,9 @@ describe("map logic", () => {
   });
 
   test("Map Viewer is a Params entry with a list input, drawn as its own node", () => {
-    const entry = paramEntries().find((e) => e.ref === "param/map");
-    expect(entry?.inputs).toEqual([{ name: "layers", type: "Any", access: "list" }]);
-    expect(entry?.outputs).toEqual([]);
+    const entry = paramEntry("param/map");
+    expect(entry.inputs).toEqual([{ name: "layers", type: "Any", types: ["Any"], access: "list" }]);
+    expect(entry.outputs).toEqual([]);
     expect(nodeKind(viewer)).toBe("map");
   });
 });

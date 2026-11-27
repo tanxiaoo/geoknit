@@ -1,7 +1,8 @@
 # geoknit: component
 # name: Random Sample
 # category: Sampling
-# icon: random-sample
+# group: Draw
+# icon: gis:multipoint
 # description: Draw random points at the centres of valid (non-nodata) pixels inside the AOI.
 # inputs:
 #   raster: Raster

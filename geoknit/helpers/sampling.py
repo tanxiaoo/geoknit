@@ -1,8 +1,8 @@
 """Read raster values at point locations without loading the raster.
 
-Used by Extract Values, Accuracy and Confusion Matrix. A point takes the value
-of the pixel it falls in (nearest pixel centre). Only the chunks that hold
-points are read.
+Used by Extract Values, Regression Accuracy and Confusion Matrix. A point
+takes the value of the pixel it falls in (nearest pixel centre). Only the
+chunks that hold points are read.
 """
 
 from __future__ import annotations

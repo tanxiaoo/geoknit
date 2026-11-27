@@ -63,7 +63,7 @@ The banner says *22 components out of date*: nothing has run yet.
 | **Random Forest** (slider *n_trees* = 300, target `IMD`) | learns IMD from the 64 bands |
 | **Predict Raster** | applies the model to every pixel, 512 × 512 px at a time |
 | **Write Raster** → `outputs/imd_rf.tif` | saves the predicted map as a Cloud Optimized GeoTIFF |
-| **Accuracy** → Panel | compares the map with the test points' `IMD` |
+| **Regression Accuracy** → Panel | compares the map with the test points' `IMD` |
 
 The grey boxes (*Sample*, *Train · predict · validate*) are groups: they only
 help reading.
@@ -147,7 +147,7 @@ panning and zooming stay quick at city scale.
 
 Try a different model size: drag the **n_trees** slider to 100 and press
 **Run**. Only Random Forest and what depends on it (Predict Raster, Write
-Raster, Accuracy, the Map Viewer) run again; reading the rasters and sampling
+Raster, Regression Accuracy, the Map Viewer) run again; reading the rasters and sampling
 come from the cache. The banner always tells you how many components are out
 of date.
 
@@ -159,7 +159,7 @@ Other things worth trying:
 | a different random sample | the *seed* slider (42) |
 | class breaks | the Text node with `0 \| 0-20 \| …` |
 | share of test points | Split Points' `test_fraction` (0.3) |
-| a different model | add **SVM** from the Model tab, wire it like Random Forest, and give it its own Predict Raster and Accuracy |
+| a different model | add **SVM** from the Model tab, wire it like Random Forest, and give it its own Predict Raster and Regression Accuracy |
 
 Save with Ctrl+S (or the file name menu → *Save*). Unsaved changes are also
 autosaved: if GeoKnit is closed by accident, it offers to restore them next

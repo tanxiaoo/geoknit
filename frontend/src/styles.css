@@ -230,9 +230,31 @@ button:disabled {
 }
 .gk-buttons {
   display: flex;
-  gap: 8px;
-  padding: 10px 12px;
+  align-items: stretch;
+  gap: 0;
+  padding: 8px 4px 4px;
   flex-wrap: wrap;
+}
+.gk-ribbon-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0 10px;
+  border-right: 1px solid var(--line);
+}
+.gk-ribbon-group:last-child {
+  border-right: 0;
+}
+.gk-ribbon-group-buttons {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gk-ribbon-group-label {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
 }
 .gk-component-button {
   display: flex;
@@ -253,6 +275,21 @@ button:disabled {
   height: 26px;
   border-radius: 4px;
   background: #f1f5f9;
+}
+
+/* Vendored (Font-GIS, Tabler) and pack .svg icons: drawn in currentColor (change 01, section 9). */
+.gk-svg-icon {
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+}
+.gk-svg-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.gk-file-icon {
+  background-color: currentColor;
 }
 
 /* ── main area ── */
@@ -522,6 +559,19 @@ button:disabled {
 .gk-handle.gk-misfit {
   opacity: 0.25;
 }
+/* A port carrying a list: a second ring outside the white one (SPEC 3 "List values"). */
+.gk-handle.gk-list {
+  box-shadow: 0 0 0 1.5px var(--gk-port, #64748b);
+}
+.gk-handle.gk-list.gk-fits {
+  box-shadow:
+    0 0 0 1.5px var(--gk-port, #64748b),
+    0 0 0 4.5px #86efac;
+}
+/* A wire carrying a list: the canvas colour down the middle of a wide stroke. */
+.gk-wire-gap {
+  stroke: var(--canvas-bg);
+}
 
 /* text node */
 .gk-text {
@@ -593,6 +643,142 @@ button:disabled {
   color: #78350f;
 }
 
+/* Params nodes of change 01: Number, Boolean Toggle, Value List, Color Swatch, Colormap */
+.gk-badge-number {
+  background: #64748b;
+}
+.gk-badge-list {
+  background: #64748b;
+}
+.gk-number-input {
+  width: 120px;
+}
+.gk-integer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.gk-slider-window .gk-integer input {
+  width: auto;
+}
+.gk-toggle {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 18px 0 4px;
+  border-radius: 15px;
+  background: #fff;
+}
+.gk-switch-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.gk-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: #cbd5e1;
+  transition: background 0.15s;
+}
+.gk-switch-on {
+  background: #0369a1;
+}
+.gk-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.3);
+  transition: left 0.15s;
+}
+.gk-switch-on .gk-switch-knob {
+  left: 18px;
+}
+.gk-toggle-value {
+  min-width: 38px;
+  font-weight: 600;
+}
+.gk-value-select {
+  max-width: 220px;
+  font: inherit;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: #fff;
+}
+.gk-options-window {
+  width: 300px;
+}
+.gk-option-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 24px;
+  gap: 6px;
+  align-items: center;
+}
+.gk-slider-window .gk-option-row input {
+  width: 100%;
+}
+.gk-option-head {
+  color: var(--muted);
+  font-size: 12px;
+}
+.gk-color {
+  padding-left: 6px;
+}
+.gk-swatch {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgb(15 23 42 / 0.25);
+  border-radius: 50%;
+}
+.gk-slider-window .gk-color-input {
+  width: 48px;
+  height: 26px;
+  padding: 0 2px;
+}
+.gk-colormap {
+  padding-left: 8px;
+}
+.gk-ramp {
+  display: flex;
+  width: 110px;
+  height: 14px;
+  border: 1px solid rgb(15 23 42 / 0.2);
+  border-radius: 3px;
+  background: repeating-linear-gradient(45deg, #e2e8f0 0 4px, #f8fafc 4px 8px);
+  overflow: hidden;
+}
+.gk-class-chip {
+  flex: 1;
+}
+.gk-ramp-window {
+  width: 240px;
+}
+.gk-ramp-window li .gk-ramp {
+  width: 90px;
+}
+.gk-ramp-reverse {
+  justify-content: flex-start !important;
+}
+.gk-slider-window .gk-ramp-reverse input {
+  width: auto;
+}
+
 /* panel node */
 .gk-panel {
   width: 100%;
@@ -609,6 +795,123 @@ button:disabled {
   font-size: 11.5px;
   line-height: 1.45;
   white-space: pre;
+}
+/* the Panel viewer (change 01, section 11) */
+.gk-panel-view {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow: hidden;
+  white-space: normal;
+}
+.gk-panel-value {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  font: inherit;
+  white-space: pre;
+}
+.gk-panel-color,
+.gk-panel-colormap,
+.gk-panel-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gk-panel-swatch {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+}
+.gk-panel-colormap .gk-ramp {
+  flex: 1;
+  height: 18px;
+}
+.gk-panel-inline .gk-ramp {
+  width: 60px;
+  height: 10px;
+}
+.gk-panel-classes {
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.gk-panel-classes li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gk-panel-chip {
+  flex: none;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(15 23 42 / 0.25);
+  border-radius: 2px;
+}
+.gk-panel-header {
+  flex: none;
+  color: #6b5d1f;
+}
+.gk-panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  cursor: auto;
+}
+.gk-panel-grid {
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.gk-panel-list {
+  width: 100%;
+  table-layout: auto;
+}
+.gk-panel-grid th,
+.gk-panel-grid td {
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  border-bottom: 1px solid rgb(107 93 31 / 0.15);
+}
+.gk-panel-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--yellow);
+  border-bottom: 1px solid #d6c77a;
+}
+.gk-panel-grid .gk-panel-index {
+  position: sticky;
+  left: 0;
+  background: var(--yellow);
+  color: #6b5d1f;
+  font-weight: normal;
+  text-align: right;
+}
+.gk-panel-grid thead .gk-panel-index {
+  z-index: 2;
+}
+.gk-panel-list .gk-panel-index {
+  width: 1%;
+}
+.gk-panel-geom {
+  font-style: italic;
+  color: #6b5d1f;
+}
+.gk-panel-more,
+.gk-panel-note {
+  color: #6b5d1f;
+}
+.gk-panel-error {
+  color: var(--red, #b91c1c);
+  white-space: normal;
 }
 .gk-panel .gk-handle.react-flow__handle-left {
   left: -6px;

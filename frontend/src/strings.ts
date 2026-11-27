@@ -41,9 +41,11 @@ export const strings = {
 
   // ribbon
   paramsTab: "Params",
-  numberSlider: "Number Slider",
-  text: "Text",
-  panel: "Panel",
+  /** Search results: where a component sits in the ribbon. */
+  tabGroup: (tab: string, group: string) => `${tab} › ${group}`,
+  /** Console warning, once per name, when a header names an icon the registry lacks. */
+  unknownIcon: (name: string) =>
+    `GeoKnit: unknown icon "${name}"; using the category icon (see docs/icons.md)`,
   searchPlaceholder: "Search components (or double-click empty canvas)",
   noMatches: "No matching components",
   addHint: "Click to add, or drag onto the canvas",
@@ -67,6 +69,14 @@ export const strings = {
   textPlaceholder: "double-click to type",
   panelEmpty: "(empty)",
   panelRunToUpdate: "run to update",
+  panelTableHeader: (rows: number, columns: number) =>
+    `${rows} row${rows === 1 ? "" : "s"} × ${columns} column${columns === 1 ? "" : "s"}`,
+  panelListHeader: (count: number, type: string | null) =>
+    `list of ${count}${type ? ` ${type}` : ""}`,
+  panelNoDiskCache: "the disk cache is off: only the first 200 rows",
+  panelLoading: "loading…",
+  panelPageError: (message: string) => `could not load more rows: ${message}`,
+  panelOtherClass: "other",
   runToHere: "Run to here",
   deleteNode: "Delete",
   copy: "Copy",
@@ -75,10 +85,41 @@ export const strings = {
   ungroup: "Ungroup",
   renameGroup: "Double-click to rename",
   notRunYet: "run to see what this carries",
+  cantConnect: (from: string, to: string) => `${from} can't connect to ${to}`,
+  listIntoItem: (title: string, input: string) =>
+    `${title} gives a list; "${input}" takes one value — use List Item`,
+  sameTypeInto: (input: string) => `all wires into "${input}" must have the same type`,
+  listOf: (types: string) => `list of ${types}`,
+  moreItems: (n: number) => `… ${n} more`,
   sliderMin: "min",
   sliderMax: "max",
   sliderStep: "step",
   sliderValue: "value",
+  /** Number and Number Slider: integer mode (change 01, section 2). */
+  integer: "whole numbers",
+  integerHint: "Whole numbers only: the value is rounded and the output is an integer",
+  numberBadge: "#",
+  notANumber: (text: string) => `"${text}" is not a number`,
+  toggleTrue: "True",
+  toggleFalse: "False",
+  toggleHint: "Click to switch",
+  valueListChoose: "Choose a value",
+  valueListHint: "Double-click to edit the options",
+  valueListOptions: "Options",
+  optionLabel: "Label",
+  optionValue: "Value",
+  optionValueHint: "A number, or any text (the list gives Text if one value is text)",
+  addOption: "Add option",
+  removeOption: "Remove option",
+  valueListEmpty: "A Value List needs at least one option",
+  colorHex: "Hex",
+  colorHint: "Double-click to pick a colour",
+  colorPicker: "Pick a colour",
+  colormapHint: "Double-click to choose a ramp",
+  colormapRamps: "Named ramps",
+  colormapReverse: "Reversed",
+  colormapCustom: "custom",
+  colormapClasses: (n: number) => `${n} class${n === 1 ? "" : "es"}`,
   ok: "OK",
   cancel: "Cancel",
 
@@ -97,6 +138,7 @@ export const strings = {
   wiredFrom: (title: string, port: string) => `wired: ${title} › ${port}`,
   wiredText: (value: string) => `wired: Text "${value}"`,
   wiredSlider: (value: string) => `wired: Number Slider = ${value}`,
+  wiredParam: (title: string, value: string) => `wired: ${title} = ${value}`,
   notConnected: "not connected (required)",
   showOnCanvasAs: "Show on canvas as",
   displayDefault: "Canvas default",
@@ -128,6 +170,8 @@ export const strings = {
   removePort: "Remove",
   portName: "Port name",
   portType: "Type",
+  /** A `like:` output's type in the Settings tab: it follows that input (SPEC 4). */
+  likeInput: (input: string) => `like ${input}`,
 
   // Map Viewer (SPEC 8)
   mapViewer: "Map Viewer",

@@ -41,7 +41,15 @@ def test_synthetic_example_runs_headless(
     first = capsys.readouterr()
     metrics = _metrics(first.out)
     assert metrics["n"] == 42  # the held-out 30 % of 7 × 20 sample points
-    assert metrics["R²"] > 0.5
+    # Locked: the synthetic data and every random step (sampling, split, forest) are
+    # seeded in make_data.py and the workflow, so a change here is a real change. The
+    # tolerance only absorbs last-digit float differences between platforms (CI runs
+    # Windows and Ubuntu); the printed table has 6 significant digits.
+    assert metrics["dropped"] == 0
+    assert metrics["RMSE"] == pytest.approx(2.455046, rel=1e-4)
+    assert metrics["MAE"] == pytest.approx(1.68384, rel=1e-4)
+    assert metrics["R²"] == pytest.approx(0.995317, rel=1e-4)
+    assert metrics["bias"] == pytest.approx(-0.369395, rel=1e-4)
     assert (tmp_path / "outputs" / "imd_rf.tif").is_file()
     assert "0 failed" in first.err
 

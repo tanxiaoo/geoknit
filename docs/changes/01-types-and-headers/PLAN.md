@@ -186,15 +186,15 @@ touches.
 
 ## Step 9: Renames, merges, examples
 
-- [ ] Merge Train/Test Split into Split Points (`data: [Table, Vector]`,
+- [x] Merge Train/Test Split into Split Points (`data: [Table, Vector]`,
       `like:`, `attrs` kept); delete `sampling/train_test_split.py`
-- [ ] Rename Accuracy → Regression Accuracy
+- [x] Rename Accuracy → Regression Accuracy
       (`validation/regression_accuracy.py`)
-- [ ] Update both example workflows (Split Points wires `points` → `data`,
+- [x] Update both example workflows (Split Points wires `points` → `data`,
       the Accuracy reference), the tests, `docs/ui/SPEC.md`,
       `docs/writing-components.md` (new header keys: `group`, `ports`,
       `INPUTS`, union types, `like`, list outputs, icon names)
-- [ ] Merge this SPEC into `docs/SPEC.md`; mark change 01 done in the index
+- [x] Merge this SPEC into `docs/SPEC.md`; mark change 01 done in the index
 
 **Done when:**
 - `geoknit run examples/synthetic/imd.geoknit` prints the same metrics as

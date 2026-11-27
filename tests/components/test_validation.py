@@ -1,4 +1,4 @@
-"""Validation tab: Accuracy, Confusion Matrix; Script tab: Python."""
+"""Validation tab: Regression Accuracy, Confusion Matrix; Script tab: Python."""
 
 from pathlib import Path
 
@@ -25,7 +25,7 @@ def _points(xs: list[float], ys: list[float], **fields: list[object]) -> gpd.Geo
     )
 
 
-def test_accuracy_against_known_errors(imd: xr.DataArray) -> None:
+def test_regression_accuracy_against_known_errors(imd: xr.DataArray) -> None:
     xs = [510_505.0, 510_995.0, 511_505.0, 511_905.0]
     ys = [5_039_005.0, 5_038_505.0, 5_038_205.0, 5_039_505.0]
     truth = [imd.sel(x=x, y=y, method="nearest").values.item() for x, y in zip(xs, ys, strict=True)]
@@ -35,7 +35,7 @@ def test_accuracy_against_known_errors(imd: xr.DataArray) -> None:
         ys + [5_000_000.0, 5_039_985.0, 5_039_005.0],
         imd_ref=observed + [1.0, 1.0, None],
     )  # + one outside, one on nodata, one without a value
-    result = run_builtin("validation/accuracy", map=imd, reference=ref, field="imd_ref")
+    result = run_builtin("validation/regression_accuracy", map=imd, reference=ref, field="imd_ref")
     assert result.ok, result.error
     m = result.outputs["metrics"].iloc[0]
     assert list(result.outputs["metrics"].columns) == ["n", "dropped", "RMSE", "MAE", "R²", "bias"]
@@ -49,11 +49,11 @@ def test_accuracy_against_known_errors(imd: xr.DataArray) -> None:
     assert any("1 outside the map, 1 on nodata, 1 without a value" in line for line in result.log)
 
 
-def test_accuracy_reprojects_reference_and_checks_field(imd: xr.DataArray) -> None:
+def test_regression_accuracy_reprojects_reference_and_checks_field(imd: xr.DataArray) -> None:
     ref = _points([510_505.0], [5_039_005.0], v=[50.0]).to_crs(4326)
-    m = ok("validation/accuracy", map=imd, reference=ref, field="v")["metrics"]
+    m = ok("validation/regression_accuracy", map=imd, reference=ref, field="v")["metrics"]
     assert m.loc[0, "n"] == 1
-    bad = run_builtin("validation/accuracy", map=imd, reference=ref, field="nope")
+    bad = run_builtin("validation/regression_accuracy", map=imd, reference=ref, field="nope")
     assert 'no field "nope"' in (bad.error or "")
 
 

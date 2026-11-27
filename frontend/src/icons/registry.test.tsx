@@ -52,7 +52,7 @@ describe("icon registry", () => {
 
   it("resolves the icon of every built-in component", () => {
     const icons = builtinIcons();
-    expect(Object.keys(icons).length).toBeGreaterThanOrEqual(20);
+    expect(Object.keys(icons).length).toBeGreaterThanOrEqual(19);
     const missing = Object.entries(icons).filter(([, name]) => !resolveIcon(name));
     expect(missing).toEqual([]);
   });

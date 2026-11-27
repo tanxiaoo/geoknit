@@ -27,7 +27,7 @@ Raster:
 
 Sampling:
   Draw: [builtin/sampling/random_sample, builtin/sampling/stratified_sample]
-  Split: [builtin/sampling/split_points, builtin/sampling/train_test_split]
+  Split: [builtin/sampling/split_points]
   Extract: [builtin/sampling/extract_values]
 
 Model:
@@ -36,7 +36,7 @@ Model:
 
 Validation:
   Classification: [builtin/validation/confusion_matrix]
-  Regression: [builtin/validation/accuracy]
+  Regression: [builtin/validation/regression_accuracy]
 
 Script:
   Python: [builtin/script/python]

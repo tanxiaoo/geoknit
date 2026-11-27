@@ -1,5 +1,5 @@
 # geoknit: component
-# name: Accuracy
+# name: Regression Accuracy
 # category: Validation
 # group: Regression
 # icon: lucide:target

@@ -11,7 +11,7 @@ Read Raster (CLMS IMD) ─┬─ Reclassify ─┐
 Read Vector (AOI) ─────────────────────────┘                                │                               │
 Read Raster (AlphaEarth) ───────────────────────────────────────────────────┼───── Predict Raster ──────────┤
                                                                             │        ├─ Write Raster (outputs/imd_rf.tif)
-                                                                            └─ test ─┴─ Accuracy ─ Panel
+                                                                            └─ test ─┴─ Regression Accuracy ─ Panel
 ```
 
 ## 1. Copy the data
@@ -46,8 +46,8 @@ first run takes about a minute; later runs use the cache in
 Stratified Sample draws the same number of points from each IMD class inside
 the AOI and stores each point's CLMS value in the field `IMD`. Split Points
 keeps 30 % of them as test points, stratified by class. The training points
-go to Extract Values and the Random Forest. Accuracy compares the predicted map
-at each test point with its `IMD`. The test points are never used for training.
+go to Extract Values and the Random Forest. Regression Accuracy compares the
+predicted map at each test point with its `IMD`. The test points are never used for training.
 
 Settings you may want to change, as Slider and Text values in the workflow or in
 the components' settings: points per class (100), seed (42), number of trees (300),

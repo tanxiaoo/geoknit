@@ -328,7 +328,8 @@ class WorkerExecutor:
         node_key = keys.nodes[nid]
         assert node_key is not None
         try:
-            self._send(p.RunNode(nid, node.source, inputs, node_key))
+            output_types = self.graph.resolved_output_types(nid)
+            self._send(p.RunNode(nid, node.source, inputs, node_key, output_types))
             while True:
                 msg = self._recv()
                 if isinstance(msg, p.Started):

@@ -120,6 +120,7 @@ class InProcessExecutor:
                 log=lambda line: self._log(nid, line),
                 cwd=self.base_dir,
                 print_port=PRINT_PORT,
+                output_types=self.graph.resolved_output_types(nid),
             )
             if not result.ok:
                 assert result.error is not None
@@ -155,7 +156,7 @@ class InProcessExecutor:
             for w in wires:
                 if w.src not in self.results or self.solver.states.get(w.src) != DONE:
                     raise _MissingInput(f'input "{name}": {w.src} has no result yet; run it first')
-                values.append(types.convert_for_input(self.results[w.src][w.src_port], port.type))
+                values.append(types.convert_for_input(self.results[w.src][w.src_port], port.types))
             inputs[name] = values if port.access == "list" else values[0]
         return inputs
 

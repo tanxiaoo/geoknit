@@ -229,8 +229,16 @@ def _port_line(port: Mapping[str, Any], key: str) -> str:
     if not name.isidentifier():
         raise ValueError(f'"{name}" is not a valid port name (letters, digits and _)')
     type_name = str(port.get("type", ""))
+    listed = [str(t) for t in port.get("types") or []]
+    if len(listed) > 1 and listed[0] == type_name:
+        type_name = f"[{', '.join(listed)}]"  # a union input (SPEC 3)
     access = port.get("access") or "item"
     file_role = port.get("file")
+    like = port.get("like")
+    if like:
+        if access != "item" or file_role:
+            raise ValueError(f'output "{name}" cannot combine like: with other keys yet')
+        return f"{name}: {{like: {like}}}"
     extra: list[str] = []
     if access != "item":
         if key != "inputs":

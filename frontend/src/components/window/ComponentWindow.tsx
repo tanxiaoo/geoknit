@@ -210,7 +210,10 @@ export function wiredLabel(graph: GraphView, nodeId: string, port: string): stri
 }
 
 function toEdit(p: PortView): PortEdit {
-  return { name: p.name, type: p.type, access: p.access, file: p.file ?? null };
+  const edit: PortEdit = { name: p.name, type: p.type, access: p.access, file: p.file ?? null };
+  if (p.types && p.types.length > 1) edit.types = p.types;
+  if (p.like) edit.like = p.like;
+  return edit;
 }
 
 function SettingsTab({ view }: { view: NodeView }) {

@@ -60,9 +60,20 @@ class Port:
 
     name: str
     type: str
+    """The first listed type (the only one for an ordinary port)."""
     access: str = "item"
     file: str | None = None
     """``"write"`` for a Text input naming a file the component writes (not fingerprinted)."""
+    types: tuple[str, ...] = ()
+    """Every type an input accepts, ``(type,)`` for an ordinary port (SPEC 3)."""
+    like: str | None = None
+    """For an output: the input whose wired type it takes (``{like: data}``, SPEC 4).
+
+    ``type`` / ``types`` are then the input's declared types, used while it is unwired."""
+
+    def __post_init__(self) -> None:
+        if not self.types:
+            object.__setattr__(self, "types", (self.type,))
 
 
 FILE_ROLES = ("write",)
@@ -181,7 +192,7 @@ def parse_component(source: str) -> ComponentSpec:
     settings = _parse_settings(lines, blocks)
 
     inputs = _parse_ports(header.get("inputs"), "inputs", allow_list=True)
-    outputs = _parse_ports(header.get("outputs"), "outputs", allow_list=False)
+    outputs = _parse_ports(header.get("outputs"), "outputs", allow_list=False, inputs=inputs)
     clash = set(inputs) & set(outputs)
     if clash:
         raise ComponentParseError(
@@ -225,7 +236,10 @@ def _parse_header(lines: list[str], header_end: int) -> dict[str, Any]:
     return data
 
 
-def _parse_ports(raw: object, key: str, *, allow_list: bool) -> dict[str, Port]:
+def _parse_ports(
+    raw: object, key: str, *, allow_list: bool, inputs: Mapping[str, Port] | None = None
+) -> dict[str, Port]:
+    """Parse ``inputs:`` (``allow_list``) or ``outputs:`` (``inputs`` given, for ``like:``)."""
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -236,32 +250,75 @@ def _parse_ports(raw: object, key: str, *, allow_list: bool) -> dict[str, Port]:
         if not name.isidentifier():
             raise ComponentParseError(f'port name "{name}" is not a valid Python name')
         file_role: object = None
-        if isinstance(spec, str):
-            type_name, access = spec, "item"
+        like: object = None
+        if isinstance(spec, str | list):
+            type_spec, access = spec, "item"
         elif isinstance(spec, dict):
-            type_name, access = spec.get("type"), spec.get("access", "item")
+            type_spec, access = spec.get("type"), spec.get("access", "item")
             file_role = spec.get("file")
+            like = spec.get("like")
         else:
             raise ComponentParseError(f'{key}: "{name}" needs a type such as Raster')
-        if type_name not in types.PORT_TYPES:
-            raise ComponentParseError(
-                f'{key}: "{name}" has unknown type "{type_name}" '
-                f"(use one of {', '.join(types.PORT_TYPES)})"
-            )
+        if like is not None:
+            port_types = _like_types(key, name, like, type_spec, inputs)
+        else:
+            port_types = _port_types(key, name, type_spec, allow_union=allow_list)
+        type_name = port_types[0]
         if access not in ("item", "list") or (access == "list" and not allow_list):
             raise ComponentParseError(f'{key}: "{name}" has invalid access "{access}"')
         if file_role is not None:
-            if not allow_list or file_role not in FILE_ROLES or type_name != types.TEXT:
+            if not allow_list or file_role not in FILE_ROLES or port_types != (types.TEXT,):
                 raise ComponentParseError(
                     f'{key}: "{name}": "file: write" is only allowed on a Text input'
                 )
         ports[name] = Port(
             name=name,
-            type=str(type_name),
+            type=type_name,
             access=str(access),
             file=None if file_role is None else str(file_role),
+            types=port_types,
+            like=None if like is None else str(like),
         )
     return ports
+
+
+def _port_types(key: str, name: str, spec: object, *, allow_union: bool) -> tuple[str, ...]:
+    """``Raster`` → ``("Raster",)``; ``[Table, Vector]`` (inputs only) → both."""
+    listed = spec if isinstance(spec, list) else [spec]
+    if isinstance(spec, list) and not allow_union:
+        raise ComponentParseError(
+            f'{key}: "{name}": only inputs can list several types; '
+            "an output that follows an input uses like:"
+        )
+    if not listed:
+        raise ComponentParseError(f'{key}: "{name}" needs a type such as Raster')
+    for type_name in listed:
+        if type_name not in types.PORT_TYPES:
+            raise ComponentParseError(
+                f'{key}: "{name}" has unknown type "{type_name}" '
+                f"(use one of {', '.join(types.PORT_TYPES)})"
+            )
+    if len(listed) > 1:
+        if types.ANY in listed:
+            raise ComponentParseError(f'{key}: "{name}": Any cannot be part of a list of types')
+        dup = next((t for t in listed if listed.count(t) > 1), None)
+        if dup is not None:
+            raise ComponentParseError(f'{key}: "{name}" lists the type "{dup}" twice')
+    return tuple(str(t) for t in listed)
+
+
+def _like_types(
+    key: str, name: str, like: object, type_spec: object, inputs: Mapping[str, Port] | None
+) -> tuple[str, ...]:
+    """The declared types of the input an output is ``like``."""
+    if inputs is None:
+        raise ComponentParseError(f'{key}: "{name}": only outputs can use like:')
+    if type_spec is not None:
+        raise ComponentParseError(f'{key}: "{name}": use either like: or type:, not both')
+    source = inputs.get(str(like)) if isinstance(like, str) else None
+    if source is None:
+        raise ComponentParseError(f'{key}: "{name}": like: must name an input, not "{like}"')
+    return source.types
 
 
 def is_allowed_literal(value: object) -> bool:
@@ -474,11 +531,14 @@ def run_component(
     log: LogFn | None = None,
     cwd: Path | None = None,
     print_port: str | None = None,
+    output_types: Mapping[str, str] | None = None,
 ) -> RunResult:
     """Run one component, following SPEC 4 "Running one component".
 
     ``inputs`` holds the wired inputs only. ``print_port`` names a Text output
     that receives everything printed (the Python component's ``out``).
+    ``output_types`` holds the types the graph resolved for ``like:`` outputs;
+    an output not listed is checked against its declared type(s).
     """
     result = RunResult()
     filename = filename or f"<component {spec.name}>"
@@ -505,7 +565,7 @@ def run_component(
                 result.error = f'input "{name}" expects a list'
                 return result
             continue
-        problem = types.check_value(port.type, value)
+        problem = types.check_value(port.types, value)
         if problem:
             result.error = f'input "{name}": {problem}'
             return result
@@ -537,7 +597,8 @@ def run_component(
             result.error = f'output "{name}" was not set by the code'
             return result
         value = types.as_output(namespace[name])
-        problem = types.check_value(port.type, value)
+        expected = (output_types or {}).get(name) or port.types
+        problem = types.check_value(expected, value)
         if problem:
             result.error = f'output "{name}": {problem}'
             return result

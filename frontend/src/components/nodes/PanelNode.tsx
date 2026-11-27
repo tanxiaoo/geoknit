@@ -1,6 +1,7 @@
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { store, useStore } from "../../store";
 import { strings } from "../../strings";
+import { portTypes } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
 
@@ -30,11 +31,16 @@ export function PanelNode({ id, data, selected }: NodeProps<GkNode>) {
           void store.patchNode(id, { size: [Math.round(p.width), Math.round(p.height)] })
         }
       />
-      <Port nodeId={id} side="in" name="data" type="Any" />
+      <Port nodeId={id} side="in" name="data" types={["Any"]} />
       <pre className="nowheel gk-panel-text" data-testid={`panel-text-${id}`}>
         {body}
       </pre>
-      <Port nodeId={id} side="out" name="data" type="Any" />
+      <Port
+        nodeId={id}
+        side="out"
+        name="data"
+        types={view.outputs[0] ? portTypes(view.outputs[0]) : ["Any"]}
+      />
     </div>
   );
 }

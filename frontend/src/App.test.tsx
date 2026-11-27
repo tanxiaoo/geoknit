@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import type { ComponentEntry, GraphView, NodeView } from "./apiTypes";
+import type { ComponentEntry, GraphView, NodeView, PortView } from "./apiTypes";
 import { categories, fittingPort, paramEntries } from "./catalog";
 import { fileBadge } from "./components/FolderTree";
 import { TextNode } from "./components/nodes/TextNode";
@@ -10,7 +10,7 @@ import type { GkNode } from "./components/nodes/kinds";
 import { exportPath, workflowFiles } from "./components/TopBar";
 import { clipOf, initialState, portSummary, reduceEvent, Store, store } from "./store";
 import { strings } from "./strings";
-import { canConnect } from "./types";
+import { canConnect, connectionError, portTypes } from "./types";
 import { ApiError, type Api } from "./api";
 
 function node(id: string, extra: Partial<NodeView> = {}): NodeView {
@@ -76,6 +76,17 @@ describe("connection rules (SPEC 3)", () => {
   ] as const)("%s → %s: %s", (out, input, ok) => {
     expect(canConnect(out, input)).toBe(ok);
   });
+
+  test("union inputs and resolved like: outputs", () => {
+    expect(connectionError(["Raster"], ["Table", "Vector"])).toBe(
+      "Raster can't connect to Table | Vector",
+    );
+    expect(connectionError(["Vector"], ["Table", "Vector"])).toBeNull();
+    expect(connectionError(["Table", "Vector"], ["Vector"])).toBeNull();
+    const out: PortView = { name: "o", type: "Table", types: ["Table", "Vector"], access: "item" };
+    expect(portTypes(out)).toEqual(["Table", "Vector"]);
+    expect(portTypes({ ...out, resolved_type: "Vector" })).toEqual(["Vector"]);
+  });
 });
 
 describe("catalog", () => {
@@ -96,13 +107,18 @@ describe("catalog", () => {
       ],
       outputs: [{ name: "model", type: "Model", access: "item" }],
     });
-    const from = { nodeId: "n1", port: "value", side: "out" as const, type: "Number" as const };
+    const from = {
+      nodeId: "n1",
+      port: "value",
+      side: "out" as const,
+      types: ["Number" as const],
+    };
     expect(fittingPort(rf, from)).toBe("n_trees");
-    expect(fittingPort(rf, { ...from, type: "Raster" })).toBeNull();
+    expect(fittingPort(rf, { ...from, types: ["Raster"] })).toBeNull();
     const [slider, text, panel] = paramEntries();
-    expect(fittingPort(slider, { ...from, side: "in", type: "Text" })).toBe("value");
-    expect(fittingPort(text, { ...from, side: "in", type: "Number" })).toBeNull();
-    expect(fittingPort(panel, { ...from, type: "Raster" })).toBe("data");
+    expect(fittingPort(slider, { ...from, side: "in", types: ["Text"] })).toBe("value");
+    expect(fittingPort(text, { ...from, side: "in", types: ["Number"] })).toBeNull();
+    expect(fittingPort(panel, { ...from, types: ["Raster"] })).toBe("data");
   });
 });
 

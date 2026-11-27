@@ -254,3 +254,44 @@ def test_server_does_not_import_the_geo_stack() -> None:
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.stdout.strip() == "[]", result.stderr
+
+
+SELECT_ROWS = """\
+# geoknit: component
+# name: Select
+# category: Table
+# inputs:
+#   data: [Table, Vector]
+# outputs:
+#   selected: {like: data}
+
+# --- code ---
+selected = data
+"""
+
+
+def test_ports_carry_types_like_and_resolved_type(client: TestClient) -> None:
+    comps = {c["ref"]: c for c in client.get("/api/components").json()}
+    split = comps["builtin/sampling/split_points"]
+    assert all("types" in p for p in split["inputs"] + split["outputs"])
+    assert all("like" in p for p in split["outputs"])
+
+    sel = _add(client, "inline", source=SELECT_ROWS)
+    panel = _add(client, "param/panel")
+    graph = client.get("/api/graph").json()
+    (data,) = graph["nodes"][sel]["inputs"]
+    assert data["type"] == "Table" and data["types"] == ["Table", "Vector"]
+    (out,) = graph["nodes"][sel]["outputs"]
+    assert out["like"] == "data" and out["resolved_type"] is None
+    assert graph["nodes"][panel]["outputs"][0]["resolved_type"] is None
+
+    text = _add(client, "param/text")
+    r = _wire(client, text, "value", sel, "data")
+    assert r.status_code == 400 and r.json()["detail"] == "Text can't connect to Table | Vector"
+    assert _wire(client, sel, "selected", panel, "data").status_code == 201
+    graph = client.get("/api/graph").json()
+    assert graph["nodes"][panel]["outputs"][0]["resolved_type"] is None  # sel unresolved
+    up = _add(client, "inline", source=UPPER)
+    assert _wire(client, text, "value", up, "text").status_code == 201
+    graph = client.get("/api/graph").json()
+    assert graph["nodes"][up]["outputs"][0]["resolved_type"] == "Text"  # a plain output

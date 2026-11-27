@@ -21,7 +21,7 @@ export function MapNode({ id, data, selected }: NodeProps<GkNode>) {
       {needsRun(state) && count > 0 && <span className="gk-dot" />}
       <div className="gk-col gk-inputs">
         <div className="gk-port-row">
-          <Port nodeId={id} side="in" name="layers" type="Any" />
+          <Port nodeId={id} side="in" name="layers" types={["Any"]} />
           <span>layers</span>
         </div>
       </div>

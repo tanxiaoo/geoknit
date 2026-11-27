@@ -200,7 +200,9 @@ An input's `type` can be a list:
   ("all wires into "items" must have the same type").
 - API: output ports in `GET /api/graph` carry `like` and `resolved_type`; the
   frontend uses `resolved_type` for colours and its own `canConnect` checks
-  while dragging.
+  while dragging. `resolved_type` is the output's own type for an ordinary
+  output, and `null` while a `like:` output is unresolved (the frontend then
+  uses its declared `types`; an unwired Panel's are `["Any"]`).
 
 ## 5. List values (SPEC 3, 4, 6, 10)
 

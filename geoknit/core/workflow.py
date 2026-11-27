@@ -162,12 +162,19 @@ def graph_from_dict(data: dict[str, Any], library: ComponentLibrary | None = Non
             graph.add_node(node_from_dict(raw, library))
         except GraphError as exc:
             raise WorkflowError(str(exc)) from None
-    for raw in data.get("wires", []):
-        try:
-            (src, src_port), (dst, dst_port) = raw["from"], raw["to"]
-            graph.add_wire(src, src_port, dst, dst_port)
-        except (KeyError, TypeError, ValueError) as exc:
-            raise WorkflowError(f"bad wire {raw}: {exc}") from None
+    # Types are checked once every wire is in: a wire leaving a ``like:`` output
+    # can come before the wire that resolves it (SPEC 4).
+    with graph.deferred_checks():
+        for raw in data.get("wires", []):
+            try:
+                (src, src_port), (dst, dst_port) = raw["from"], raw["to"]
+                graph.add_wire(src, src_port, dst, dst_port)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise WorkflowError(f"bad wire {raw}: {exc}") from None
+        bad = graph.bad_wires()
+        if bad:
+            wire, problem = bad[0]
+            raise WorkflowError(f"bad wire {wire}: {problem}")
     graph.groups = list(data.get("groups", []))
     graph.view = dict(data.get("view", {}))
     return graph
@@ -265,30 +272,33 @@ def apply_dict(
         ]
     except (KeyError, IndexError, TypeError) as exc:
         raise WorkflowError(f"bad wire in workflow: {exc}") from None
-    try:
-        for w in [w for w in graph.wires if w not in wanted]:
-            graph.remove_wire(w.src, w.src_port, w.dst, w.dst_port)
-        for nid in [n for n in graph.nodes if n not in target]:
-            graph.remove_node(nid)
-        for nid, raw in target.items():
-            new = node_from_dict(raw, library)
-            old = graph.nodes.get(nid)
-            if old is None:
-                graph.add_node(new)
-            elif _content(node_to_dict(old)) != _content(node_to_dict(new)):
-                _update_node(graph, old, new)
-            old = graph.nodes[nid]
-            old.position, old.display, old.extra = list(new.position), new.display, new.extra
-        for w in wanted:
-            if w not in graph.wires:
-                graph.add_wire(w.src, w.src_port, w.dst, w.dst_port)
-    except GraphError as exc:
-        raise WorkflowError(str(exc)) from None
-    # same order as the document, so saving gives the same bytes
-    ordered = {nid: graph.nodes[nid] for nid in target}
-    graph.nodes.clear()
-    graph.nodes.update(ordered)
-    graph.wires[:] = wanted
+    # Wire types are checked once the graph matches the document (SPEC 4: a wire
+    # leaving a ``like:`` output can come before the wire that resolves it).
+    with graph.deferred_checks():
+        try:
+            for w in [w for w in graph.wires if w not in wanted]:
+                graph.remove_wire(w.src, w.src_port, w.dst, w.dst_port)
+            for nid in [n for n in graph.nodes if n not in target]:
+                graph.remove_node(nid)
+            for nid, raw in target.items():
+                new = node_from_dict(raw, library)
+                old = graph.nodes.get(nid)
+                if old is None:
+                    graph.add_node(new)
+                elif _content(node_to_dict(old)) != _content(node_to_dict(new)):
+                    _update_node(graph, old, new)
+                old = graph.nodes[nid]
+                old.position, old.display, old.extra = list(new.position), new.display, new.extra
+            for w in wanted:
+                if w not in graph.wires:
+                    graph.add_wire(w.src, w.src_port, w.dst, w.dst_port)
+        except GraphError as exc:
+            raise WorkflowError(str(exc)) from None
+        # same order as the document, so saving gives the same bytes
+        ordered = {nid: graph.nodes[nid] for nid in target}
+        graph.nodes.clear()
+        graph.nodes.update(ordered)
+        graph.wires[:] = wanted
     graph.groups = json.loads(json.dumps(data.get("groups", [])))
     if view:
         graph.view = dict(data.get("view", {}))

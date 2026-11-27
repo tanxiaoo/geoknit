@@ -56,7 +56,7 @@ export function SliderNode({ id, data, selected }: NodeProps<GkNode>) {
       >
         {formatNumber(local)}
       </span>
-      <Port nodeId={id} side="out" name="value" type="Number" />
+      <Port nodeId={id} side="out" name="value" types={["Number"]} />
       {open && (
         <SliderWindow
           min={min}

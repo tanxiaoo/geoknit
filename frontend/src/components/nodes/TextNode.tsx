@@ -49,7 +49,7 @@ export function TextNode({ id, data, selected }: NodeProps<GkNode>) {
           {value || strings.textPlaceholder}
         </span>
       )}
-      <Port nodeId={id} side="out" name="value" type="Text" />
+      <Port nodeId={id} side="out" name="value" types={["Text"]} />
     </div>
   );
 }

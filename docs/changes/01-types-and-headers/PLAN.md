@@ -34,18 +34,18 @@ touches.
 
 ## Step 2: Union input types and `like:` outputs
 
-- [ ] Header parser: `type: [A, B]` (`Port.types`), `like: <input>`, errors
+- [x] Header parser: `type: [A, B]` (`Port.types`), `like: <input>`, errors
       for unknown inputs, `Any` in a list, duplicates, `like` + `type`
-- [ ] Graph: wiring checks against union types; `Graph.output_type()`
+- [x] Graph: wiring checks against union types; `Graph.output_type()`
       resolving `like:` through chains; Panel's pass-through becomes
       `{like: data}` (only an unwired Panel is `Any`);
       graph-wide re-check that removes wires when an input's source changes
       type; load and `apply_dict` check wires after all are added
-- [ ] Run: union check on inputs; resolved output types sent in `RunNode`
+- [x] Run: union check on inputs; resolved output types sent in `RunNode`
       (`output_types`) and checked by the worker and the in-process executor
-- [ ] API: ports in `/api/graph` and `/api/components` carry `types`; outputs
+- [x] API: ports in `/api/graph` and `/api/components` carry `types`; outputs
       carry `like` and `resolved_type`
-- [ ] Frontend: two-colour port dot, tooltip "Raster can't connect to
+- [x] Frontend: two-colour port dot, tooltip "Raster can't connect to
       Table | Vector", drag checks use `resolved_type`
 
 **Done when:**

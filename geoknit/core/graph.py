@@ -7,8 +7,9 @@ one place.
 
 from __future__ import annotations
 
+import contextlib
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,7 +33,11 @@ INLINE = "inline"
 _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
     PARAM_TEXT: ({}, {"value": Port("value", types.TEXT)}),
     PARAM_SLIDER: ({}, {"value": Port("value", types.NUMBER)}),
-    PARAM_PANEL: ({"data": Port("data", types.ANY)}, {"data": Port("data", types.ANY)}),
+    # The pass-through takes the type of what is wired in; unwired it is ``Any`` (SPEC 4).
+    PARAM_PANEL: (
+        {"data": Port("data", types.ANY)},
+        {"data": Port("data", types.ANY, like="data")},
+    ),
     PARAM_MAP: ({"layers": Port("layers", types.ANY, access="list")}, {}),
 }
 
@@ -130,6 +135,7 @@ class Graph:
         self.groups: list[dict[str, Any]] = []
         self.view: dict[str, Any] = {}
         self._listeners: list[ChangeListener] = []
+        self._deferred = 0
 
     # ── listeners ──
     def subscribe(self, listener: ChangeListener) -> None:
@@ -212,6 +218,7 @@ class Graph:
                 g["nodes"] = [n for n in g["nodes"] if n != node_id]
         self.groups = [g for g in self.groups if g.get("nodes")]  # an empty group is gone
         self._changed(changed=children - {node_id}, removed=[node_id])
+        self._recheck()
 
     # ── edits that change results ──
     def set_setting(self, node_id: str, name: str, value: Any) -> None:
@@ -231,11 +238,10 @@ class Graph:
         node = self.node(node_id)
         if node.is_param:
             raise GraphError(f"{node.title} has no code")
-        old_inputs, old_outputs = dict(node.inputs), dict(node.outputs)
         node.set_source(source)
-        if node.parse_error is None:
-            self._drop_broken_wires(node_id, old_inputs, old_outputs)
         self._changed(changed=[node_id])
+        if node.parse_error is None:
+            self._recheck()
 
     def set_ports(
         self,
@@ -260,7 +266,6 @@ class Graph:
             raise GraphError(str(exc)) from None
         renamed_in = {str(p["was"]): str(p["name"]) for p in inputs if p.get("was")}
         renamed_out = {str(p["was"]): str(p["name"]) for p in outputs if p.get("was")}
-        old_inputs, old_outputs = dict(node.inputs), dict(node.outputs)
         node.set_source(new_source)
         rewired: list[Wire] = []
         for w in self.wires:
@@ -270,10 +275,8 @@ class Graph:
                 w = Wire(w.src, renamed_out[w.src_port], w.dst, w.dst_port)
             rewired.append(w)
         self.wires = rewired
-        old_inputs = {renamed_in.get(k, k): v for k, v in old_inputs.items()}
-        old_outputs = {renamed_out.get(k, k): v for k, v in old_outputs.items()}
-        self._drop_broken_wires(node_id, old_inputs, old_outputs)
         self._changed(changed=[node_id])
+        self._recheck()
 
     def set_value(self, node_id: str, value: Any) -> None:
         node = self.node(node_id)
@@ -329,7 +332,11 @@ class Graph:
 
     # ── wires ──
     def add_wire(self, src: str, src_port: str, dst: str, dst_port: str) -> Wire:
-        """Connect ``src.src_port`` → ``dst.dst_port``, refusing bad wires."""
+        """Connect ``src.src_port`` → ``dst.dst_port``, refusing bad wires.
+
+        Wires further downstream are re-checked afterwards and removed when they
+        no longer fit (a ``like:`` output that resolved to another type, SPEC 4).
+        """
         a, b = self.node(src), self.node(dst)
         out = a.outputs.get(src_port)
         if out is None:
@@ -337,10 +344,11 @@ class Graph:
         inp = b.inputs.get(dst_port)
         if inp is None:
             raise GraphError(f'{b.title} has no input "{dst_port}"')
-        problem = types.connection_error(out.type, inp.type)
-        if problem:
-            raise GraphError(problem)
         wire = Wire(src, src_port, dst, dst_port)
+        if not self._deferred:
+            problem = self._wire_problem(wire, self.wires)
+            if problem:
+                raise GraphError(problem)
         if wire in self.wires:
             raise GraphError("these ports are already connected")
         if inp.access == "item" and self.wires_into(dst, dst_port):
@@ -349,6 +357,7 @@ class Graph:
             raise GraphError(f"connecting {a.title} → {b.title} would create a cycle")
         self.wires.append(wire)
         self._changed(changed=[dst])
+        self._recheck()
         return wire
 
     def remove_wire(self, src: str, src_port: str, dst: str, dst_port: str) -> None:
@@ -357,35 +366,127 @@ class Graph:
             raise GraphError(f"no wire {wire}")
         self.wires.remove(wire)
         self._changed(changed=[dst])
+        self._recheck()
 
     def wires_into(self, node_id: str, port: str | None = None) -> list[Wire]:
         return [w for w in self.wires if w.dst == node_id and (port is None or w.dst_port == port)]
 
-    def _drop_broken_wires(
-        self, node_id: str, old_inputs: dict[str, Port], old_outputs: dict[str, Port]
-    ) -> None:
-        """After a code change, remove wires whose ports vanished or changed type."""
-        node = self.nodes[node_id]
-        keep: list[Wire] = []
-        affected: set[str] = set()
-        for w in self.wires:
-            if w.dst == node_id:
-                p = node.inputs.get(w.dst_port)
-                src_type = self.nodes[w.src].outputs[w.src_port].type
-                ok = p is not None and types.can_connect(src_type, p.type)
-            elif w.src == node_id:
-                p = node.outputs.get(w.src_port)
-                dst_type = self.nodes[w.dst].inputs[w.dst_port].type
-                ok = p is not None and types.can_connect(p.type, dst_type)
-                if not ok:
-                    affected.add(w.dst)
+    # ── resolved types (``like:`` outputs, SPEC 4) ──
+    def output_types(self, node_id: str, port: str) -> tuple[str, ...]:
+        """The types ``node_id.port`` can carry, resolved from the wires.
+
+        One type once resolved; a ``like:`` output whose input is unwired has
+        the input's declared types (``("Any",)`` for an unwired Panel).
+        """
+        node = self.node(node_id)
+        out = node.outputs.get(port)
+        if out is None:
+            raise GraphError(f'{node.title} has no output "{port}"')
+        if out.like is None:
+            return out.types
+        inp = node.inputs.get(out.like)
+        if inp is None:  # pragma: no cover  (the header parser refuses this)
+            return out.types
+        found: list[str] = []
+        for w in self.wires_into(node_id, out.like):
+            found.extend(t for t in self._arriving_types(w, inp) if t not in found)
+        return tuple(found) if found else inp.types
+
+    def output_type(self, node_id: str, port: str) -> str | None:
+        """The one type ``node_id.port`` resolves to, or ``None`` while unresolved."""
+        found = self.output_types(node_id, port)
+        return found[0] if len(found) == 1 and found[0] != types.ANY else None
+
+    def resolved_output_types(self, node_id: str) -> dict[str, str]:
+        """Resolved types of a node's ``like:`` outputs, for checking values after a run."""
+        node = self.node(node_id)
+        out: dict[str, str] = {}
+        for name, port in node.outputs.items():
+            if port.like is not None and (t := self.output_type(node_id, name)) is not None:
+                out[name] = t
+        return out
+
+    def _arriving_types(self, wire: Wire, inp: Port) -> tuple[str, ...]:
+        """The types a wire's value can have at ``inp`` (after Number/Boolean → Text)."""
+        src = self.nodes.get(wire.src)
+        if src is None or wire.src_port not in src.outputs:
+            return ()
+        found: list[str] = []
+        for t in self.output_types(wire.src, wire.src_port):
+            if t == types.ANY:
+                arriving: tuple[str, ...] = inp.types
+            elif types.can_connect_any(t, inp.types):
+                arriving = (types.arriving_type(t, inp.types),)
             else:
-                ok = True
-            if ok:
-                keep.append(w)
-        self.wires = keep
-        if affected:
-            self._changed(changed=affected)
+                arriving = ()
+            found.extend(a for a in arriving if a not in found)
+        return tuple(found)
+
+    def _wire_problem(self, wire: Wire, others: Iterable[Wire]) -> str | None:
+        """Why ``wire`` does not fit (given the ``others`` already there), or ``None``."""
+        a, b = self.nodes.get(wire.src), self.nodes.get(wire.dst)
+        if a is None or b is None:
+            return f"no node for the wire {wire}"
+        out, inp = a.outputs.get(wire.src_port), b.inputs.get(wire.dst_port)
+        if out is None:
+            return f'{a.title} has no output "{wire.src_port}"'
+        if inp is None:
+            return f'{b.title} has no input "{wire.dst_port}"'
+        problem = types.connection_error(self.output_types(wire.src, wire.src_port), inp.types)
+        if problem:
+            return problem
+        if inp.access == "list" and any(o.like == inp.name for o in b.outputs.values()):
+            # An output ``like`` a list input needs one type across its wires.
+            mine = self._arriving_types(wire, inp)
+            for w in others:
+                if w == wire or (w.dst, w.dst_port) != (wire.dst, wire.dst_port):
+                    continue
+                theirs = self._arriving_types(w, inp)
+                if len(mine) == len(theirs) == 1 and types.ANY not in (*mine, *theirs):
+                    if mine != theirs:
+                        return f'all wires into "{inp.name}" must have the same type'
+        return None
+
+    def bad_wires(self) -> list[tuple[Wire, str]]:
+        """Wires that do not fit, each checked against the wires before it."""
+        bad: list[tuple[Wire, str]] = []
+        for i, w in enumerate(self.wires):
+            problem = self._wire_problem(w, self.wires[:i])
+            if problem:
+                bad.append((w, problem))
+        return bad
+
+    def _recheck(self) -> None:
+        """Remove wires that no longer fit, graph-wide; mark their targets out of date.
+
+        Generalises "changing a component's code" (SPEC 4) to ``like:`` outputs:
+        when an input's source changes type, wires leaving outputs that follow
+        it, and further ``like:`` outputs downstream, are checked again.
+        """
+        if self._deferred:
+            return
+        lost: set[str] = set()
+        while bad := self.bad_wires():
+            wire = bad[0][0]
+            self.wires.remove(wire)
+            if wire.dst in self.nodes:
+                lost.add(wire.dst)
+        if lost:
+            self._changed(changed=lost)
+
+    @contextlib.contextmanager
+    def deferred_checks(self) -> Iterator[None]:
+        """Add wires without type checks and re-check them all at the end.
+
+        Loading and undo add wires in file order, and a wire leaving a ``like:``
+        output can come before the wire that resolves it (SPEC 4).
+        """
+        self._deferred += 1
+        try:
+            yield
+        finally:
+            self._deferred -= 1
+        self._recheck()
 
     # ── structure ──
     def parents(self, node_id: str) -> list[str]:

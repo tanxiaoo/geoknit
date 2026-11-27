@@ -238,7 +238,8 @@ class _Exporter:
         self.order = graph.topological_order()
         self.names = _id_names(list(graph.nodes))
         self.exprs: dict[tuple[str, str], str] = {}
-        self.out_types: dict[tuple[str, str], str] = {}
+        self.out_types: dict[tuple[str, str], tuple[str, ...]] = {}
+        """Resolved output types (``like:`` outputs follow the graph, SPEC 4)."""
         self.warnings: list[str] = []
         self.needs_as_text = False
         self.needs_capture = False
@@ -251,20 +252,23 @@ class _Exporter:
     # ── inputs ──
     def wired_value(self, node: Node, port: str) -> str:
         wires = self.graph.wires_into(node.id, port)
-        in_type = node.inputs[port].type
-        values = [self._convert(self.exprs[(w.src, w.src_port)], w, in_type) for w in wires]
+        in_types = node.inputs[port].types
+        values = [self._convert(self.exprs[(w.src, w.src_port)], w, in_types) for w in wires]
         if node.inputs[port].access == "list":
             return "[" + ", ".join(values) + "]"
         return values[0]
 
-    def _convert(self, expr: str, wire: Any, in_type: str) -> str:
+    def _convert(self, expr: str, wire: Any, in_types: tuple[str, ...]) -> str:
         """Number/Boolean → Text wires get ``str()`` (SPEC 3), like ``convert_for_input``."""
-        if in_type != types.TEXT:
+        if types.TEXT not in in_types:
             return expr
-        out_type = self.out_types[(wire.src, wire.src_port)]
-        if out_type in types.TO_TEXT:
+        out_types = self.out_types[(wire.src, wire.src_port)]
+        if types.ANY in out_types:  # an unwired Panel, or an unresolved ``like:`` output
+            self.needs_as_text = True
+            return f"_as_text({expr})"
+        if len(out_types) == 1 and out_types[0] in types.TO_TEXT and out_types[0] not in in_types:
             return f"str({expr})"
-        if out_type == types.ANY:
+        if any(t in types.TO_TEXT and t not in in_types for t in out_types):
             self.needs_as_text = True
             return f"_as_text({expr})"
         return expr
@@ -284,7 +288,7 @@ class _Exporter:
         targets = ", ".join(f"{w.dst} {self.graph.nodes[w.dst].title}.{w.dst_port}" for w in wires)
         comment = f"# {node.id} {note}" + (f" → {targets}" if targets else "")
         self.exprs[(node.id, "value")] = name
-        self.out_types[(node.id, "value")] = node.outputs["value"].type
+        self.out_types[(node.id, "value")] = self.graph.output_types(node.id, "value")
         return f"{comment}\n{name} = {self.literal(value)}\n"
 
     def literal(self, value: Any) -> str:
@@ -336,7 +340,7 @@ class _Exporter:
             var = f"{self.names[node.id]}_{port}"
             # An output named like its component (Half → half) must not hide the function.
             self.exprs[(node.id, port)] = f"{var}_value" if var == fname else var
-            self.out_types[(node.id, port)] = spec.outputs[port].type
+            self.out_types[(node.id, port)] = self.graph.output_types(node.id, port)
         return _Function(node, fname, wired, outputs, text, imports)
 
     def header_comment(self, node: Node) -> str:
@@ -362,7 +366,7 @@ class _Exporter:
                 wires = self.graph.wires_into(nid, "data")
                 value = self.exprs[(wires[0].src, wires[0].src_port)] if wires else "None"
                 self.exprs[(nid, "data")] = value
-                self.out_types[(nid, "data")] = types.ANY
+                self.out_types[(nid, "data")] = self.graph.output_types(nid, "data")
                 panel_values[nid] = value if wires else None
             elif node.component == PARAM_MAP:
                 steps.append(f"# {nid} Map Viewer: view only, not exported")

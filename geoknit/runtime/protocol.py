@@ -18,12 +18,15 @@ class RunNode:
 
     ``inputs`` maps each wired input to the port key feeding it, or to a list of
     port keys (wire order) for a ``list`` input. Settings are part of ``source``.
+    ``output_types`` holds the types the graph resolved for ``like:`` outputs
+    (the worker does not know the graph); the outputs are checked against them.
     """
 
     node_id: str
     source: str
     inputs: dict[str, str | list[str]]
     cache_key: str
+    output_types: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

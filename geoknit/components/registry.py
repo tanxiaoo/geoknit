@@ -162,10 +162,13 @@ class Registry:
                     "icon": spec.icon,
                     "description": spec.description,
                     "inputs": [
-                        {"name": p.name, "type": p.type, "access": p.access}
+                        {"name": p.name, "type": p.type, "types": list(p.types), "access": p.access}
                         for p in spec.inputs.values()
                     ],
-                    "outputs": [{"name": p.name, "type": p.type} for p in spec.outputs.values()],
+                    "outputs": [
+                        {"name": p.name, "type": p.type, "types": list(p.types), "like": p.like}
+                        for p in spec.outputs.values()
+                    ],
                     "requires": list(spec.requires),
                 }
             )

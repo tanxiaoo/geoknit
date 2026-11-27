@@ -4,11 +4,12 @@ import type { ComponentEntry, PortType } from "./apiTypes";
 import { strings } from "./strings";
 import {
   CATEGORY_ORDER,
-  canConnect,
+  canConnectAny,
   PARAM_MAP,
   PARAM_PANEL,
   PARAM_SLIDER,
   PARAM_TEXT,
+  portTypes,
 } from "./types";
 
 const PORT_NAMES: Record<string, string> = {
@@ -71,13 +72,13 @@ export interface WireFrom {
   nodeId: string;
   port: string;
   side: "in" | "out";
-  type: PortType;
+  types: PortType[];
 }
 
 /** The port on ``entry`` that fits ``from``, or null. */
 export function fittingPort(entry: ComponentEntry, from: WireFrom): string | null {
   if (from.side === "out") {
-    return entry.inputs.find((p) => canConnect(from.type, p.type))?.name ?? null;
+    return entry.inputs.find((p) => canConnectAny(from.types, portTypes(p)))?.name ?? null;
   }
-  return entry.outputs.find((p) => canConnect(p.type, from.type))?.name ?? null;
+  return entry.outputs.find((p) => canConnectAny(portTypes(p), from.types))?.name ?? null;
 }

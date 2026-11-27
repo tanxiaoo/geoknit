@@ -154,7 +154,7 @@ test.describe.serial("component window", () => {
     await page.getByTestId("port-type-raster").selectOption("Raster");
     await expect
       .poll(async () => (await graph(page)).nodes[py].inputs)
-      .toEqual([{ name: "raster", type: "Raster", access: "item", file: null }]);
+      .toEqual([{ name: "raster", type: "Raster", types: ["Raster"], access: "item", file: null }]);
     await expect(node(page, py)).toContainText("raster");
 
     await page.getByTestId("window-tab-code").click();

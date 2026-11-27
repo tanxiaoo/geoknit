@@ -1,6 +1,7 @@
 // Data-type and category colours (SPEC 3, SPEC 8) and the connection rules (SPEC 3).
 
-import type { NodeState, PortType } from "./apiTypes";
+import type { NodeState, PortType, PortView } from "./apiTypes";
+import { strings } from "./strings";
 
 export const DATA_TYPES: Exclude<PortType, "Any">[] = [
   "Number",
@@ -56,6 +57,27 @@ export function canConnect(out: PortType, input: PortType): boolean {
     out === "Any" ||
     (input === "Text" && (out === "Number" || out === "Boolean"))
   );
+}
+
+/** The types a port can carry: the resolved type of a `like:` output, else the declared ones. */
+export function portTypes(p: PortView): PortType[] {
+  if (p.resolved_type) return [p.resolved_type];
+  return p.types && p.types.length ? p.types : [p.type];
+}
+
+/** `Table | Vector` for a port that accepts several types. */
+export function typeLabel(types: PortType[]): string {
+  return types.join(" | ");
+}
+
+/** SPEC 3: some possible output type fits some listed input type. */
+export function canConnectAny(outs: PortType[], ins: PortType[]): boolean {
+  return outs.some((o) => ins.some((i) => canConnect(o, i)));
+}
+
+/** The refusal tooltip ("Raster can't connect to Table | Vector"), or null if it fits. */
+export function connectionError(outs: PortType[], ins: PortType[]): string | null {
+  return canConnectAny(outs, ins) ? null : strings.cantConnect(typeLabel(outs), typeLabel(ins));
 }
 
 /** Nodes that still need a run show the orange dot. */

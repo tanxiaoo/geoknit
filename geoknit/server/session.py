@@ -87,7 +87,19 @@ class Conflict(SessionError):
 
 
 def _ports(ports: Iterable[Any]) -> list[dict[str, Any]]:
-    return [{"name": p.name, "type": p.type, "access": p.access, "file": p.file} for p in ports]
+    return [
+        {"name": p.name, "type": p.type, "types": list(p.types), "access": p.access, "file": p.file}
+        for p in ports
+    ]
+
+
+def _output_ports(graph: Graph, node: Node) -> list[dict[str, Any]]:
+    """Outputs with ``like`` and the type the graph resolved (``None`` while unresolved)."""
+    out = _ports(node.outputs.values())
+    for view, port in zip(out, node.outputs.values(), strict=True):
+        view["like"] = port.like
+        view["resolved_type"] = graph.output_type(node.id, port.name)
+    return out
 
 
 def _setting_view(s: Any) -> dict[str, Any]:
@@ -352,7 +364,7 @@ class Session:
             "position": node.position,
             "display": node.display,
             "inputs": _ports(node.inputs.values()),
-            "outputs": _ports(node.outputs.values()),
+            "outputs": _output_ports(self.graph, node),
         }
         if node.component == PARAM_TEXT:
             view["value"] = node.value

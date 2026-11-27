@@ -130,7 +130,7 @@ class Worker:
                 if port is None:
                     raise _MissingInput(f'unknown input "{name}"')
                 values = [
-                    types.convert_for_input(self._lookup(k, name), port.type)
+                    types.convert_for_input(self._lookup(k, name), port.types)
                     for k in ([wired] if isinstance(wired, str) else wired)
                 ]
                 inputs[name] = values if port.access == "list" else values[0]
@@ -145,6 +145,7 @@ class Worker:
             log=lambda line: self.send(p.Log(nid, line)),
             cwd=self.project_dir,
             print_port=PRINT_PORT,
+            output_types=msg.output_types,
         )
         if not result.ok:
             assert result.error is not None

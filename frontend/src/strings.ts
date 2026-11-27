@@ -75,6 +75,7 @@ export const strings = {
   ungroup: "Ungroup",
   renameGroup: "Double-click to rename",
   notRunYet: "run to see what this carries",
+  cantConnect: (from: string, to: string) => `${from} can't connect to ${to}`,
   sliderMin: "min",
   sliderMax: "max",
   sliderStep: "step",

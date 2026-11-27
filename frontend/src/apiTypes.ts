@@ -17,9 +17,16 @@ export type Display = "default" | "text" | "icon";
 
 export interface PortView {
   name: string;
+  /** The first listed type. */
   type: PortType;
+  /** Every type an input accepts (SPEC 3); one element for an ordinary port. */
+  types?: PortType[];
   access: "item" | "list";
   file?: string | null;
+  /** Output only: the input whose wired type it follows (`{like: data}`). */
+  like?: string | null;
+  /** Output only (`/api/graph`): the type the graph resolved, null while unresolved. */
+  resolved_type?: PortType | null;
 }
 
 export interface SettingView {
@@ -159,6 +166,8 @@ export type ServerEvent =
 export interface PortEdit {
   name: string;
   type: PortType;
+  types?: PortType[];
+  like?: string | null;
   access?: "item" | "list";
   file?: string | null;
   was?: string;

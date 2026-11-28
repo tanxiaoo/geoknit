@@ -74,6 +74,10 @@ export interface NodeView {
   editable_ports?: EditablePorts | null;
   /** Map Viewer: saved basemap and per-layer styles (SPEC 8). */
   map?: MapSettings;
+  /** Map Layer: values of its unwired style inputs, set in its window (change 03, 3). */
+  style?: MapLayerStyle;
+  /** Map Layer: the layer as last built; `null` before the server built it. */
+  layer?: MapLayerBuild | null;
 }
 
 /** One option of a Value List: a number or text value under a label. */
@@ -286,6 +290,9 @@ export type ServerEvent =
   | { type: "run_finished"; report: RunReport | null; error?: string }
   | { type: "workflow_opened"; path: string }
   | { type: "node_changed"; node: string }
+  /** A Map Layer's layer changed (style, or a Params node feeding it): redraw the Map
+   * Viewers in `viewers` without a Run (change 03, section 6). */
+  | { type: "map_changed"; node: string; viewers: string[] }
   | ({ type: "worker" } & Status);
 
 /** A port as PATCH /api/nodes/{id} `ports` takes it; `was` renames (wires follow). */
@@ -313,6 +320,62 @@ export interface NodePatch {
   options?: ValueOption[];
   size?: [number, number] | null;
   map?: { basemap?: Basemap; styles?: Record<string, Partial<LayerStyle> | null> };
+  /** Map Layer: merged; a `null` field resets it, `null` resets them all. A colormap may
+   * also be sent as a ramp name; it is saved as Colormap JSON. */
+  style?: { [K in keyof MapLayerStyle]?: MapLayerStyle[K] | string | null } | null;
+}
+
+// ── Map Layer (change 03, section 3) ──
+
+/** A Map Layer's saved `style`: each field present only when set. */
+export interface MapLayerStyle {
+  colormap?: ColormapJson;
+  /** `#RRGGBB` or `#RRGGBBAA`, upper case. */
+  color?: string;
+  /** 0–1. */
+  opacity?: number;
+  /** `"1"` or `"4,3,2"`: band numbers (from 1) or names. */
+  bands?: string;
+  name?: string;
+  /** A vector column the colormap colours features by. */
+  field?: string;
+}
+
+/** The Layer value (`MapLayer.to_json()`). `null` style fields: the Map Viewer's default. */
+export interface MapLayerJson {
+  /** Port key of the data. */
+  source: string;
+  kind: "raster" | "vector";
+  name: string;
+  colormap: ColormapJson | null;
+  color: string | null;
+  opacity: number;
+  bands: number[] | null;
+  field: string | null;
+}
+
+/** A Map Layer as the server built it (node view `layer`, GET /api/layer/{id}). */
+export interface MapLayerBuild {
+  /** Port key of the `layer` output. */
+  key: string | null;
+  /** `null` without data (see `issues.data`). */
+  value: MapLayerJson | null;
+  /** Input or style field → why its wired or saved value is not used (it counts as
+   * unwired: a component that has not run, the disk cache off, a wrong value). */
+  issues: Record<string, string>;
+  /** Wired style inputs whose value is used: from a Params node or a component's result. */
+  wired: Record<string, "params" | "component">;
+}
+
+/** GET /api/layer/{id}: the build plus what the window's dropdowns offer. */
+export interface MapLayerInfo extends MapLayerBuild {
+  node: string;
+  state: NodeState | null;
+  style: MapLayerStyle;
+  /** Columns of a vector's data once it has a result (the `field` dropdown), else `null`. */
+  columns: string[] | null;
+  /** Band names of a raster's data once it has a result, else `null`. */
+  bands: string[] | null;
 }
 
 // ── Map Viewer (SPEC 8, 9) ──
@@ -320,15 +383,26 @@ export interface NodePatch {
 /** `auto` (the default) follows the theme. */
 export type Basemap = "auto" | "light" | "dark" | "none";
 
-/** A layer's look; `color` is for vectors, the rest for rasters. */
+/** A layer's look; `color` is for vectors, the rest for rasters. `colormap` is a ramp
+ * name, `categorical`, or a Colormap (change 03; tiles get it as `cmap`). */
 export interface LayerStyle {
   bands: number[];
-  colormap: string;
+  colormap: string | ColormapJson;
   min: number | null;
   max: number | null;
   opacity: number;
   visible: boolean;
   color: string;
+  /** A vector coloured by a field with `colormap` (set by a Map Layer, change 03). */
+  field?: string;
+}
+
+/** A vector field's range over the features of the GeoJSON (`GET /api/map`). */
+export interface FieldRange {
+  name: string;
+  numeric: boolean;
+  min: number | null;
+  max: number | null;
 }
 
 export interface MapSettings {
@@ -367,12 +441,14 @@ export interface VectorInfo {
   crs: string;
   bounds: [number, number, number, number] | null;
   default_style: Partial<LayerStyle>;
+  /** The field a Map Layer colours the vector by, with its range. */
+  field?: FieldRange;
 }
 
 export type LayerStatus = "ready" | "not_run" | "no_cache" | "unsupported" | "error";
 
 export interface MapLayer {
-  /** `<source node id>.<port>` */
+  /** `<source node id>.<port>`, and `<source node id>.<port>[i]` for list elements */
   id: string;
   title: string;
   source: [string, string];
@@ -383,6 +459,10 @@ export interface MapLayer {
   raster?: RasterInfo;
   vector?: VectorInfo;
   style?: Partial<LayerStyle>;
+  /** The Map Layer node this layer comes from (change 03), else `null`. */
+  from_layer?: string | null;
+  /** Style fields the Map Layer sets: read-only in the viewer, values in `style`. */
+  locked?: (keyof LayerStyle)[];
 }
 
 export interface MapView {

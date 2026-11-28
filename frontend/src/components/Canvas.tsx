@@ -29,6 +29,7 @@ import { ColorNode } from "./nodes/ColorNode";
 import { ColormapNode } from "./nodes/ColormapNode";
 import { ComponentNode } from "./nodes/ComponentNode";
 import { nodeKind, PANEL_SIZE, type GkNode } from "./nodes/kinds";
+import { LayerNode } from "./nodes/LayerNode";
 import { MapNode } from "./nodes/MapNode";
 import { NumberNode } from "./nodes/NumberNode";
 import { PanelNode } from "./nodes/PanelNode";
@@ -54,6 +55,7 @@ const nodeTypes = {
   color: ColorNode,
   colormap: ColormapNode,
   panel: PanelNode,
+  layer: LayerNode,
   map: MapNode,
 };
 const edgeTypes = { typed: TypedEdge };
@@ -171,6 +173,17 @@ export function Canvas() {
         requestAnimationFrame(() => void flow.fitView({ padding: 0.1, maxZoom: 1 }));
     }
   }, [graph, flow]);
+
+  // a selection asked for without a new graph (Go to Map Layer): select and show the nodes
+  const pending = useStore((s) => s.pendingSelect);
+  useEffect(() => {
+    if (!pending || !graph || !pending.every((id) => id in graph.nodes)) return;
+    if (store.getState().pendingSelect !== pending) return; // taken by a new graph (paste)
+    store.set({ pendingSelect: null });
+    setNodes((prev) => prev.map((n) => ({ ...n, selected: pending.includes(n.id) })));
+    setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
+    void flow.fitView({ nodes: pending.map((id) => ({ id })), padding: 0.5, maxZoom: 1, duration: 200 });
+  }, [pending, graph, flow]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<GkNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
@@ -368,8 +381,8 @@ export function Canvas() {
           onConnectEnd={onConnectEnd}
           onBeforeDelete={onBeforeDelete}
           onNodeDoubleClick={(e, n) => {
-            // Text and Number edit inline; Slider, Value List, Color Swatch and Colormap
-            // open their own small window (SPEC 8, change 01 section 8)
+            // Text and Number edit inline; Slider, Value List, Color Swatch, Colormap and
+            // Map Layer open their own small window (SPEC 8, change 01 section 8)
             if (n.type === "map") {
               e.stopPropagation();
               store.openMap(n.id);

@@ -38,16 +38,19 @@ it opens read-only until you click **Trust**.
 
 - **Top bar**: the file name and whether it is saved, the worker (the Python
   process that runs components), **Export .py**, **Stop** and **Run**.
-- **Ribbon**: the components by category (Params, Raster, Vector, Sampling,
-  Model, Validation, Script), and a search box.
+- **Ribbon**: the components by category (Params, Vector, Raster, Sampling,
+  Model, Validation, Display, Script), and a search box.
 - **Folder tree** (left): the project folder. Drag a file onto the canvas to
   get a Text node with its path.
 - **Canvas**: the workflow. Data flows from left to right, from an output on
   the right of a node to an input on the left of the next. Wire colours show
   the type: teal Raster, orange Vector, purple Table, pink Model, brown Text,
-  grey Number.
+  grey Number, indigo Colormap, magenta Layer. The legend at the bottom lists
+  them all.
 
-The banner says *22 components out of date*: nothing has run yet.
+The banner says *11 components out of date*: nothing has run yet. (It
+counts components only: inputs, Panels, the Map Layer and the Map Viewer are
+never counted.)
 
 ### Reading it left to right
 
@@ -64,6 +67,7 @@ The banner says *22 components out of date*: nothing has run yet.
 | **Predict Raster** | applies the model to every pixel, 512 × 512 px at a time |
 | **Write Raster** → `outputs/imd_rf.tif` | saves the predicted map as a Cloud Optimized GeoTIFF |
 | **Regression Accuracy** → Panel | compares the map with the test points' `IMD` |
+| **Colormap** (7 classes) → **Map Layer** "IMD classes" → **Map Viewer** | draws Reclassify's classes with a colour and a label each, and the test points, on a map |
 
 The grey boxes (*Sample*, *Train · predict · validate*) are groups: they only
 help reading.
@@ -125,31 +129,57 @@ Close the window with **OK** or ×.
 
 ## 4. See the map
 
-1. In the ribbon's **Params** tab, click **Map Viewer** (or drag it onto the
-   canvas next to the Panel).
-2. Wire **Predict Raster**'s `map` output into the Map Viewer's `layers`
-   input, and **Split Points**' `test` output too: `layers` takes several
-   wires.
-3. Click **Run** (everything else comes from the cache), then double-click
-   the Map Viewer.
+The top right of the canvas holds the map part of the workflow:
+
+![Colormap, Map Layer and Map Viewer](img/milan/06-map-nodes.png)
+
+- **Colormap** (ribbon: Params › Style) holds the 7 IMD classes, each with a
+  colour and a label. Double-click it to edit them:
+
+  ![The Colormap editor](img/milan/06-colormap.png)
+
+  *Classes* lists value, colour and label; *Continuous* is a ramp with a min
+  and max instead. Pasting lines of `value, #hex, label` replaces the table,
+  so a legend kept in a spreadsheet comes in at once.
+- **Map Layer** "IMD classes" (ribbon: Display › Style) styles one layer:
+  Reclassify's classes in `data`, the Colormap in `colormap`. Opacity, bands,
+  colour and name are set in its window (double-click) or wired in.
+- **Map Viewer** (Display › Map) shows every layer wired into `layers`: here
+  the Map Layer and, unstyled, **Split Points**' `test` points.
+
+Map Layer and Map Viewer never need a Run: they are ready as soon as the
+data they show is. Double-click the Map Viewer:
 
 ![The Map Viewer](img/milan/06-map-viewer.png)
 
-The predicted imperviousness is drawn over OpenStreetMap, with the 210 test
-points on top. For each layer you can change the colormap, the min and max of
-the stretch, the band and the opacity; the styles are saved with the
-workflow. Click the map to read the values of every layer at that point.
+The CLMS classes are drawn over OpenStreetMap with the 210 test points on
+top, and the legend shows the class labels. The style of *IMD classes*
+comes from the Map Layer, so its controls are read-only here (*Go to Map
+Layer* selects the node). Change a colour in the Colormap editor and the
+open map redraws at once, without running anything. Click the map to read
+the values of every layer at that point.
 
-Tiles come from the cached Cloud Optimized GeoTIFF and its overviews, so
-panning and zooming stay quick at city scale.
+To see the prediction too, wire **Predict Raster**'s `map` output into the
+same `layers` input (it takes several wires: vectors are drawn above
+rasters, and among rasters the first wire is on top). Untick *IMD classes* to look underneath:
+
+![The predicted map](img/milan/06-map-prediction.png)
+
+A raw wire like this one is styled in the viewer itself: colormap, the min
+and max of the stretch, the band and the opacity; these styles are saved
+with the workflow. Tiles come from the cached Cloud Optimized GeoTIFF and its
+overviews, so panning and zooming stay quick at city scale. With the theme
+set to dark, the basemap (*Auto*) follows it:
+
+![The Map Viewer, dark theme](img/milan/06-map-viewer-dark.png)
 
 ## 5. Change something
 
 Try a different model size: drag the **n_trees** slider to 100 and press
 **Run**. Only Random Forest and what depends on it (Predict Raster, Write
-Raster, Regression Accuracy, the Map Viewer) run again; reading the rasters and sampling
-come from the cache. The banner always tells you how many components are out
-of date.
+Raster, Regression Accuracy) run again; reading the rasters and sampling come
+from the cache, and the Map Viewer redraws the new prediction. The banner
+always tells you how many components are out of date.
 
 Other things worth trying:
 
@@ -157,7 +187,8 @@ Other things worth trying:
 |--------|-------|
 | points per class | the *n* slider (100) |
 | a different random sample | the *seed* slider (42) |
-| class breaks | the Text node with `0 \| 0-20 \| …` |
+| class breaks | the Text node with `0 \| 0-20 \| …` (then the Colormap's classes too) |
+| class colours and labels | double-click the Colormap |
 | share of test points | Split Points' `test_fraction` (0.3) |
 | a different model | add **SVM** from the Model tab, wire it like Random Forest, and give it its own Predict Raster and Regression Accuracy |
 
@@ -181,7 +212,9 @@ python examples/milan_imd/milan_imd.py
 It prints the same metrics Panel as GeoKnit. Inside, the Text and slider
 values are constants at the top (`N07_N = 100`, `N15_N_TREES = 300`), each
 component is a function containing its settings and code, and `main()` calls
-them in order. It needs the same packages as GeoKnit but not GeoKnit itself,
+them in order. The Colormap is a constant too; the Map Layer and the Map
+Viewer only show results, so they are comments
+(`# n24 Map Layer "IMD classes": n04.classes, colormap n23`). It needs the same packages as GeoKnit but not GeoKnit itself,
 so you can share it, put it on a server, or keep it with a paper.
 
 The same from the command line:

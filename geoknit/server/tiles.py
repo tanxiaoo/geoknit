@@ -1,6 +1,7 @@
 """Map Viewer data (SPEC 8, 9): layer descriptions, raster tiles, GeoJSON, inspect.
 
-Everything is read from the disk cache by port key (``<node key>.<port>``):
+Everything is read from the disk cache by port key (``<node key>.<port>``, or
+``<node key>.<port>[i]`` for element ``i`` of a list output, change 03):
 a raster is the cached COG, or the source file a ``.ref.json`` names; a vector
 is the cached GeoParquet. Cache entries never change under a key, so
 descriptions and statistics are memoised by key.
@@ -92,7 +93,8 @@ PALETTE = (
 POOL_IDLE = 20.0
 """Seconds an unused raster stays open for the next tile."""
 
-_KEY = re.compile(r"^[0-9a-f]{64}\.[A-Za-z_][A-Za-z0-9_]*$")
+_KEY = re.compile(r"^[0-9a-f]{64}\.[A-Za-z_][A-Za-z0-9_]*(\[\d+\])?$")
+"""A port key, or ``<port key>[i]`` for element ``i`` of a list output (change 03)."""
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -132,7 +134,12 @@ def _check_style(layer: str, style: Any) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for name, value in style.items():
         if name == "colormap":
-            if value not in (*COLORMAPS, CATEGORICAL):
+            if isinstance(value, dict):  # a Colormap (change 03), saved in its normal form
+                try:
+                    value = types.Colormap.from_json(value).to_json()
+                except (ValueError, TypeError) as exc:
+                    raise _style_error(layer, f"colormap: {exc}") from None
+            elif value not in (*COLORMAPS, CATEGORICAL):
                 raise _style_error(layer, f'unknown colormap "{value}"')
         elif name == "bands":
             if (
@@ -528,6 +535,57 @@ def _palette() -> Any:
     return np.array([[int(c[i : i + 2], 16) for i in (1, 3, 5)] for c in PALETTE], dtype="uint8")
 
 
+def colormap_lut(cm: types.Colormap) -> Any:
+    """``(256, 4)`` uint8 RGBA table of a continuous Colormap, low to high.
+
+    A named ramp that was not customised is rio-tiler's table (``_lut``), so it
+    draws exactly as the plain ``colormap=<name>`` does; its alpha is not used.
+    Other ramps are interpolated linearly between their stops.
+    """
+    if cm.is_named and cm.name is not None:
+        lut = _lut(cm.name)
+    else:
+        lut = _stops_lut(tuple((p, c.rgba) for p, c in cm.stops))
+    return lut[::-1] if cm.reverse else lut
+
+
+@functools.lru_cache(maxsize=64)
+def _stops_lut(stops: tuple[tuple[float, tuple[int, int, int, int]], ...]) -> Any:
+    import numpy as np
+
+    positions = np.array([p for p, _ in stops], dtype="float64")
+    colours = np.array([c for _, c in stops], dtype="float64")
+    at = np.arange(256, dtype="float64") / 255
+    channels = [np.interp(at, positions, colours[:, i]) for i in range(4)]
+    return np.round(np.stack(channels, axis=-1)).astype("uint8")
+
+
+def colormap_from_query(text: str) -> types.Colormap:
+    """The ``cmap`` tile parameter: a Colormap as compact JSON."""
+    try:
+        return types.Colormap.from_json(json.loads(text))
+    except (ValueError, TypeError) as exc:
+        raise MapError(f"cmap: {exc}") from None
+
+
+def _classes_rgba(cm: types.Colormap, values: Any, dtype: Any = None) -> Any:
+    """``(4, h, w)`` uint8: each class value its colour, the rest ``other`` or transparent.
+
+    ``values`` are float64; on a float raster a class value is first rounded to
+    the raster's own ``dtype`` (``0.1`` in float32 is not ``0.1`` in float64).
+    """
+    import numpy as np
+
+    rgba = np.zeros((*values.shape, 4), dtype="uint8")
+    if cm.other is not None:
+        rgba[...] = cm.other.rgba
+    native = dtype is not None and np.issubdtype(dtype, np.floating)
+    for value, color, _ in cm.classes:
+        target = float(np.asarray(value, dtype=dtype)) if native else value
+        rgba[values == target] = color.rgba
+    return np.moveaxis(rgba, -1, 0)
+
+
 def colormap_stops(n: int = 9) -> dict[str, list[str]]:
     """A few colours of each colormap, for legends and the colormap picker."""
     out: dict[str, list[str]] = {}
@@ -555,18 +613,28 @@ def render_tile(
     y: int,
     *,
     bands: tuple[int, ...] = (1,),
-    colormap: str = "viridis",
+    colormap: str | types.Colormap = "viridis",
     vmin: float | None = None,
     vmax: float | None = None,
 ) -> bytes:
-    """A 256 px PNG in Web Mercator; transparent outside the raster and on nodata."""
+    """A 256 px PNG in Web Mercator; transparent outside the raster and on nodata.
+
+    ``colormap`` is a ramp name, ``categorical``, or a Colormap (change 03): a
+    continuous one's own min/max win over ``vmin``/``vmax``; a classes one
+    colours listed values only (``other`` the rest, transparent when ``None``),
+    and a colour's alpha multiplies the tile's. Three bands ignore the colormap.
+    """
     import numpy as np
     from rio_tiler.errors import TileOutsideBounds
     from rio_tiler.utils import render
 
     if len(bands) not in (1, 3):
         raise MapError("bands is 1 or 3 band numbers")
-    if colormap not in (*COLORMAPS, CATEGORICAL):
+    if isinstance(colormap, types.Colormap):
+        if colormap.kind == types.CONTINUOUS:
+            vmin = colormap.min if colormap.min is not None else vmin
+            vmax = colormap.max if colormap.max is not None else vmax
+    elif colormap not in (*COLORMAPS, CATEGORICAL):
         raise MapError(f'unknown colormap "{colormap}"')
     entry, path = _raster_file(cache, key)
     if vmin is None or vmax is None:
@@ -584,20 +652,38 @@ def render_tile(
     data = np.ma.getdata(img.array).astype("float64")
     alpha = np.where(np.asarray(img.mask) > 0, 255, 0).astype("uint8")
     alpha[~np.isfinite(data).all(axis=0)] = 0
-    if len(bands) == 1 and colormap == CATEGORICAL:
+    cm = colormap if isinstance(colormap, types.Colormap) and len(bands) == 1 else None
+    if cm is not None and cm.kind == types.CLASSES:
+        rgba = _classes_rgba(cm, data[0], img.array.dtype)
+        rgb = rgba[:3]
+        alpha = _times_alpha(alpha, rgba[3])
+    elif len(bands) == 1 and colormap == CATEGORICAL:
         values = np.nan_to_num(data[0]).astype("int64")
         rgb = np.moveaxis(_palette()[values % len(PALETTE)], -1, 0)
     else:
         span = (vmax - vmin) or 1.0
         scaled = np.clip((np.nan_to_num(data) - vmin) / span, 0, 1)
         index = np.round(scaled * 255).astype("uint8")
-        if len(bands) == 1:
-            rgb = np.moveaxis(_lut(colormap)[index[0]][..., :3], -1, 0)
+        if cm is not None:
+            rgba = np.moveaxis(colormap_lut(cm)[index[0]], -1, 0)
+            rgb = rgba[:3]
+            if not cm.is_named:  # rio-tiler's tables are opaque: same bytes as by name
+                alpha = _times_alpha(alpha, rgba[3])
+        elif len(bands) == 1:
+            rgb = np.moveaxis(_lut(str(colormap))[index[0]][..., :3], -1, 0)
         else:
             rgb = index
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # NotGeoreferencedWarning: a PNG tile has no transform
         return render(np.ascontiguousarray(rgb, dtype="uint8"), mask=alpha, img_format="PNG")
+
+
+def _times_alpha(alpha: Any, colour_alpha: Any) -> Any:
+    """The tile's alpha times a colour's (both 0-255)."""
+    import numpy as np
+
+    out = np.round(alpha.astype("uint16") * colour_alpha.astype("uint16") / 255)
+    return out.astype("uint8")
 
 
 # ── vectors ──
@@ -633,6 +719,29 @@ def describe_vector(cache: DiskCache, key: str) -> dict[str, Any]:
     desc = dict(_describe_vector(str(cache.root), key))
     desc["default_style"] = {"color": PALETTE[3], "opacity": 1.0, "visible": True}
     return desc
+
+
+@functools.lru_cache(maxsize=64)
+def _vector_field(cache_root: str, key: str, name: str) -> dict[str, Any]:
+    gdf = _vector(DiskCache(Path(cache_root)), key)
+    if name not in gdf.columns or name == gdf.geometry.name:
+        raise MapError(f'the vector has no field "{name}"')
+    import pandas as pd
+
+    column = gdf[name].head(MAX_FEATURES)
+    numeric = pd.api.types.is_numeric_dtype(column) and not pd.api.types.is_bool_dtype(column)
+    values = pd.to_numeric(column, errors="coerce") if numeric else None
+    finite = values[values.notna()] if values is not None else None
+    if finite is None or finite.empty:
+        return {"name": name, "numeric": numeric, "min": None, "max": None}
+    return {"name": name, "numeric": True, "min": float(finite.min()), "max": float(finite.max())}
+
+
+def vector_field(cache: DiskCache, key: str, name: str) -> dict[str, Any]:
+    """``{name, numeric, min, max}`` of a vector's field over the features the GeoJSON
+    carries (at most MAX_FEATURES): the "auto" range of a continuous Colormap that
+    colours the vector by that field (change 03, section 4)."""
+    return dict(_vector_field(str(cache.root), key, name))
 
 
 def vector_geojson(cache: DiskCache, key: str) -> tuple[str, int]:

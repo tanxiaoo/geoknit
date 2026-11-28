@@ -225,8 +225,14 @@ ramps viridis, magma, plasma, cividis, turbo, greys_r, terrain, rdylgn,
 spectral, blues, or `stops=((0, Color(...)), (1, Color(...)))`; `min`/`max`,
 `None` for the layer's 2–98 % stretch; `reverse`) or a set of classes
 (`kind="classes"`, `classes=((1, Color(...), "urban"), ...)`, and `other` for
-values not listed). There is also a `Layer` type, made only by the Map Layer
-component.
+values not listed). On the canvas a Colormap node (Params › Style) holds one,
+edited in its window, and a component can take it as an input or return one.
+
+There is also a `Layer` type, made only by the Map Layer node (Display ›
+Style): a `geoknit.core.types.MapLayer` with `source` (the cache key of the
+data), `kind` (`"raster"` or `"vector"`), `name`, `colormap`, `color`,
+`opacity`, `bands` and `field`. It holds no pixels or features; the Map
+Viewer draws it.
 
 **Keep rasters lazy.** Rasters come in as dask-backed arrays and may be
 larger than memory (a city at 10 m with 64 bands is several GB). Prefer
@@ -260,7 +266,8 @@ nodes that read it again. Mark an input that names a file the component
 
 **`access: list`, lists.** An input with `access: list` takes any number of
 wires and receives a Python list, in wire order. The Map Viewer's
-`layers: {type: Any, access: list}` is the built-in example. An output can be
+`layers: {type: [Raster, Vector, Layer], access: list}` is the built-in
+example. An output can be
 a list too:
 
 ```python

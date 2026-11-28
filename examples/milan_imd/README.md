@@ -12,7 +12,12 @@ Read Vector (AOI) ────────────────────�
 Read Raster (AlphaEarth) ───────────────────────────────────────────────────┼───── Predict Raster ──────────┤
                                                                             │        ├─ Write Raster (outputs/imd_rf.tif)
                                                                             └─ test ─┴─ Regression Accuracy ─ Panel
+
+Reclassify ─ Map Layer "IMD classes" ← Colormap (7 classes) ─┐
+Split Points (test) ─────────────────────────────────────────┴─ Map Viewer
 ```
+
+The Map Viewer only shows results: it never runs and does not change the metrics.
 
 ## 1. Copy the data
 

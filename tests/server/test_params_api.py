@@ -184,3 +184,39 @@ def test_colormaps_lists_the_named_ramps(client: TestClient) -> None:
     viridis = Colormap.named("viridis")
     assert ramps["viridis"] == [c.hex for _, c in viridis.stops]
     assert all(len(stops) == 11 for stops in ramps.values())
+
+
+def test_colormap_editor_values_patch_save_and_reopen(client: TestClient) -> None:
+    """The Colormap editor's values (change 03, section 2): classes with labels and
+    ``other``, custom stops with fixed min/max; each patch is one undo step and the
+    workflow file keeps them as they were sent."""
+    ramp = _add(client, "param/colormap")["id"]
+    classes = {
+        "kind": "classes",
+        "classes": [[1, "#ff0000", "Built"], [2, "#00FF00", "Green"], [3, "#0000FF80", ""]],
+        "other": "#808080",
+    }
+    view = _patch(client, ramp, value=classes)
+    assert view["value"] == {
+        "kind": "classes",
+        "classes": [[1, "#FF0000", "Built"], [2, "#00FF00", "Green"], [3, "#0000FF80", ""]],
+        "other": "#808080",
+    }
+    custom = {
+        "kind": "continuous",
+        "name": None,
+        "stops": [[0, "#000000"], [0.4, "#FF0000"], [1, "#FFFFFF"]],
+        "min": 0,
+        "max": 10.5,
+        "reverse": False,
+    }
+    assert _patch(client, ramp, value=custom)["value"] == custom
+    assert client.post("/api/undo").status_code == 200
+    assert client.get("/api/graph").json()["nodes"][ramp]["value"]["kind"] == "classes"
+    twice = {"kind": "classes", "classes": [[1, "#FF0000", ""], [1, "#00FF00", ""]]}
+    r = client.patch(f"/api/nodes/{ramp}", json={"value": twice})
+    assert r.status_code == 400 and "listed twice" in r.json()["detail"]
+
+    assert client.post("/api/workflow/save", json={"path": "cm.geoknit"}).status_code == 200
+    assert client.post("/api/workflow/open", json={"path": "cm.geoknit"}).status_code == 200
+    assert client.get("/api/graph").json()["nodes"][ramp]["value"] == view["value"]

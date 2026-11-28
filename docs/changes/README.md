@@ -51,7 +51,7 @@ code.
 |---|--------|--------|-------|---------|
 | 01 | [Types and component headers](01-types-and-headers/SPEC.md) | **done** | – | 0.1.0 |
 | 02 | [Light and dark theme](02-theme-light-dark/SPEC.md) | **done** | – (01 for the new type colours) | 0.1.0 |
-| 03 | [Map layers and colormaps](03-map-layers/SPEC.md) | agreed | 01, 02 | 0.1.0 |
+| 03 | [Map layers and colormaps](03-map-layers/SPEC.md) | **done** | 01, 02 | 0.1.0 |
 | 04 | [Component library](04-component-library/SPEC.md) | agreed | 01 (03 for Display) | core set in 0.1.0, the rest in 0.1.x |
 | 05 | [Run modes, radial menu, disable](05-run-modes/SPEC.md) | agreed | 01 (icons), 03 (view nodes) | 0.1.0 |
 
@@ -127,3 +127,10 @@ the code. They are fixed like the decisions above.
 
   Large tables are paged from the disk cache through an API endpoint (e.g.
   200 rows per page), under a header line "N rows × M columns".
+
+## Decisions on the change 03 review (28 Nov 2026)
+
+- The Map Viewer is always `done`: it draws every layer whose source works,
+  whatever the state of the others.
+- The "N components out of date" banner counts components only. Params nodes
+  (inputs, Panels, Map Layer, Map Viewer) never count.

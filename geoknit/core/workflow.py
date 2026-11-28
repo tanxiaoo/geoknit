@@ -20,6 +20,7 @@ from geoknit.core.graph import (
     INLINE,
     PARAM_COLOR,
     PARAM_COLORMAP,
+    PARAM_LAYER,
     PARAM_MAP,
     PARAM_NUMBER,
     PARAM_PANEL,
@@ -34,6 +35,7 @@ from geoknit.core.graph import (
     Wire,
     check_integer_mode,
     check_options,
+    check_style,
     number_value,
     param_value,
     set_param_defaults,
@@ -48,7 +50,7 @@ MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {}
 
 _NODE_KEYS = {
     "id", "component", "version", "settings", "source", "based_on", "position", "display",
-    "value", "min", "max", "step", "integer", "options",
+    "value", "min", "max", "step", "integer", "options", "style",
 }  # fmt: skip
 
 
@@ -134,6 +136,8 @@ def node_to_dict(node: Node, base_dir: Path | None = None) -> dict[str, Any]:
         d["value"] = node.value
     elif node.component in (PARAM_TOGGLE, PARAM_COLOR, PARAM_COLORMAP):
         d["value"] = types.to_json_value(node.value)
+    elif node.component == PARAM_LAYER:
+        d["style"] = dict(node.style)
     elif node.component in (PARAM_PANEL, PARAM_MAP):
         pass  # layout and map styles live in ``extra``
     elif node.component == INLINE or is_modified(node) or node.parse_error is not None:
@@ -220,6 +224,11 @@ def node_from_dict(raw: dict[str, Any], library: ComponentLibrary | None = None)
             node.integer = raw.get("integer") is True
             try:
                 check_integer_mode(node)
+            except GraphError as exc:
+                raise WorkflowError(f'node "{node.id}": {exc}') from None
+        elif node.component == PARAM_LAYER:
+            try:
+                node.style = check_style(raw.get("style", {}))
             except GraphError as exc:
                 raise WorkflowError(f'node "{node.id}": {exc}') from None
         elif node.component not in (PARAM_PANEL, PARAM_MAP):
@@ -368,6 +377,8 @@ def _update_node(graph: Graph, old: Node, new: Node) -> None:
         PARAM_TOGGLE, PARAM_COLOR, PARAM_COLORMAP,
     ):  # fmt: skip
         graph.set_value(old.id, new.value)
+    elif old.component == new.component == PARAM_LAYER:
+        old.style = dict(new.style)  # restyles only: nothing goes out of date (change 03)
     elif old.component == new.component and old.component in (PARAM_PANEL, PARAM_MAP):
         pass  # no content beyond layout and map styles (``extra``)
     elif old.component == new.component and not old.is_param:

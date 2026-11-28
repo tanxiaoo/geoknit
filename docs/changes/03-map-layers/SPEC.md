@@ -1,6 +1,6 @@
 # Change 03: Map layers and colormaps
 
-Status: agreed (checked against the code, 26 Nov 2026) · Needs 01 (types,
+Status: done (merged into `docs/SPEC.md`, 28 Nov 2026; checked against the code, 26 Nov 2026) · Needs 01 (types,
 union inputs, list values, Color and Colormap nodes), 02 (basemap `auto`) ·
 Touches `docs/SPEC.md` sections 5, 6, 7, 8, 9, 10
 
@@ -200,6 +200,179 @@ Map Layer and Map Viewer are comments in the script
 Layer prints `(Map Layer, not exported)`. Colormap and Color constants are
 exported (change 01), so a component that takes a Colormap (for example a
 future "Write Map PNG") still runs.
+
+## 8. Implementation choices (step 3)
+
+Points the sections above leave open, as built in step 3 (backend):
+
+- **Style values** (`geoknit/core/layers.py`). Each style input takes, in
+  order: a wired Params node's current value (followed through Panels, also
+  when that node is out of date); a wired component's last done result; the
+  value saved in `style`; the default. A wired value of the wrong type (after
+  the usual Number → Text conversion), an opacity outside 0–1, unknown band
+  names, or a component without a usable result count as unwired. The node
+  view's `layer.issues` says why, per input (`data`, `colormap`, `color`,
+  `opacity`, `bands`, `name`); `layer.wired` names each wired input whose
+  value is used (`params` | `component`).
+- **Saved `style`** is checked on load and on PATCH (an unknown field or bad
+  value is refused, 400 / `WorkflowError`) and stored in normal form:
+  `colormap` as Colormap JSON (a ramp name is accepted in a PATCH and saved as
+  `{"kind": "continuous", "name": …}`), `color` as upper-case `#RRGGBB[AA]`,
+  `bands` as `"4,3,2"` (spaces removed), `opacity` a number 0–1, `name` and
+  `field` non-empty text. A new Map Layer saves `"style": {}`. `PATCH
+  {"style": null}` resets every field.
+- **`MapLayer.bands`** is a tuple (the dataclass is frozen); its JSON form is a
+  list. Band names in `bands` are matched against the raster's band names
+  read from its cache entry (no pixels); `field` is kept only for vectors.
+- **`kind`** comes from the data wire's type in the graph; when that is
+  ambiguous (a union output) it comes from the data's done result. So the
+  layer, and its port key, exist before any run whenever the graph types say
+  Raster or Vector. Without data, the `layer` port key is the empty key
+  (value `None`).
+- **Port key**: `<sha256("layer" + data port key + style JSON)>.layer`, the
+  style JSON being `MapLayer.to_json()` without `source` (sorted keys, compact
+  separators). `keys.nodes` is `None` for a Map Layer (no work, no cache
+  entry), as for a Panel.
+- **View-node state** (`Solver.view_state`, revised 28 Nov 2026 after
+  Xiao's review): a Map Viewer is always `done` and draws every layer whose
+  source works. A Map Layer follows its `data` wire: `done` when it is;
+  `skipped` when it is `error` or `skipped` (so a Panel on the layer is
+  skipped too); `never_run` without data or when it never ran; otherwise
+  `out_of_date`. Style sources never affect it.
+- **Banner count** (decided 28 Nov 2026): "N components out of date" counts
+  components only; Params nodes (inputs, Panels, view nodes) never count, so
+  a Colormap edit leaves the banner hidden. A Run with mode `test` on a
+  view node plans nothing; `to_node` plans its upstream.
+- **Plan order**: with view nodes in the graph, plans follow the whole
+  graph's topological order, so a Panel on a Map Layer runs after a
+  component wired into the layer's style.
+- **Style edits** (`style` PATCH, wiring or unwiring a style input, deleting
+  a node that only feeds style inputs) mark nothing out of date, so a
+  Panel or component downstream of the Map Layer keeps its state until the
+  next Run, which finds its key changed and runs it again (as for a changed
+  file, SPEC 6). A `style` PATCH is refused during a run (409), as other
+  result edits.
+- **Worker**: the layers are sent with `PutValue` at the start of a Run, and
+  again after a component wired into a style input finishes (its result now
+  resolves, so later nodes get the new layer).
+- **API**
+  - Node view of a Map Layer (`GET /api/graph`, PATCH answers): `style` (the
+    saved fields) and `layer: {key, value, issues, wired}` (`value` is the
+    `MapLayer` JSON: `source, kind, name, colormap, color, opacity, bands,
+    field`), or `null` before the server built it.
+  - `GET /api/layer/{id}` (new, tag `map`): the same build plus `node`,
+    `state`, `style`, `columns` (a vector's columns, from `describe_vector`,
+    for the `field` dropdown) and `bands` (a raster's band names); both `null`
+    until the data is `done` with the disk cache on. 400 for another node.
+  - `/ws` `map_changed {node, viewers}`: sent after any edit, undo/redo or
+    Run that changes a Map Layer's port key; `viewers` are the Map Viewers
+    downstream of it. Sent before the `states` event of that edit.
+  - `GET /api/nodes/{id}/output` of a done Map Layer: `outputs.layer` is the
+    `describe()` text, `views.layer` a `summary` view, `keys.layer` the port
+    key. A Panel on it shows the same (three lines: `Layer · <name> · <kind>`,
+    `source <key start>….<port>`, then the style: colormap, bands or colour
+    and field, opacity; `default` where the Map Viewer chooses).
+- **Display tab**: Map Layer's ribbon icon is `gis:layers`. Map Layer and Map
+  Viewer nodes and windows use the Display colour.
+- **Map Layer window** (frontend): it shows colormap, opacity and name, plus
+  bands for a raster, colour and `field` for a vector (all but `field` before
+  the data's type is known), and any other input that is wired. A wired input
+  whose value is used is read-only with "from <node title>" ("(last result)"
+  for a component); one listed in `issues` stays editable, with the reason
+  under it, and `issues.data` shows at the top. The colormap dropdown offers
+  none and the named ramps (sent as the ramp name); a saved colormap that is
+  more than a plain ramp shows as "(edited)" until another choice is made.
+  Colour hex, bands and name are sent on Enter or blur (empty resets the
+  field); the colour picker and opacity slider send once they rest (400 ms,
+  or on pointer up), so a drag is one PATCH. "Reset all" sends `style: null`.
+  The `field` dropdown is filled from `GET /api/layer/{id}` `columns`, and
+  disabled until they are known. On `map_changed` the page re-reads the graph.
+- **Export**: step 3 wrote a stub comment; step 5 wrote the full one
+  (section 10 below).
+
+## 9. Implementation choices (step 4)
+
+Points sections 4 and 6 leave open, as built in step 4 (Map Viewer with Layers):
+
+- **Wires**: `layers` is `Port("layers", Raster, types=[Raster, Vector, Layer],
+  access=list)`. A Model, Table, Text, … wire is refused (400, `X can't connect
+  to Raster | Vector | Layer`), and a Panel's wire is removed once the Panel
+  carries such a type (the usual re-check). So "cannot be shown on a map"
+  (`unsupported`) is now only reached by a value whose type the graph could
+  not tell (a union output or `Any` pass-through whose result is something
+  else, or a list of simple values stored as one JSON file); the code path is
+  kept.
+- **Lists**: a done list result stored one file per element gives one layer
+  per element, id `<src>.<port>[i]`, title `<title> › <port> [i]`, key
+  `<port key>[i]`; before a run (count unknown) it is one `not_run` stub
+  `<src>.<port>`. `DiskCache.port_info` (and so `read_port`, `band_names`)
+  accepts `<port key>[i]` itself (`cache.split_element`); `tiles._KEY` takes an
+  optional `[\d+]`, so tiles, GeoJSON, stats and inspect answer element keys;
+  the whole list port, an index out of range, and `[i]` on a port that is no
+  list stay 404.
+- **Layer wires** are found by following Panels back (`layers.origin_wire`): a
+  Panel on a Map Layer wired in draws that Map Layer's layer. The layer id stays
+  the wire's `<src>.<port>` (the Panel's, when wired through one); `title` is the
+  layer's `name`; `key` is the layer's `source` once the Map Layer is `done`.
+  Without data the stub is `not_run` with the Map Layer's `issues.data`.
+- **`locked`** is a per-layer list next to `style` (not inside it), sorted. It
+  holds the fields the Map Layer sets (`layers.set_fields`): `colormap`,
+  `color`, `bands`, `field` when not `None`, and `opacity` only when wired or
+  saved in the Map Layer (its default 1.0 leaves the viewer's opacity
+  editable). Mapped to viewer style: a raster takes `colormap` (Colormap JSON),
+  `bands`, `opacity`, and `min`/`max` too when a continuous Colormap has its own
+  min or max; a vector takes `color`, `opacity`, and `colormap` + `field` only
+  when both are set and the field exists (otherwise it is drawn with `color`).
+  `style` = server default, then the viewer's saved `map.styles[id]`, then the
+  locked values. `visible`, and any field not locked, stay editable and saved
+  in `map.styles` as before.
+- **Field range**: for a vector coloured by a continuous Colormap with auto
+  min/max, the server computes the field's min/max over the features the
+  GeoJSON carries (the first 50 000) and sends it as `vector.field = {name,
+  numeric, min, max}` in `GET /api/map/{id}` (rather than the window scanning
+  the GeoJSON itself, which MapLibre loads by URL).
+- **Expressions** (`fieldColour` in `components/map/layers.ts`): classes →
+  `["match", ["get", f], v1, c1, …, other]` when every class value is an
+  integer (MapLibre's `match` takes integer labels only; a repeated value keeps
+  its first class), else a `case` of `==` tests; a transparent `other` is
+  `rgba(0, 0, 0, 0)`. Continuous → `["case", ["==", ["typeof", ["get", f]],
+  "number"], ["interpolate", ["linear"], ["get", f], …stops], transparent]`, the
+  stops being the Colormap's own (or its named ramp's 9 colours evenly) over
+  min/max; equal min and max give the top colour. `#RRGGBBAA` colours go to
+  MapLibre as `rgba(…)` (`cssColour`, in `palettes.ts`).
+- **Draw order** stays as for raw wires: vectors above rasters, then wire order
+  (first on top). The layer list is in wire order.
+- **Window**: a layer from a Map Layer shows "Layer" as its type, a line "from
+  Map Layer <name>" with a "Go to Map Layer" link, and its locked controls
+  disabled (hovering one shows the same "from Map Layer <name>"); a vector
+  coloured by a field shows "coloured by <field>" instead of the swatches.
+  "Go to Map Layer" selects only that node on the canvas and frames it
+  (`store.selectNode`, through `pendingSelect`). The vector legend is now drawn:
+  a swatch and the layer's name.
+- **Live redraw**: the store counts `map_changed` events whose `viewers`
+  include the open Map Viewer (`mapVersion`); the window re-reads
+  `GET /api/map/{id}` on each. Raster tiles get a new URL (new `cmap`), so
+  MapLibre reloads them; vector paint is set again from the new style. A
+  `map_changed` for another viewer does not re-read.
+
+## 10. Implementation choices (step 5)
+
+- **Examples**: `examples/synthetic/imd.geoknit` and
+  `examples/milan_imd/milan_imd.geoknit` add a Colormap `n23` (classes 1–7,
+  one per Reclassify rule, labelled `0 %`, `0–20 %`, …, `100 %`, green to dark
+  red, `other` transparent), a Map Layer `n24` (`data` ← Reclassify
+  `classes`, `colormap` ← `n23`, `style: {"name": "IMD classes"}`) and a Map
+  Viewer `n25` (`layers` ← `n24.layer`, then Split Points `test`). Nothing
+  reads them, so the metrics are unchanged; the predicted map is not wired in
+  (it would put the viewer downstream of the sliders the canvas test moves).
+- **Export comments**: `# <id> Map Layer "<name>": <data>, <input> <node>, …`
+  with the name from `layers.layer_name` (wired Params value, saved style,
+  else `<source title> › <port>`, else the node title without data), the
+  data as `<node>.<port>` and each wired style input in
+  `LAYER_STYLE_INPUTS` order; `no data` without a data wire. The Map Viewer
+  is `# <id> Map Viewer: <node>.<port>, …` or `no layers`. Referenced nodes
+  use the script's padded names (`n04`), the leading id the node id, as the
+  other comments do.
 
 ---
 

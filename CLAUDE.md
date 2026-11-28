@@ -97,6 +97,9 @@ npm run e2e                        # build, then Playwright end-to-end tests
 
 ## Rules
 
+- **No AI attribution**: no "Generated with Claude Code" line at the end of
+  pull request descriptions, and no `Co-Authored-By: Claude` trailer in
+  commit messages.
 - **Windows first-class.** Use `pathlib`, no shell-specific commands in code,
   `multiprocessing` with the spawn start method everywhere. CI runs on
   `windows-latest` and `ubuntu-latest`.

@@ -14,6 +14,10 @@ be keyed in topological order without running anything:
   also the fingerprint of the file it names, as for ``param/text``);
 - ``param/panel``: no key of its own; its ``data`` output reuses the key of the
   wire feeding it;
+- ``param/layer``: no node key of its own (nothing runs); its ``layer`` port key
+  is ``<sha256("layer" + data port key + style JSON)>.layer``, the style being
+  the built ``MapLayer`` without its source (change 03, section 3). Without
+  data its output is the empty key (value ``None``);
 - ``param/map``: no key and no outputs (the Map Viewer reads its inputs' entries).
 
 A port key is ``<node key>.<port>``. A file fingerprint is the absolute path
@@ -26,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -34,6 +39,7 @@ from typing import Any
 
 from geoknit.core import types
 from geoknit.core.graph import (
+    PARAM_LAYER,
     PARAM_MAP,
     PARAM_PANEL,
     PARAM_TEXT,
@@ -43,6 +49,7 @@ from geoknit.core.graph import (
     Node,
     param_output,
 )
+from geoknit.core.layers import DoneResults, LayerBuild, build_layer, layer_key
 from geoknit.core.types import RASTER_CHUNKS
 
 CACHE_FORMAT = 1
@@ -125,11 +132,20 @@ class GraphKeys:
     inputs: dict[str, dict[str, list[str]]] = field(default_factory=dict)
     """Upstream port keys feeding each input, in wire order."""
     values: dict[str, Any] = field(default_factory=dict)
-    """Port key → value for the Params values (``VALUE_PARAMS``) and empty Panel outputs."""
+    """Port key → value for the Params values (``VALUE_PARAMS``), Map Layers' layers
+    and empty Panel outputs: the server sends them to the worker (``PutValue``)."""
+    layers: dict[str, LayerBuild] = field(default_factory=dict)
+    """Each Map Layer's built layer and the issues its window shows."""
 
 
-def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
-    """Key every node of ``graph`` in topological order."""
+def compute_keys(
+    graph: Graph, base_dir: Path | None = None, results: DoneResults | None = None
+) -> GraphKeys:
+    """Key every node of ``graph`` in topological order.
+
+    ``results`` gives components' last done results for Map Layer style inputs
+    wired from a component (without it they count as unwired).
+    """
     keys = GraphKeys()
     for nid in graph.topological_order():
         node = graph.nodes[nid]
@@ -147,6 +163,20 @@ def compute_keys(graph: Graph, base_dir: Path | None = None) -> GraphKeys:
             if not upstream:
                 keys.values[EMPTY_KEY] = None
             keys.ports[nid] = {"data": data_key}
+            continue
+
+        if node.component == PARAM_LAYER:  # built here, nothing to run or store
+            keys.nodes[nid] = None
+            upstream = inputs.get("data")
+            build = build_layer(graph, nid, upstream[0] if upstream else None, results)
+            keys.layers[nid] = build
+            if build.layer is None:
+                keys.values[EMPTY_KEY] = None
+                keys.ports[nid] = {"layer": EMPTY_KEY}
+            else:
+                pkey = port_key(layer_key(build.layer.source, build.layer), "layer")
+                keys.values[pkey] = build.layer
+                keys.ports[nid] = {"layer": pkey}
             continue
 
         if node.component == PARAM_MAP:  # shows its inputs; nothing to key or store
@@ -201,6 +231,15 @@ def split_port_key(key: str) -> tuple[str, str]:
     return node_key, port
 
 
+_ELEMENT = re.compile(r"^(.*)\[(\d+)\]$")
+
+
+def split_element(key: str) -> tuple[str, int | None]:
+    """``"<port key>[i]"`` → ``(port key, i)``; a plain port key → ``(key, None)``."""
+    m = _ELEMENT.match(key)
+    return (m.group(1), int(m.group(2))) if m else (key, None)
+
+
 def _dir_size(path: Path) -> int:
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
 
@@ -250,12 +289,19 @@ class DiskCache:
         return outputs, dict(meta.get("summaries", {}))
 
     def port_info(self, key: str) -> tuple[Path, dict[str, Any]]:
-        """``(entry folder, port info from meta.json)`` for a port key; raises ``CacheMiss``."""
+        """``(entry folder, port info from meta.json)`` for a port key; raises ``CacheMiss``.
+
+        ``<node key>.<port>[i]`` names element ``i`` of a list port stored one file
+        per element (change 03): its folder and its own info.
+        """
+        key, index = split_element(key)
         node_key, port = split_port_key(key)
         meta = self.meta(node_key)
         info = meta.get("ports", {}).get(port)
         if meta.get("format") != CACHE_FORMAT or info is None:
             raise CacheMiss(key)
+        if index is not None:
+            return list_element_info(self._entry(node_key), info, index)
         return self._entry(node_key), info
 
     def read_port(self, key: str) -> Any:
@@ -270,6 +316,27 @@ class DiskCache:
             raise
         except Exception:  # noqa: BLE001  (damaged entry: just a miss here)
             raise CacheMiss(key) from None
+
+    def band_names(self, key: str) -> list[str]:
+        """Band names of a cached Raster (as ``types.raster_band_names``), without
+        reading pixels; the file is closed again at once. Raises ``CacheMiss``."""
+        entry, info = self.port_info(key)
+        if info.get("type") != types.RASTER or info.get("access") == "list":
+            raise CacheMiss(f"{key} is not a raster")
+        path = entry / info["file"]
+        try:
+            if info.get("format") == "ref":
+                return [str(n) for n in json.loads(path.read_text(encoding="utf-8"))["long_name"]]
+            import rasterio
+
+            with rasterio.open(path) as ds:
+                names = list(ds.descriptions)
+                count = ds.count
+        except (OSError, ValueError, KeyError):
+            raise CacheMiss(key) from None
+        if len(names) == count and all(names):
+            return [str(n) for n in names]
+        return [f"b{i:02d}" for i in range(1, count + 1)]
 
     def written_rasters(self, node_key: str) -> dict[str, Any]:
         """Rasters of ``node_key`` stored as COGs, opened lazily from the cache.

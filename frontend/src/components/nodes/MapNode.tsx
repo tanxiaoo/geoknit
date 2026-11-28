@@ -2,16 +2,18 @@ import type { NodeProps } from "@xyflow/react";
 import { Map as MapIcon } from "lucide-react";
 import { useCategoryColour, useStore } from "../../store";
 import { strings } from "../../strings";
-import { needsRun } from "../../types";
+import { needsRun, portTypes } from "../../types";
 import { Port } from "./Port";
 import type { GkNode } from "./kinds";
 
-/** Map Viewer: one `layers` input taking any number of wires; double-click opens the map. */
+/** Map Viewer: one `layers` input (Raster, Vector or Layer, change 03) taking any number of
+ * wires; double-click opens the map. */
 export function MapNode({ id, data, selected }: NodeProps<GkNode>) {
   const view = data.view;
   const count = useStore((s) => s.graph?.workflow.wires.filter((w) => w.to[0] === id).length ?? 0);
   const state = view.state ?? "never_run";
-  const colour = useCategoryColour("Params");
+  const colour = useCategoryColour("Display");
+  const input = view.inputs.find((p) => p.name === "layers");
   return (
     <div
       className={`gk-node gk-comp gk-map-node gk-state-${state}${selected ? " gk-selected" : ""}`}
@@ -22,7 +24,7 @@ export function MapNode({ id, data, selected }: NodeProps<GkNode>) {
       {needsRun(state) && count > 0 && <span className="gk-dot" />}
       <div className="gk-col gk-inputs">
         <div className="gk-port-row">
-          <Port nodeId={id} side="in" name="layers" types={["Any"]} list />
+          <Port nodeId={id} side="in" name="layers" types={input ? portTypes(input) : ["Raster", "Vector", "Layer"]} list />
           <span>layers</span>
         </div>
       </div>

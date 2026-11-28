@@ -39,7 +39,7 @@ DATA_TYPES: tuple[str, ...] = (
 )
 """The data types a port can carry (``Any`` is only an input type, e.g. Panel's).
 
-``Layer`` is only a name until change 03 defines its Python object."""
+A ``Layer`` is a ``MapLayer``; only Map Layer makes one (change 03)."""
 
 PORT_TYPES: tuple[str, ...] = (*DATA_TYPES, ANY)
 
@@ -278,11 +278,74 @@ class Colormap:
         return cls(**args)
 
 
+LAYER_KINDS = ("raster", "vector")
+
+
+@dataclass(frozen=True)
+class MapLayer:
+    """A styled map layer: what Map Layer gives the Map Viewer (change 03, section 3).
+
+    ``source`` is the port key of the data (a Raster or Vector result in the
+    cache); the layer holds no pixels or features. ``None`` style fields mean the
+    Map Viewer's default for that layer.
+    """
+
+    source: str
+    kind: str
+    name: str
+    colormap: Colormap | None = None
+    color: Color | None = None
+    opacity: float = 1.0
+    bands: tuple[int, ...] | None = None
+    field: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in LAYER_KINDS:
+            raise ValueError(f'layer kind must be "raster" or "vector", got {self.kind!r}')
+        if not _is_real(self.opacity) or not 0 <= self.opacity <= 1:
+            raise ValueError("layer opacity is a number from 0 to 1")
+        if self.bands is not None:
+            bands = tuple(self.bands)
+            if len(bands) not in (1, 3) or not all(
+                isinstance(b, int) and not isinstance(b, bool) and b >= 1 for b in bands
+            ):
+                raise ValueError("layer bands are 1 or 3 band numbers (from 1)")
+            object.__setattr__(self, "bands", bands)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "source": self.source,
+            "kind": self.kind,
+            "name": self.name,
+            "colormap": self.colormap.to_json() if self.colormap is not None else None,
+            "color": self.color.hex if self.color is not None else None,
+            "opacity": self.opacity,
+            "bands": list(self.bands) if self.bands is not None else None,
+            "field": self.field,
+        }
+
+    @classmethod
+    def from_json(cls, data: Any) -> MapLayer:
+        if not isinstance(data, dict):
+            raise ValueError("a layer is an object")
+        cm, color, bands = data.get("colormap"), data.get("color"), data.get("bands")
+        return cls(
+            source=str(data["source"]),
+            kind=str(data["kind"]),
+            name=str(data["name"]),
+            colormap=Colormap.from_json(cm) if cm is not None else None,
+            color=Color.from_json(color) if color is not None else None,
+            opacity=data.get("opacity", 1.0),
+            bands=tuple(bands) if bands is not None else None,
+            field=data.get("field"),
+        )
+
+
 def to_json_value(value: Any) -> Any:
-    """``value`` as plain JSON data: Color and Colormap by their ``to_json()``, numpy
-    scalars (``np.int64``, ``np.float32``, ``np.bool_``) as the Python number or ``bool``
-    they hold, so ``json.dumps`` takes them."""
-    if isinstance(value, Color | Colormap):
+    """``value`` as plain JSON data: Color, Colormap and MapLayer by their ``to_json()``,
+    numpy scalars (``np.int64``, ``np.float32``, ``np.bool_``) as the Python number or
+    ``bool`` they hold, so ``json.dumps`` takes them."""
+    if isinstance(value, Color | Colormap | MapLayer):
         return value.to_json()
     if type(value).__module__ == "numpy" and getattr(value, "shape", None) == ():
         return value.item()
@@ -295,6 +358,8 @@ def from_json_value(type_name: str, data: Any) -> Any:
         return Color.from_json(data)
     if type_name == COLORMAP:
         return Colormap.from_json(data)
+    if type_name == LAYER:
+        return MapLayer.from_json(data)
     return data
 
 
@@ -330,6 +395,8 @@ def type_of(value: object) -> str | None:
         return COLOR
     if isinstance(value, Colormap):
         return COLORMAP
+    if isinstance(value, MapLayer):
+        return LAYER
     if _has_class(value, "xarray", "DataArray"):
         return RASTER
     if _has_class(value, "geopandas", "GeoDataFrame"):
@@ -468,6 +535,9 @@ def describe(value: object) -> str:
     if kind == COLORMAP:
         assert isinstance(value, Colormap)
         return _describe_colormap(value)
+    if kind == LAYER:
+        assert isinstance(value, MapLayer)
+        return _describe_layer(value)
     if kind == RASTER:
         return _describe_raster(value)
     if kind == VECTOR:
@@ -574,6 +644,32 @@ def _describe_colormap(cm: Colormap) -> str:
         hi = "98 %" if cm.max is None else f"{cm.max:g}"
         span = f"{lo} to {hi}"
     return f"Colormap · continuous · {name} · {span}"
+
+
+def _describe_layer(layer: MapLayer) -> str:
+    """Name, source and style (``default`` for a field the Map Viewer chooses)."""
+    node_key, _, port = layer.source.rpartition(".")
+    source = f"{node_key[:12]}….{port}" if node_key else layer.source
+    colormap = (
+        _describe_colormap(layer.colormap).removeprefix("Colormap · ")
+        if layer.colormap
+        else "default"
+    )
+    bands = ",".join(map(str, layer.bands)) if layer.bands is not None else "default"
+    style = [f"colormap {colormap}"]
+    if layer.kind == "vector":
+        style.append(f"color {layer.color.hex if layer.color is not None else 'default'}")
+        style.append(f"field {layer.field or 'none'}")
+    else:
+        style.append(f"bands {bands}")
+    style.append(f"opacity {layer.opacity:g}")
+    return "\n".join(
+        [
+            f"Layer · {layer.name} · {layer.kind}",
+            f"source {source}",
+            " · ".join(style),
+        ]
+    )
 
 
 def _describe_model(m: ModelBundle) -> str:

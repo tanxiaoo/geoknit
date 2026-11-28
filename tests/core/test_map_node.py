@@ -1,43 +1,61 @@
-"""The Map Viewer node (SPEC 7, 8): a Params node with a list input and no outputs."""
+"""The Map Viewer node (SPEC 7, 8): a Params node with a list input and no outputs.
 
+Its ``layers`` input takes Raster, Vector and Layer (change 03, section 4); a
+Panel's ``Any`` pass-through still connects, so the tests wire unwired Panels.
+"""
+
+import re
 from pathlib import Path
 
 import pytest
 
 from geoknit.core.cache import compute_keys
 from geoknit.core.executor import InProcessExecutor
-from geoknit.core.graph import PARAM_MAP, PARAM_SLIDER, PARAM_TEXT, Graph, GraphError
+from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, PARAM_SLIDER, PARAM_TEXT, Graph, GraphError
 from geoknit.core.workflow import graph_from_dict, graph_to_dict, load_workflow, save_workflow
 
 
 def _viewer() -> tuple[Graph, str, str, str]:
     g = Graph()
-    text = g.add_component(PARAM_TEXT).id
-    slider = g.add_component(PARAM_SLIDER).id
+    first = g.add_component(PARAM_PANEL).id
+    second = g.add_component(PARAM_PANEL).id
     viewer = g.add_component(PARAM_MAP).id
-    g.add_wire(text, "value", viewer, "layers")
-    g.add_wire(slider, "value", viewer, "layers")
-    return g, text, slider, viewer
+    g.add_wire(first, "data", viewer, "layers")
+    g.add_wire(second, "data", viewer, "layers")
+    return g, first, second, viewer
 
 
 def test_map_viewer_takes_several_wires_and_has_no_outputs() -> None:
     g, text, _, viewer = _viewer()
     node = g.nodes[viewer]
     assert node.title == "Map Viewer" and node.is_param
-    assert node.inputs["layers"].access == "list" and node.inputs["layers"].type == "Any"
+    assert node.inputs["layers"].access == "list"
+    assert node.inputs["layers"].types == ("Raster", "Vector", "Layer")
     assert node.outputs == {}
     assert [w.src for w in g.wires_into(viewer, "layers")] == [text, g.wires[1].src]
     with pytest.raises(GraphError):
-        g.add_wire(text, "value", viewer, "layers")  # the same wire twice
+        g.add_wire(text, "data", viewer, "layers")  # the same wire twice
 
 
-def test_map_viewer_has_no_key_and_runs_after_its_inputs() -> None:
+def test_map_viewer_refuses_values_that_are_not_map_layers() -> None:
+    g, _, _, viewer = _viewer()
+    for component in (PARAM_TEXT, PARAM_SLIDER):
+        src = g.add_component(component).id
+        with pytest.raises(GraphError, match=re.escape("Raster | Vector | Layer")):
+            g.add_wire(src, "value", viewer, "layers")
+
+
+def test_map_viewer_has_no_key_and_is_always_done() -> None:
+    """A view node (change 03, section 4): never in a run plan; always ``done``, it
+    draws whichever layers work (decided 28 Nov 2026)."""
     g, _, _, viewer = _viewer()
     keys = compute_keys(g)
     assert keys.nodes[viewer] is None and keys.ports[viewer] == {}
-    report = InProcessExecutor(g).run()
-    assert report.ok and viewer in report.ran
-    assert g.nodes[viewer] is not None
+    ex = InProcessExecutor(g)
+    assert viewer not in ex.solver.plan() and ex.solver.states[viewer] == "done"
+    report = ex.run()
+    assert report.ok and viewer not in report.ran
+    assert ex.solver.states[viewer] == "done" and ex.solver.out_of_date_count == 0
 
 
 def test_map_styles_are_saved_and_loaded(tmp_path: Path) -> None:

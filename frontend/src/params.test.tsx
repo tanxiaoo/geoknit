@@ -241,19 +241,14 @@ describe("Colormap", () => {
     );
   });
 
-  test("draws the gradient; double-click offers the named ramps", () => {
+  test("draws the gradient; double-click opens the Colormap editor (change 03)", () => {
     store.set({ ramps: RAMPS });
-    const patch = vi.spyOn(store, "patchNode").mockResolvedValue();
     const value = { ...viridis, min: 0, max: 5 };
     show(ColormapNode as NodeComponent, view(PARAM_COLORMAP, { value }));
     expect(screen.getByTestId("ramp-n1").style.background).toContain("linear-gradient");
     expect(screen.getByTestId("node-n1").textContent).toContain("viridis");
     fireEvent.doubleClick(screen.getByTestId("node-n1"));
-    fireEvent.click(screen.getByTestId("ramp-reverse"));
-    fireEvent.click(screen.getByTestId("ramp-magma"));
-    expect(patch).toHaveBeenCalledWith("n1", {
-      value: { kind: "continuous", name: "magma", min: 0, max: 5, reverse: true },
-    });
+    expect(store.getState().colormapNode).toBe("n1");
   });
 
   test("a classes colormap is drawn as chips", () => {

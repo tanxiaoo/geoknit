@@ -62,6 +62,7 @@ describe("icon registry", () => {
     expect(Object.keys(icons).sort()).toEqual([
       "param/color",
       "param/colormap",
+      "param/layer",
       "param/map",
       "param/number",
       "param/panel",

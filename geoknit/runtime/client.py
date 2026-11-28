@@ -17,9 +17,18 @@ from pathlib import Path
 from typing import Any
 
 from geoknit.core import types, views
-from geoknit.core.cache import DEFAULT_LIMIT, GraphKeys, compute_keys
+from geoknit.core.cache import DEFAULT_LIMIT, CacheMiss, DiskCache, GraphKeys, compute_keys
 from geoknit.core.executor import Event, EventFn, RunReport
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, VALUE_PARAMS, Graph, Node, param_output
+from geoknit.core.graph import (
+    PARAM_LAYER,
+    PARAM_MAP,
+    PARAM_PANEL,
+    VALUE_PARAMS,
+    Graph,
+    Node,
+    param_output,
+)
+from geoknit.core.layers import LayerBuild, origin_wire
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 from geoknit.runtime import protocol as p
 from geoknit.runtime.worker import worker_main
@@ -72,6 +81,8 @@ class WorkerExecutor:
         self.errors: dict[str, str] = {}
         self._done_ports: dict[str, dict[str, str]] = {}
         """Port keys each node had when it last finished, to spot changed files."""
+        self.layers: dict[str, LayerBuild] = {}
+        """Each Map Layer's layer as last built (``refresh_views``), for its window."""
 
         self._lock = threading.Lock()
         self._proc: BaseProcess | None = None
@@ -154,6 +165,7 @@ class WorkerExecutor:
         self.solver = solver or Solver(graph)
         for store in (self.summaries, self.views, self.logs, self.errors, self._done_ports):
             store.clear()
+        self.layers.clear()
         self.solver.invalidate(set(graph.nodes))  # results here belong to the old setup
         if base_dir != self.base_dir:
             self.base_dir = base_dir
@@ -248,6 +260,68 @@ class WorkerExecutor:
         for n in removed:
             for store in (self.summaries, self.views, self.logs, self.errors, self._done_ports):
                 store.pop(n, None)
+            self.layers.pop(n, None)
+
+    # ── view nodes (change 03, section 4) ──
+    def refresh_views(self, keys: GraphKeys | None = None) -> GraphKeys:
+        """Set the view nodes' states from their sources and build every Map Layer's
+        layer (style values from Params nodes and the disk cache); a done Map Layer
+        gets its layer as summary, view and done port key. Nothing runs."""
+        if keys is None:
+            keys = compute_keys(self.graph, self.base_dir, self)
+        self.solver.refresh_views()
+        for nid, node in self.graph.nodes.items():
+            if node.component == PARAM_MAP and self.solver.states.get(nid) == DONE:
+                self.summaries[nid], self.views[nid], self._done_ports[nid] = {}, {}, {}
+            if node.component != PARAM_LAYER:
+                continue
+            build = keys.layers[nid]
+            self.layers[nid] = build
+            if self.solver.states.get(nid) == DONE and build.layer is not None:
+                summary = types.describe(build.layer)
+                self.summaries[nid] = {"layer": summary}
+                self.views[nid] = {"layer": views.safe_view(build.layer, summary)}
+                self._done_ports[nid] = dict(keys.ports[nid])
+            else:
+                for store in (self.summaries, self.views, self._done_ports):
+                    store.pop(nid, None)
+        return keys
+
+    def _done_key(self, node_id: str, port: str) -> str:
+        if self.solver.states.get(node_id) != DONE:
+            raise LookupError(f"{self.graph.node(node_id).title} has no result yet; run it")
+        key = self.done_port_key(node_id, port)
+        if key is None:  # pragma: no cover  (done nodes have their port keys)
+            raise LookupError(f"{self.graph.node(node_id).title} has no result yet; run it")
+        if self.cache_dir is None:
+            raise LookupError("the disk cache is off, so a component's result cannot be read")
+        return key
+
+    def value(self, node_id: str, port: str) -> Any:
+        """``DoneResults``: a done component's output, read from its disk cache entry."""
+        key = self._done_key(node_id, port)
+        assert self.cache_dir is not None
+        try:
+            return DiskCache(self.cache_dir).read_port(key)
+        except CacheMiss:
+            raise LookupError("the result is no longer cached; run again") from None
+
+    def data_type(self, node_id: str, port: str) -> str | None:
+        try:
+            key = self._done_key(node_id, port)
+            assert self.cache_dir is not None
+            _, info = DiskCache(self.cache_dir).port_info(key)
+        except (LookupError, CacheMiss):
+            return None
+        return None if info.get("access") == "list" else info.get("type")
+
+    def band_names(self, node_id: str, port: str) -> list[str] | None:
+        try:
+            key = self._done_key(node_id, port)
+            assert self.cache_dir is not None
+            return DiskCache(self.cache_dir).band_names(key)
+        except (LookupError, CacheMiss):
+            return None
 
     def done_port_key(self, node_id: str, port: str) -> str | None:
         """Cache key of an output as of the node's last successful run, if any."""
@@ -260,11 +334,13 @@ class WorkerExecutor:
     # ── running ──
     def run(self, mode: str = RUN_ALL, node_id: str | None = None) -> RunReport:
         report = RunReport()
-        keys = compute_keys(self.graph, self.base_dir)
+        keys = compute_keys(self.graph, self.base_dir, self)
         stale = {
             n
             for n, ports in self._done_ports.items()
-            if self.solver.states.get(n) == DONE and keys.ports.get(n) != ports
+            if self.solver.states.get(n) == DONE
+            and keys.ports.get(n) != ports
+            and not self.graph.nodes[n].is_view
         }
         if stale:  # a file it reads changed on disk (SPEC 6 "Out of date")
             self.solver.invalidate(stale)
@@ -280,13 +356,35 @@ class WorkerExecutor:
             except (_Stopped, _Crashed):
                 self._recover()
                 return report
+            self.refresh_views(keys)
             for nid in plan:
                 if not self._run_node(self.graph.node(nid), keys, report, test=mode == RUN_TEST):
                     break
+                keys = self._after_node(nid, keys)
         finally:
             with self._lock:
                 self._running, self._stop_requested = False, False
         return report
+
+    def _after_node(self, nid: str, keys: GraphKeys) -> GraphKeys:
+        """Refresh the view nodes after ``nid`` ran. A component wired into a Map
+        Layer's style input (directly or through Panels) now has a result, so the
+        keys are computed again and the new layers sent to the worker."""
+        feeds_style = any(
+            not self.graph.carries(w) and origin_wire(self.graph, w).src == nid
+            for w in self.graph.wires
+        )
+        if feeds_style and not self.graph.nodes[nid].is_param:
+            new = compute_keys(self.graph, self.base_dir, self)
+            try:
+                for key, value in new.values.items():
+                    if key not in keys.values:
+                        self._send(p.PutValue(key, value))
+            except (_Stopped, _Crashed):
+                pass  # the next node's run finds the worker gone and recovers
+            keys = new
+        self.refresh_views(keys)
+        return keys
 
     def _recover(self) -> None:
         with self._lock:

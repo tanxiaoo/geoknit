@@ -174,4 +174,5 @@ export const PARAM_VALUE_LIST = "param/value_list";
 export const PARAM_COLOR = "param/color";
 export const PARAM_COLORMAP = "param/colormap";
 export const PARAM_PANEL = "param/panel";
+export const PARAM_LAYER = "param/layer";
 export const PARAM_MAP = "param/map";

@@ -282,6 +282,74 @@
         480,
         110
       ]
+    },
+    {
+      "component": "param/colormap",
+      "id": "n23",
+      "position": [
+        1520,
+        0
+      ],
+      "value": {
+        "classes": [
+          [
+            1,
+            "#1A9850",
+            "0 %"
+          ],
+          [
+            2,
+            "#91CF60",
+            "0–20 %"
+          ],
+          [
+            3,
+            "#D9EF8B",
+            "20–40 %"
+          ],
+          [
+            4,
+            "#FEE08B",
+            "40–60 %"
+          ],
+          [
+            5,
+            "#FC8D59",
+            "60–80 %"
+          ],
+          [
+            6,
+            "#D73027",
+            "80–100 %"
+          ],
+          [
+            7,
+            "#7F0000",
+            "100 %"
+          ]
+        ],
+        "kind": "classes",
+        "other": null
+      }
+    },
+    {
+      "component": "param/layer",
+      "id": "n24",
+      "position": [
+        1820,
+        0
+      ],
+      "style": {
+        "name": "IMD classes"
+      }
+    },
+    {
+      "component": "param/map",
+      "id": "n25",
+      "position": [
+        2120,
+        120
+      ]
     }
   ],
   "view": {
@@ -531,6 +599,46 @@
       "to": [
         "n22",
         "data"
+      ]
+    },
+    {
+      "from": [
+        "n4",
+        "classes"
+      ],
+      "to": [
+        "n24",
+        "data"
+      ]
+    },
+    {
+      "from": [
+        "n23",
+        "value"
+      ],
+      "to": [
+        "n24",
+        "colormap"
+      ]
+    },
+    {
+      "from": [
+        "n24",
+        "layer"
+      ],
+      "to": [
+        "n25",
+        "layers"
+      ]
+    },
+    {
+      "from": [
+        "n10",
+        "test"
+      ],
+      "to": [
+        "n25",
+        "layers"
       ]
     }
   ]

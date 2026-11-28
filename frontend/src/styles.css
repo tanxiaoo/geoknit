@@ -764,18 +764,6 @@ button:disabled {
 .gk-class-chip {
   flex: 1;
 }
-.gk-ramp-window {
-  width: 240px;
-}
-.gk-ramp-window li .gk-ramp {
-  width: 90px;
-}
-.gk-ramp-reverse {
-  justify-content: flex-start !important;
-}
-.gk-slider-window .gk-ramp-reverse input {
-  width: auto;
-}
 
 /* panel node */
 .gk-panel {
@@ -1608,6 +1596,26 @@ pre.gk-output-error {
   font-size: 11px;
   color: var(--gk-muted);
 }
+/* a layer from a Map Layer: "from Map Layer <name>" and the Go to link (change 03) */
+.gk-map-from {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+.gk-map-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--gk-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.gk-map-layer [data-locked="true"] {
+  opacity: 0.7;
+}
 .gk-map-error {
   margin: 0;
   font-size: 12px;
@@ -1756,4 +1764,239 @@ pre.gk-output-error {
   justify-content: center;
   color: var(--gk-muted);
   pointer-events: none;
+}
+
+/* Colormap editor window (change 03, section 2) */
+.gk-cm-window {
+  color: var(--gk-ink);
+}
+.gk-cm-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  overflow: auto;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-size: 12px;
+}
+.gk-cm-body input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+.gk-cm-body select {
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--gk-line);
+  border-radius: 5px;
+  color: var(--gk-ink);
+  font: inherit;
+}
+.gk-cm-body input:disabled {
+  opacity: 0.5;
+}
+.gk-cm-body button:not(.gk-icon-button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--gk-control-border);
+  border-radius: 5px;
+  background: var(--gk-app-bg);
+  color: var(--gk-ink);
+}
+.gk-cm-body button:not(.gk-icon-button):hover {
+  background: var(--gk-panel-bg);
+}
+.gk-cm-preview.gk-ramp {
+  width: 100%;
+  height: 20px;
+  box-sizing: border-box;
+}
+.gk-cm-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.gk-cm-field > span {
+  color: var(--gk-muted);
+  flex: 0 0 auto;
+}
+.gk-cm-field select {
+  flex: 0 1 200px;
+}
+.gk-cm-segmented {
+  display: inline-flex;
+  border: 1px solid var(--gk-control-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.gk-cm-body .gk-cm-segmented button {
+  border: 0;
+  border-radius: 0;
+}
+.gk-cm-body .gk-cm-segmented button.gk-cm-on {
+  background: var(--gk-active-bg);
+  color: var(--gk-active-ink);
+}
+.gk-cm-bound,
+.gk-cm-other,
+.gk-cm-fill,
+.gk-cm-colour {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.gk-cm-bound label,
+.gk-cm-other label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.gk-cm-bound input:not([type="checkbox"]) {
+  width: 90px;
+}
+.gk-cm-colour input[type="color"] {
+  width: 28px;
+  height: 22px;
+  padding: 0 1px;
+  border: 1px solid var(--gk-line);
+  border-radius: 4px;
+  background: var(--gk-app-bg);
+}
+.gk-cm-body .gk-cm-hex {
+  width: 84px;
+  font-family: var(--mono);
+}
+.gk-cm-hint {
+  color: var(--gk-muted);
+  font-size: 11px;
+}
+.gk-cm-stops {
+  display: grid;
+  gap: 6px;
+}
+.gk-cm-bar {
+  position: relative;
+  height: 22px;
+  margin: 0 7px 8px;
+  border: 1px solid var(--gk-ramp-border);
+  border-radius: 3px;
+  cursor: copy;
+  touch-action: none;
+}
+.gk-cm-stop {
+  position: absolute;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  margin-left: -7px;
+  border: 1px solid var(--gk-ink);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--gk-ring);
+  cursor: ew-resize;
+}
+.gk-cm-stop.gk-cm-on {
+  border-width: 2px;
+  box-shadow: 0 0 0 2px var(--gk-primary);
+}
+.gk-cm-stop-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gk-cm-stop-name {
+  min-width: 48px;
+  color: var(--gk-muted);
+}
+.gk-cm-pos {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gk-muted);
+}
+.gk-cm-pos input {
+  width: 60px;
+}
+.gk-cm-table {
+  display: grid;
+  gap: 4px;
+  max-height: 300px;
+  padding: 6px;
+  overflow: auto;
+  border: 1px solid var(--gk-line);
+  border-radius: 6px;
+  background: var(--gk-panel-bg);
+}
+.gk-cm-table:focus-visible {
+  outline: 2px solid var(--gk-primary);
+}
+.gk-cm-row {
+  display: grid;
+  grid-template-columns: 70px 128px minmax(0, 1fr) 72px;
+  gap: 6px;
+  align-items: center;
+}
+.gk-cm-head {
+  color: var(--gk-muted);
+  font-size: 11px;
+}
+.gk-cm-row-buttons {
+  display: flex;
+  justify-content: flex-end;
+}
+.gk-cm-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Map Layer window (change 03, section 3) */
+.gk-layer-row {
+  display: grid;
+  gap: 3px;
+}
+.gk-layer-row .gk-cm-field > input:not([type="range"]),
+.gk-layer-row .gk-cm-field > select {
+  flex: 0 1 200px;
+}
+.gk-layer-colormap,
+.gk-layer-opacity,
+.gk-layer-wired {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.gk-layer-colormap .gk-ramp {
+  width: 48px;
+  height: 12px;
+}
+.gk-layer-opacity input[type="range"] {
+  width: 150px;
+  accent-color: var(--gk-slider);
+}
+.gk-layer-number {
+  min-width: 32px;
+  font-family: var(--mono);
+  text-align: right;
+}
+.gk-layer-wired {
+  color: var(--gk-ink);
+}
+.gk-layer-from {
+  color: var(--gk-muted);
+  font-style: italic;
+}
+.gk-layer-issue {
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--gk-banner-warn-bg);
+  color: var(--gk-banner-warn-ink);
+  font-size: 11px;
+}
+.gk-layer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--gk-line);
 }

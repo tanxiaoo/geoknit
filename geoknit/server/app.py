@@ -58,7 +58,7 @@ class NodeCreate(BaseModel):
     component: str = Field(
         description=(
             "library reference, `inline`, or a Params node: `param/text|number|slider|toggle|"
-            "value_list|color|colormap|panel|map`"
+            "value_list|color|colormap|panel|layer|map`"
         )
     )
     position: list[float] = Field(default_factory=lambda: [0.0, 0.0])
@@ -116,6 +116,13 @@ class NodePatch(BaseModel):
     map: dict[str, Any] | None = Field(
         default=None,
         description="Map Viewer: `{basemap?, styles?: {layer id: style | null}}`, merged",
+    )
+    style: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Map Layer: `{colormap?, color?, opacity?, bands?, name?, field?}`, merged; "
+            "a `null` field resets it, `null` resets them all"
+        ),
     )
 
 
@@ -476,6 +483,12 @@ def create_app(
         except ValueError:
             raise tiles.MapError("bands is a comma-separated list of band numbers") from None
 
+    @app.get("/api/layer/{node_id}", tags=["map"])
+    def layer_info(node_id: str) -> dict[str, Any]:
+        """A Map Layer: its layer, issues, saved style, and the data's vector columns
+        (for the `field` dropdown) or raster band names."""
+        return session.layer_info(node_id)
+
     @app.get("/api/map/{node_id}", tags=["map"])
     def map_view(node_id: str) -> dict[str, Any]:
         """Layers of a Map Viewer (one per wire): status, bounds, bands, stats, style."""
@@ -499,10 +512,14 @@ def create_app(
         y: int,
         bands: str | None = None,
         colormap: str = "viridis",
+        cmap: str | None = None,
         min: float | None = Query(default=None),  # noqa: A002  (query names of the API)
         max: float | None = Query(default=None),  # noqa: A002
     ) -> Response:
-        """A 256 px Web Mercator tile of a cached raster (rio-tiler, from overviews)."""
+        """A 256 px Web Mercator tile of a cached raster (rio-tiler, from overviews).
+
+        ``cmap`` is a Colormap as compact JSON; it replaces ``colormap`` when given.
+        """
         png = tiles.render_tile(
             session.map_cache(),
             key,
@@ -510,7 +527,7 @@ def create_app(
             x,
             y,
             bands=_bands(bands) or (1,),
-            colormap=colormap,
+            colormap=tiles.colormap_from_query(cmap) if cmap is not None else colormap,
             vmin=min,
             vmax=max,
         )
@@ -534,7 +551,7 @@ def create_app(
     @app.websocket("/ws")
     async def ws(websocket: WebSocket) -> None:
         """Events: ``states``, ``started``, ``log``, ``done``, ``error``, ``skipped``,
-        ``run_finished``, ``workflow_opened``, ``worker``, ``node_changed``."""
+        ``run_finished``, ``workflow_opened``, ``worker``, ``node_changed``, ``map_changed``."""
         await websocket.accept()
         sub = session.events.subscribe()
         await websocket.send_json(session.states_message())

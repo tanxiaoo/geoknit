@@ -98,16 +98,20 @@ def test_group_header(tmp_path: Path) -> None:
 def test_tabs_groups_and_order_of_the_builtins(builtins: Registry) -> None:
     lib = library(builtins.entries())
     tabs = {t["name"]: t for t in lib["tabs"]}
-    assert list(tabs) == ["Params", "Vector", "Raster", "Sampling", "Model", "Validation", "Script"]
+    assert list(tabs) == [
+        "Params", "Vector", "Raster", "Sampling", "Model", "Validation", "Display", "Script",
+    ]  # fmt: skip
     assert tabs["Raster"] == {
         "name": "Raster",
         "colour": "#0B7A7C",
         "groups": ["Files", "Bands", "Calculate", "Extent"],
     }
     assert tabs["Sampling"]["colour"] == "#B45309"
-    assert tabs["Params"]["groups"] == ["Input", "Style", "Inspect", "Map"]
+    assert tabs["Params"]["groups"] == ["Input", "Style", "Inspect"]
+    # Change 03, section 1: Map Layer and Map Viewer (node id kept) in Display.
+    assert tabs["Display"] == {"name": "Display", "colour": "#A21CAF", "groups": ["Style", "Map"]}
     refs = [c["ref"] for c in lib["components"]]
-    assert refs[:9] == [
+    assert refs[:8] == [
         "param/text",
         "param/number",
         "param/slider",
@@ -116,8 +120,9 @@ def test_tabs_groups_and_order_of_the_builtins(builtins: Registry) -> None:
         "param/color",
         "param/colormap",
         "param/panel",
-        "param/map",
     ]
+    display = [(c["ref"], c["group"]) for c in lib["components"] if c["category"] == "Display"]
+    assert display == [("param/layer", "Style"), ("param/map", "Map")]
     value_list = next(c for c in lib["components"] if c["ref"] == "param/value_list")
     assert value_list["group"] == "Input" and value_list["outputs"][0]["type"] == "Number"
     raster = [c["ref"] for c in lib["components"] if c["category"] == "Raster"]

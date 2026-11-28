@@ -12,8 +12,17 @@ from pathlib import Path
 from typing import Any
 
 from geoknit.core import types, views
+from geoknit.core.cache import compute_keys
 from geoknit.core.component import PRINT_PORT, run_component
-from geoknit.core.graph import PARAM_MAP, PARAM_PANEL, VALUE_PARAMS, Graph, Node, param_output
+from geoknit.core.graph import (
+    PARAM_LAYER,
+    PARAM_MAP,
+    PARAM_PANEL,
+    VALUE_PARAMS,
+    Graph,
+    Node,
+    param_output,
+)
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 
 
@@ -80,12 +89,52 @@ class InProcessExecutor:
 
     def run(self, mode: str = RUN_ALL, node_id: str | None = None) -> RunReport:
         report = RunReport()
+        self.refresh_views()
         for nid in self.solver.plan(mode, node_id):
             self._run_node(self.graph.node(nid), report, test=mode == RUN_TEST)
+            self.refresh_views()
         return report
 
     def output(self, node_id: str, port: str) -> Any:
         return self.results[node_id][port]
+
+    # ── view nodes (change 03, section 4) ──
+    def refresh_views(self) -> None:
+        """States of the view nodes, and each done Map Layer's layer as its result."""
+        self.solver.refresh_views()
+        layers = [n for n, v in self.graph.nodes.items() if v.component == PARAM_LAYER]
+        if not layers:
+            return
+        keys = compute_keys(self.graph, self.base_dir, self)
+        for nid in layers:
+            layer = keys.layers[nid].layer
+            if self.solver.states.get(nid) == DONE and layer is not None:
+                self.results[nid] = {"layer": layer}
+                summary = types.describe(layer)
+                self.summaries[nid] = {"layer": summary}
+                self.views[nid] = {"layer": views.safe_view(layer, summary)}
+            else:
+                for store in (self.results, self.summaries, self.views):
+                    store.pop(nid, None)
+
+    def value(self, node_id: str, port: str) -> Any:
+        """``DoneResults``: a done node's output held in memory."""
+        if self.solver.states.get(node_id) != DONE or node_id not in self.results:
+            raise LookupError(f"{self.graph.node(node_id).title} has no result yet; run it")
+        return self.results[node_id][port]
+
+    def data_type(self, node_id: str, port: str) -> str | None:
+        try:
+            return types.type_of(self.value(node_id, port))
+        except LookupError:
+            return None
+
+    def band_names(self, node_id: str, port: str) -> list[str] | None:
+        try:
+            value = self.value(node_id, port)
+        except LookupError:
+            return None
+        return types.raster_band_names(value) if types.type_of(value) == types.RASTER else None
 
     # ── one node ──
     def _run_node(self, node: Node, report: RunReport, *, test: bool) -> None:

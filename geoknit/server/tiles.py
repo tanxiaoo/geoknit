@@ -568,15 +568,21 @@ def colormap_from_query(text: str) -> types.Colormap:
         raise MapError(f"cmap: {exc}") from None
 
 
-def _classes_rgba(cm: types.Colormap, values: Any) -> Any:
-    """``(4, h, w)`` uint8: each class value its colour, the rest ``other`` or transparent."""
+def _classes_rgba(cm: types.Colormap, values: Any, dtype: Any = None) -> Any:
+    """``(4, h, w)`` uint8: each class value its colour, the rest ``other`` or transparent.
+
+    ``values`` are float64; on a float raster a class value is first rounded to
+    the raster's own ``dtype`` (``0.1`` in float32 is not ``0.1`` in float64).
+    """
     import numpy as np
 
     rgba = np.zeros((*values.shape, 4), dtype="uint8")
     if cm.other is not None:
         rgba[...] = cm.other.rgba
+    native = dtype is not None and np.issubdtype(dtype, np.floating)
     for value, color, _ in cm.classes:
-        rgba[values == value] = color.rgba
+        target = float(np.asarray(value, dtype=dtype)) if native else value
+        rgba[values == target] = color.rgba
     return np.moveaxis(rgba, -1, 0)
 
 
@@ -648,7 +654,7 @@ def render_tile(
     alpha[~np.isfinite(data).all(axis=0)] = 0
     cm = colormap if isinstance(colormap, types.Colormap) and len(bands) == 1 else None
     if cm is not None and cm.kind == types.CLASSES:
-        rgba = _classes_rgba(cm, data[0])
+        rgba = _classes_rgba(cm, data[0], img.array.dtype)
         rgb = rgba[:3]
         alpha = _times_alpha(alpha, rgba[3])
     elif len(bands) == 1 and colormap == CATEGORICAL:

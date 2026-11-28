@@ -160,8 +160,8 @@ open map redraws at once, without running anything. Click the map to read
 the values of every layer at that point.
 
 To see the prediction too, wire **Predict Raster**'s `map` output into the
-same `layers` input (it takes several wires; the first one is drawn on
-top). Untick *IMD classes* to look underneath:
+same `layers` input (it takes several wires: vectors are drawn above
+rasters, and among rasters the first wire is on top). Untick *IMD classes* to look underneath:
 
 ![The predicted map](img/milan/06-map-prediction.png)
 

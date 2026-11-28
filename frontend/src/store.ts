@@ -233,6 +233,8 @@ export class Store {
   private listeners = new Set<() => void>();
   private clip: Clip | null = null;
   private pastes = 0;
+  /** Counts `workflow_opened`: an edit made in another workflow's window is dropped. */
+  workflowEpoch = 0;
 
   constructor(readonly api: Api = defaultApi) {}
 
@@ -261,6 +263,7 @@ export class Store {
       if (this.state.windowNode) void this.loadOutput(this.state.windowNode);
       void this.refreshFiles();
     } else if (ev.type === "workflow_opened") {
+      this.workflowEpoch += 1;
       this.set({
         summaries: {},
         views: {},

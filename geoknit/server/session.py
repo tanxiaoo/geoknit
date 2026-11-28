@@ -1055,7 +1055,13 @@ class Session:
         stub["_layer"] = layer
         stub["_set"] = set_fields(self.graph, layer_id, build)
         if self.solver.states.get(layer_id) == DONE:
+            # the data's last done result, as a raw wire draws it (a changed file is
+            # only seen at the next Run); the layer's own key is the fallback
             stub["key"] = layer.source
+            data = self.graph.wires_into(layer_id, "data")
+            if data and ex is not None:
+                origin = origin_wire(self.graph, data[0])
+                stub["key"] = ex.done_port_key(origin.src, origin.src_port) or layer.source
         return stub
 
     @staticmethod

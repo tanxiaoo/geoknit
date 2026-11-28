@@ -704,7 +704,7 @@ so behaviour matches Windows):
     Boolean Toggle, Value List, Color Swatch, Colormap), an empty Panel's
     `None`, or a Map Layer's `MapLayer`, sent before each run so the worker
     can look it up. Map Layers are sent again after a component wired into a
-    style input finishes (its result now resolves, so later nodes get the new
+    style input (directly or through Panels) finishes (its result now resolves, so later nodes get the new
     layer).
   - `clear_cache` (answered by `cleared {complete}`), `shutdown`.
 - worker → server: `ready {pid}`, `started`, `log {line}`,

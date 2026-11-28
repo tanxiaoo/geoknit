@@ -191,9 +191,9 @@ describe("map logic", () => {
     const cm: ColormapJson = { kind: "classes", classes: [[1, "#FF0000", "Built"]], other: null };
     const url = tileUrl(classes.key!, effectiveStyle(classes, { colormap: cm }));
     const q = new URLSearchParams(url.split("?")[1]);
-    expect(q.get("cmap")).toBe('{"kind":"classes","classes":[[1,"#FF0000","Built"]],"other":null}');
+    // labels never change a pixel: left out, so a long legend keeps the URL short
+    expect(q.get("cmap")).toBe('{"kind":"classes","classes":[[1,"#FF0000",""]],"other":null}');
     expect(q.has("colormap")).toBe(false);
-    expect(JSON.parse(q.get("cmap")!)).toEqual(cm);
     // a classes Colormap draws nearest pixels; a continuous one does not
     const styles = { "n4.classes": { colormap: cm }, "n17.map": { colormap: cm } };
     const ramp: ColormapJson = { kind: "continuous", name: "magma", min: null, max: null, reverse: false };

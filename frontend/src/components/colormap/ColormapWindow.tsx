@@ -67,12 +67,16 @@ function Editor({ view }: { view: NodeView }) {
   const pending = useRef<ColormapJson | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const busy = useRef(false); // a stop is being dragged
+  // PATCHes sent and not answered: the server's value may not hold the last edit yet
+  const inflight = useRef(0);
+  const [settled, setSettled] = useState(0);
+  const epoch = useRef(store.workflowEpoch);
   // the other kind as last edited, so switching Kind back and forth keeps it
   const otherKind = useRef<ColormapJson | null>(null);
 
   useEffect(() => {
-    if (!pending.current && !busy.current) setDraft(serverRef.current);
-  }, [view]);
+    if (!pending.current && !busy.current && !inflight.current) setDraft(serverRef.current);
+  }, [view, settled]);
 
   const flush = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -80,13 +84,18 @@ function Editor({ view }: { view: NodeView }) {
     const next = pending.current;
     pending.current = null;
     if (!next || same(next, serverRef.current)) return;
+    if (store.workflowEpoch !== epoch.current) return; // another workflow is open now
     const why = problem(next);
     if (why) {
       store.showToast(why);
       setDraft(serverRef.current);
       return;
     }
-    void store.patchNode(id, { value: next });
+    inflight.current += 1;
+    void store.patchNode(id, { value: next }).finally(() => {
+      inflight.current -= 1;
+      setSettled((n) => n + 1);
+    });
   }, [id]);
   useEffect(() => () => flush(), [flush]); // closing the window sends what is left
 

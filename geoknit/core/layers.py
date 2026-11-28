@@ -168,16 +168,19 @@ def _bands(
     except GraphError as exc:
         build.issues["bands"] = str(exc)
         return None
-    if all(isinstance(b, int) for b in wanted):
-        return tuple(int(b) for b in wanted)
     origin = origin_wire(graph, data)
     names = results.band_names(origin.src, origin.src_port) if results is not None else None
     if names is None:
+        if all(isinstance(b, int) for b in wanted):
+            return tuple(int(b) for b in wanted)  # checked once the raster has a result
         build.issues["bands"] = "band names are known once the raster has a result"
         return None
     out: list[int] = []
     for b in wanted:
         if isinstance(b, int):
+            if not 1 <= b <= len(names):
+                build.issues["bands"] = f"no band {b} (the raster has {len(names)} bands)"
+                return None
             out.append(b)
         elif b in names:
             out.append(names.index(b) + 1)

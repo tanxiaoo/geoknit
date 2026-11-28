@@ -151,12 +151,19 @@ export function range(style: LayerStyle, stats: RasterStats | null): [number, nu
   return lo === undefined || hi === undefined ? null : [lo, hi];
 }
 
+/** The Colormap as the tiles need it: class labels never change a pixel, and long
+ * ones (land-cover legends) would make every tile URL too long for the server. */
+export function tileColormap(c: ColormapJson): ColormapJson {
+  if (c.kind !== "classes") return c;
+  return { ...c, classes: c.classes.map(([v, colour]) => [v, colour, ""]) };
+}
+
 /** `/tiles/{key}/{z}/{x}/{y}.png?…`; without min/max the server stretches 2–98 %.
  * A Colormap object goes as `cmap` (compact JSON), which replaces `colormap`. */
 export function tileUrl(key: string, style: LayerStyle): string {
   const c = style.colormap;
   const q = new URLSearchParams({ bands: style.bands.join(",") });
-  if (isColormap(c)) q.set("cmap", JSON.stringify(c));
+  if (isColormap(c)) q.set("cmap", JSON.stringify(tileColormap(c)));
   else q.set("colormap", c);
   if (style.min !== null) q.set("min", String(style.min));
   if (style.max !== null) q.set("max", String(style.max));

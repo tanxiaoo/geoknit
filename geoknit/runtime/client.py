@@ -28,7 +28,7 @@ from geoknit.core.graph import (
     Node,
     param_output,
 )
-from geoknit.core.layers import LayerBuild
+from geoknit.core.layers import LayerBuild, origin_wire
 from geoknit.core.solver import DONE, ERROR, RUN_ALL, RUN_TEST, RUNNING, SKIPPED, Solver
 from geoknit.runtime import protocol as p
 from geoknit.runtime.worker import worker_main
@@ -368,9 +368,12 @@ class WorkerExecutor:
 
     def _after_node(self, nid: str, keys: GraphKeys) -> GraphKeys:
         """Refresh the view nodes after ``nid`` ran. A component wired into a Map
-        Layer's style input now has a result, so the keys are computed again and
-        the new layers sent to the worker."""
-        feeds_style = any(w.src == nid and not self.graph.carries(w) for w in self.graph.wires)
+        Layer's style input (directly or through Panels) now has a result, so the
+        keys are computed again and the new layers sent to the worker."""
+        feeds_style = any(
+            not self.graph.carries(w) and origin_wire(self.graph, w).src == nid
+            for w in self.graph.wires
+        )
         if feeds_style and not self.graph.nodes[nid].is_param:
             new = compute_keys(self.graph, self.base_dir, self)
             try:

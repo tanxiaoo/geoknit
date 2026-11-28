@@ -69,10 +69,14 @@ function Window({ view }: { view: NodeView }) {
   const pending = useRef<StyleEdit>({});
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [refused, setRefused] = useState(0); // remounts the text fields after a refusal
+  // PATCHes sent and not answered: the saved style may not hold the last edit yet
+  const inflight = useRef(0);
+  const [settled, setSettled] = useState(0);
+  const epoch = useRef(store.workflowEpoch);
 
   useEffect(() => {
-    if (!Object.keys(pending.current).length && !timer.current) setDraft({});
-  }, [view]);
+    if (!Object.keys(pending.current).length && !timer.current && !inflight.current) setDraft({});
+  }, [view, settled]);
 
   const flush = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -80,11 +84,15 @@ function Window({ view }: { view: NodeView }) {
     const patch = pending.current;
     pending.current = {};
     if (!Object.keys(patch).length) return;
+    if (store.workflowEpoch !== epoch.current) return; // another workflow is open now
+    inflight.current += 1;
     void store.tryPatchNode(id, { style: patch }).then((ok) => {
+      inflight.current -= 1;
       if (!ok) {
         setDraft({});
         setRefused((n) => n + 1);
       }
+      setSettled((n) => n + 1);
     });
   }, [id]);
   useEffect(() => () => flush(), [flush]); // closing the window sends what is left

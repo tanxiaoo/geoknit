@@ -287,7 +287,8 @@ def test_named_colormap_draws_as_today(imd: tuple[TestClient, str, Path]) -> Non
     for name in ("viridis", "terrain"):
         today = client.get(f"/tiles/{key}/{z}/{x}/{y}.png?colormap={name}&min=5&max=80").content
         cmap = json.dumps({"kind": "continuous", "name": name, "min": None, "max": None})
-        r = client.get(f"/tiles/{key}/{z}/{x}/{y}.png?min=5&max=80", params={"cmap": cmap})
+        # all in params: newer httpx drops a URL query when params= is given
+        r = client.get(f"/tiles/{key}/{z}/{x}/{y}.png", params={"cmap": cmap, "min": 5, "max": 80})
         assert r.content == today
         fixed = json.dumps({"kind": "continuous", "name": name, "min": 5, "max": 80})
         assert client.get(f"/tiles/{key}/{z}/{x}/{y}.png", params={"cmap": fixed}).content == today
@@ -510,3 +511,14 @@ def test_a_run_closes_the_files_the_map_keeps_open(imd: tuple[TestClient, str, P
     assert tiles._pool.open_files >= 1  # kept for the next tile
     _run(client)
     assert tiles._pool.open_files == 0
+
+
+def test_classes_match_float_rasters_in_their_own_dtype() -> None:
+    """Review fix: 0.1 read from a float32 raster still matches the class 0.1."""
+    cm = tiles.types.Colormap("classes", classes=((0.1, tiles.types.Color("#FF0000"), ""),))
+    values = np.array([[0.1, 0.2]], dtype="float32").astype("float64")
+    rgba = tiles._classes_rgba(cm, values, np.dtype("float32"))
+    assert tuple(rgba[:, 0, 0]) == (255, 0, 0, 255) and rgba[3, 0, 1] == 0
+    ints = np.array([[1.0, 2.0]])
+    cm = tiles.types.Colormap("classes", classes=((2, tiles.types.Color("#0000FF"), ""),))
+    assert tuple(tiles._classes_rgba(cm, ints, np.dtype("uint8"))[:, 0, 1]) == (0, 0, 255, 255)

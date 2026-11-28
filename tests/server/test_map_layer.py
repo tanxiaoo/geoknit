@@ -262,3 +262,37 @@ def test_display_tab_lists_map_layer_and_map_viewer(client: TestClient) -> None:
         "data", "colormap", "color", "opacity", "bands", "name",
     ]  # fmt: skip
     assert entries["param/layer"]["outputs"][0]["type"] == "Layer"
+
+
+def test_colormap_from_a_component_through_a_panel_reaches_the_layer_in_the_same_run(
+    setup: tuple[TestClient, dict[str, str]],
+) -> None:
+    """Review fix: the layer is rebuilt after the component even when a Panel sits between."""
+    client, ids = setup
+    maker = _add(client, "inline", source=MAKE_CLASSES)
+    between = _add(client, "param/panel")
+    r = client.request(
+        "DELETE",
+        "/api/wires",
+        json={"from": [ids["cmap"], "value"], "to": [ids["layer"], "colormap"]},
+    )
+    assert r.status_code == 204, r.text
+    _wire(client, maker, "cmap", between, "data")
+    _wire(client, between, "data", ids["layer"], "colormap")
+    _run(client)
+    panel = client.get(f"/api/nodes/{ids['panel']}/output").json()["outputs"]["data"]
+    assert "classes" in panel
+
+
+def test_a_band_number_past_the_last_band_is_an_issue(
+    setup: tuple[TestClient, dict[str, str]],
+) -> None:
+    """Review fix: bands "99" says why instead of drawing a blank layer."""
+    client, ids = setup
+    _run(client)
+    _patch(client, ids["layer"], style={"bands": "99"})
+    view = _graph(client)["nodes"][ids["layer"]]["layer"]
+    assert "no band 99" in view["issues"]["bands"]
+    _patch(client, ids["layer"], style={"bands": "1"})
+    view = _graph(client)["nodes"][ids["layer"]]["layer"]
+    assert "bands" not in view["issues"] and view["value"]["bands"] == [1]

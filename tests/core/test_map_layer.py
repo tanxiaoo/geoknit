@@ -216,7 +216,7 @@ def test_map_layer_is_done_with_read_raster_without_running(
     assert ex.solver.states[ids["layer"]] == "never_run"
     plan = ex.solver.plan()
     assert ids["layer"] not in plan and ids["viewer"] not in plan
-    assert ex.solver.out_of_date_count == 5  # path, read, select, colormap, panel
+    assert ex.solver.out_of_date_count == 2  # read, select: components only, no Params
     report = ex.run()
     assert report.ok
     assert ids["layer"] not in report.ran and ids["viewer"] not in report.ran
@@ -245,7 +245,7 @@ def test_changing_the_colormap_restyles_without_out_of_date(
     g.set_value(ids["cmap"], types.Colormap.named("magma"))
     out = {n for n, s in ex.solver.states.items() if s != "done"}
     assert out == {ids["cmap"]}  # only the Colormap itself, as every Params edit
-    assert ex.solver.out_of_date_count == 1
+    assert ex.solver.out_of_date_count == 0  # Params never count in the banner
     assert ex.solver.states[ids["select"]] == "done"  # Read Raster's downstream component
     assert ex.solver.states[ids["layer"]] == "done"
     after = compute_keys(g).ports[ids["layer"]]["layer"]

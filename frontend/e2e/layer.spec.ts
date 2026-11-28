@@ -166,8 +166,8 @@ test("a Map Layer is a view node: done with its data, restyled without a Run", a
   const g2 = await graph(page);
   expect(g2.nodes[colormap].state).toBe("out_of_date");
   for (const id of [raster, select, layer, panel]) expect(g2.nodes[id].state, id).toBe("done");
-  expect(g2.out_of_date).toBe(1);
-  await expect(page.getByTestId("banner-text")).toContainText("1 component out of date");
+  expect(g2.out_of_date).toBe(0); // Params never count in the banner
+  await expect(page.getByTestId("banner")).toHaveCount(0);
   await expect(node).toHaveAttribute("data-state", "done");
   await expect(page.getByTestId(`node-${select}`)).toHaveAttribute("data-state", "done");
   expect(started.length).toBe(startedBefore); // nothing ran

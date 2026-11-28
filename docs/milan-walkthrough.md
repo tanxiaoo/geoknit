@@ -48,9 +48,9 @@ it opens read-only until you click **Trust**.
   grey Number, indigo Colormap, magenta Layer. The legend at the bottom lists
   them all.
 
-The banner says *23 components out of date*: nothing has run yet. (The Map
-Layer and the Map Viewer are not counted: they only show results, see
-section 4.)
+The banner says *11 components out of date*: nothing has run yet. (It
+counts components only: inputs, Panels, the Map Layer and the Map Viewer are
+never counted.)
 
 ### Reading it left to right
 

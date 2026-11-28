@@ -45,13 +45,14 @@ def test_map_viewer_refuses_values_that_are_not_map_layers() -> None:
             g.add_wire(src, "value", viewer, "layers")
 
 
-def test_map_viewer_has_no_key_and_is_done_when_its_inputs_are() -> None:
-    """A view node (change 03, section 4): never in a run plan, done with its sources."""
+def test_map_viewer_has_no_key_and_is_always_done() -> None:
+    """A view node (change 03, section 4): never in a run plan; always ``done``, it
+    draws whichever layers work (decided 28 Nov 2026)."""
     g, _, _, viewer = _viewer()
     keys = compute_keys(g)
     assert keys.nodes[viewer] is None and keys.ports[viewer] == {}
     ex = InProcessExecutor(g)
-    assert viewer not in ex.solver.plan() and ex.solver.states[viewer] == "never_run"
+    assert viewer not in ex.solver.plan() and ex.solver.states[viewer] == "done"
     report = ex.run()
     assert report.ok and viewer not in report.ran
     assert ex.solver.states[viewer] == "done" and ex.solver.out_of_date_count == 0

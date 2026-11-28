@@ -107,7 +107,7 @@ def test_map_layer_is_done_without_a_worker_run(setup: tuple[TestClient, dict[st
     assert layer["state"] == "never_run" and layer["style"] == {}
     # The layer is known from the graph (Read Raster gives a Raster) before any run.
     assert layer["layer"]["value"]["kind"] == "raster" and layer["layer"]["issues"] == {}
-    assert g["out_of_date"] == 5  # not the Map Layer, not the Map Viewer
+    assert g["out_of_date"] == 2  # Read Raster, Width: components only, no Params
     assert client.get(f"/api/nodes/{ids['layer']}/output").json()["outputs"] == {}
 
     plan = client.post("/api/run", json={}).json()["plan"]
@@ -149,7 +149,7 @@ def test_colormap_change_restyles_without_out_of_date(
     assert changed == [{"type": "map_changed", "node": ids["layer"], "viewers": [ids["viewer"]]}]
     states = events[-1]["states"]
     assert {n for n, s in states.items() if s != "done"} == {ids["cmap"]}
-    assert events[-1]["out_of_date"] == 1
+    assert events[-1]["out_of_date"] == 0  # Params never count in the banner
     g = _graph(client)
     assert g["nodes"][ids["width"]]["state"] == "done"  # Read Raster's downstream component
     after = g["nodes"][ids["layer"]]["layer"]

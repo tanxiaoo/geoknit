@@ -60,7 +60,9 @@ def test_build_run_and_read_the_synthetic_workflow(client: TestClient, project: 
     # Map Layer and Map Viewer are view nodes: never out of date, never in a plan.
     work = [n for n in recipe["nodes"] if n["component"] not in ("param/layer", "param/map")]
     assert len(work) < len(recipe["nodes"])
-    assert graph["out_of_date"] == len(work)
+    # the banner counts components only, never Params (decided 28 Nov 2026)
+    components = [n for n in recipe["nodes"] if not n["component"].startswith("param/")]
+    assert graph["out_of_date"] == len(components)
 
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json()["type"] == "states"
@@ -74,7 +76,6 @@ def test_build_run_and_read_the_synthetic_workflow(client: TestClient, project: 
     assert [e["type"] for e in events].count("run_finished") == 1
 
     # started → log… → done, in that order, for every component node.
-    components = [n for n in recipe["nodes"] if not n["component"].startswith("param/")]
     for raw in components:
         nid = ids[raw["id"]]
         mine = [e["type"] for e in events if e.get("node") == nid]

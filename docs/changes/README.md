@@ -127,3 +127,10 @@ the code. They are fixed like the decisions above.
 
   Large tables are paged from the disk cache through an API endpoint (e.g.
   200 rows per page), under a header line "N rows × M columns".
+
+## Decisions on the change 03 review (28 Nov 2026)
+
+- The Map Viewer is always `done`: it draws every layer whose source works,
+  whatever the state of the others.
+- The "N components out of date" banner counts components only. Params nodes
+  (inputs, Panels, Map Layer, Map Viewer) never count.

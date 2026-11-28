@@ -653,18 +653,21 @@ Run:
 - Wires into a Map Layer's style inputs (`colormap`, `color`, `opacity`,
   `bands`, `name`) carry no out-of-date. Changing a Colormap, Color Swatch or
   Slider that only feeds those inputs marks that Params node itself out of
-  date, as every Params edit does, and the open maps redraw at once
+  date, as every Params edit does (it is not counted in the banner), and
+  the open maps redraw at once
   (section 8). A `style` edit, wiring or unwiring a style input, and deleting
   a node that only feeds style inputs mark nothing out of date either; a Panel
   or component downstream of the Map Layer keeps its state until the next
   Run, which finds its key changed and runs it again (as for a changed file).
 - View nodes are not in a run plan's work and are not counted in "N
-  components out of date". Their state (`Solver.view_state`) follows their
-  sources, which are a Map Layer's `data` wire and every wire into a Map
-  Viewer's `layers`: `done` when all sources are; `skipped` when one is
-  `error` or `skipped` (so a Panel on the layer is skipped too); `never_run`
-  without sources or when one never ran; otherwise `out_of_date`. Style
-  sources never affect it.
+  components out of date". Their state is `Solver.view_state` (decided
+  28 Nov 2026):
+  - A Map Viewer is always `done`. It draws every layer whose source works
+    and leaves out the others, whatever their state.
+  - A Map Layer follows its `data` wire: `done` when its source is (the
+    viewer draws it then); `skipped` when that is `error` or `skipped` (so a
+    Panel on the layer is skipped too); `never_run` without data or when it
+    never ran; otherwise `out_of_date`. Style sources never affect it.
 - A Run with mode `test` on a view node plans nothing; `to_node` plans its
   upstream. With view nodes in the graph, plans follow the whole graph's
   topological order, so a Panel on a Map Layer runs after a component wired
@@ -682,7 +685,10 @@ Run:
   starts a fresh worker. In-memory results are lost; the disk cache stays.
 
 Runs are manual only in v0.1. A toolbar banner shows
-"N components out of date · Run".
+"N components out of date · Run". It counts components only: Params nodes
+(inputs, Panels, Map Layer, Map Viewer) never count, even when their own
+state is `out_of_date`, and the banner is hidden when the count is 0
+(decided 28 Nov 2026). `out_of_date` in the API is this count.
 
 ### Worker protocol
 

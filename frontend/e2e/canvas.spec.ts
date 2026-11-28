@@ -227,8 +227,13 @@ test.describe.serial("canvas", () => {
       )
       .toEqual([...expected].sort());
     await expect(page.getByTestId("banner-text")).toContainText("n_trees changed");
+    // the banner counts components only, never Params (the slider, Panels)
+    const kinds = new Map<string, string>(
+      (graph.workflow.nodes as { id: string; component: string }[]).map((n) => [n.id, n.component]),
+    );
+    const components = [...expected].filter((id) => !kinds.get(id)!.startsWith("param/"));
     await expect(page.getByTestId("banner-text")).toContainText(
-      `${expected.size} components out of date`,
+      `${components.length} components out of date`,
     );
 
     const runs = await page.evaluate(() => window.__geoknit!.getState().runCount);

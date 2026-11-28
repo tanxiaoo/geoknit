@@ -233,11 +233,15 @@ Points the sections above leave open, as built in step 3 (backend):
   style JSON being `MapLayer.to_json()` without `source` (sorted keys, compact
   separators). `keys.nodes` is `None` for a Map Layer (no work, no cache
   entry), as for a Panel.
-- **View-node state** (`Solver.view_state`): sources are a Map Layer's `data`
-  wire and every wire into a Map Viewer's `layers`. `done` when all sources
-  are; `skipped` when one is `error` or `skipped` (so a Panel on the layer is
-  skipped too); `never_run` without sources or when one never ran; otherwise
-  `out_of_date`. Style sources never affect it. A Run with mode `test` on a
+- **View-node state** (`Solver.view_state`, revised 28 Nov 2026 after
+  Xiao's review): a Map Viewer is always `done` and draws every layer whose
+  source works. A Map Layer follows its `data` wire: `done` when it is;
+  `skipped` when it is `error` or `skipped` (so a Panel on the layer is
+  skipped too); `never_run` without data or when it never ran; otherwise
+  `out_of_date`. Style sources never affect it.
+- **Banner count** (decided 28 Nov 2026): "N components out of date" counts
+  components only; Params nodes (inputs, Panels, view nodes) never count, so
+  a Colormap edit leaves the banner hidden. A Run with mode `test` on a
   view node plans nothing; `to_node` plans its upstream.
 - **Plan order**: with view nodes in the graph, plans follow the whole
   graph's topological order, so a Panel on a Map Layer runs after a

@@ -8,7 +8,7 @@ Map Layer's style inputs (``Graph.carries``).
 
 from __future__ import annotations
 
-from geoknit.core.graph import PARAM_LAYER, Graph, GraphError
+from geoknit.core.graph import PARAM_LAYER, PARAM_MAP, Graph, GraphError
 
 NEVER_RUN = "never_run"
 OUT_OF_DATE = "out_of_date"
@@ -77,8 +77,12 @@ class Solver:
         return list(dict.fromkeys(w.src for w in self.graph.wires_into(node_id, port)))
 
     def view_state(self, node_id: str) -> str:
-        """``done`` when every source is; ``skipped`` when one failed; ``never_run``
-        without sources or when one never ran; otherwise ``out_of_date``."""
+        """A Map Viewer is always ``done``: it draws whichever layers work (decided
+        28 Nov 2026). A Map Layer follows its data: ``done`` when it is; ``skipped``
+        when it failed; ``never_run`` without data or before a run; otherwise
+        ``out_of_date``."""
+        if self.graph.node(node_id).component == PARAM_MAP:
+            return DONE
         found = [self.states.get(s, NEVER_RUN) for s in self.view_sources(node_id)]
         if not found:
             return NEVER_RUN
@@ -100,8 +104,9 @@ class Solver:
 
     @property
     def out_of_date_count(self) -> int:
-        """For the "N components out of date · Run" banner (view nodes never count)."""
-        return sum(self.needs_run(n) for n in self.graph.nodes)
+        """For the "N components out of date · Run" banner: components only, so
+        Params nodes (inputs, Panels, view nodes) never count (decided 28 Nov 2026)."""
+        return sum(self.needs_run(n) and not v.is_param for n, v in self.graph.nodes.items())
 
     def _order(self, wanted: set[str]) -> list[str]:
         """``wanted`` in topological order. View nodes are left out of plans, so with

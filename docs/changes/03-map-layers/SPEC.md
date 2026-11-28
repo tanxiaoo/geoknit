@@ -1,6 +1,6 @@
 # Change 03: Map layers and colormaps
 
-Status: agreed (checked against the code, 26 Nov 2026) · Needs 01 (types,
+Status: done (merged into `docs/SPEC.md`, 28 Nov 2026; checked against the code, 26 Nov 2026) · Needs 01 (types,
 union inputs, list values, Color and Colormap nodes), 02 (basemap `auto`) ·
 Touches `docs/SPEC.md` sections 5, 6, 7, 8, 9, 10
 
@@ -283,9 +283,8 @@ Points the sections above leave open, as built in step 3 (backend):
   or on pointer up), so a drag is one PATCH. "Reset all" sends `style: null`.
   The `field` dropdown is filled from `GET /api/layer/{id}` `columns`, and
   disabled until they are known. On `map_changed` the page re-reads the graph.
-- **Export** (until step 5 writes the full comment): a Map Layer is
-  `# nX Map Layer: view only, not exported`, and a Panel on it prints
-  `"(Map Layer, not exported)"`.
+- **Export**: step 3 wrote a stub comment; step 5 wrote the full one
+  (section 10 below).
 
 ## 9. Implementation choices (step 4)
 
@@ -351,6 +350,25 @@ Points sections 4 and 6 leave open, as built in step 4 (Map Viewer with Layers):
   `GET /api/map/{id}` on each. Raster tiles get a new URL (new `cmap`), so
   MapLibre reloads them; vector paint is set again from the new style. A
   `map_changed` for another viewer does not re-read.
+
+## 10. Implementation choices (step 5)
+
+- **Examples**: `examples/synthetic/imd.geoknit` and
+  `examples/milan_imd/milan_imd.geoknit` add a Colormap `n23` (classes 1–7,
+  one per Reclassify rule, labelled `0 %`, `0–20 %`, …, `100 %`, green to dark
+  red, `other` transparent), a Map Layer `n24` (`data` ← Reclassify
+  `classes`, `colormap` ← `n23`, `style: {"name": "IMD classes"}`) and a Map
+  Viewer `n25` (`layers` ← `n24.layer`, then Split Points `test`). Nothing
+  reads them, so the metrics are unchanged; the predicted map is not wired in
+  (it would put the viewer downstream of the sliders the canvas test moves).
+- **Export comments**: `# <id> Map Layer "<name>": <data>, <input> <node>, …`
+  with the name from `layers.layer_name` (wired Params value, saved style,
+  else `<source title> › <port>`, else the node title without data), the
+  data as `<node>.<port>` and each wired style input in
+  `LAYER_STYLE_INPUTS` order; `no data` without a data wire. The Map Viewer
+  is `# <id> Map Viewer: <node>.<port>, …` or `no layers`. Referenced nodes
+  use the script's padded names (`n04`), the leading id the node id, as the
+  other comments do.
 
 ---
 

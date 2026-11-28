@@ -358,8 +358,28 @@ def test_layer_json_round_trip() -> None:
 def test_export_keeps_working_with_a_map_layer(synthetic_data: dict[str, Path]) -> None:
     g, ids = _raster_layer(synthetic_data["predictors"])
     script = export_script(g, workflow_name="t.geoknit").script
-    assert f"# {ids['layer']} Map Layer" in script
+    read, cmap, layer = (ids[k] for k in ("read", "cmap", "layer"))
+    pad = {i: f"n{int(i[1:]):02d}" for i in ids.values()}
+    comment = f'# {layer} Map Layer "Read Raster › raster"'
+    assert f"    {comment}: {pad[read]}.raster, colormap {pad[cmap]}\n" in script
+    assert f"    # {ids['viewer']} Map Viewer: {pad[layer]}.layer\n" in script
     assert '"(Map Layer, not exported)"' in script
+    assert f"{pad[cmap].upper()}_COLORMAP = Colormap.named(" in script  # change 01
+
+
+def test_export_comment_names_the_layer_and_every_style_wire() -> None:
+    g = Graph()
+    text = g.add_component(PARAM_TEXT).id
+    g.set_value(text, "Built-up")
+    color = g.add_component(PARAM_COLOR).id
+    layer = g.add_component(PARAM_LAYER).id
+    g.add_wire(text, "value", layer, "name")
+    g.add_wire(color, "value", layer, "color")
+    script = export_script(g).script
+    assert f'# {layer} Map Layer "Built-up": no data, color n02, name n01\n' in script
+    g.remove_wire(text, "value", layer, "name")
+    g.set_style(layer, {"name": "AOI"})
+    assert f'# {layer} Map Layer "AOI": no data, color n02\n' in export_script(g).script
 
 
 def test_round_trip_of_the_whole_raster_workflow(synthetic_data: dict[str, Path]) -> None:

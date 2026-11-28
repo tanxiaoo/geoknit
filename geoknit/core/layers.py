@@ -210,6 +210,22 @@ def set_fields(graph: Graph, node_id: str, build: LayerBuild) -> frozenset[str]:
     return frozenset(out)
 
 
+def _name(graph: Graph, node_id: str, style: dict[str, Any]) -> str:
+    """The ``name`` style value, else the data's title and port, else the node title."""
+    name = style.get("name")
+    if isinstance(name, str) and name.strip():
+        return name
+    data = graph.wires_into(node_id, "data")
+    if data:
+        return f"{graph.node(data[0].src).title} › {data[0].src_port}"
+    return graph.node(node_id).title
+
+
+def layer_name(graph: Graph, node_id: str, results: DoneResults | None = None) -> str:
+    """The name a Map Layer gives its layer (also without data, for the export comment)."""
+    return _name(graph, node_id, _style_inputs(graph, node_id, results, LayerBuild()))
+
+
 def build_layer(
     graph: Graph, node_id: str, data_key: str | None, results: DoneResults | None = None
 ) -> LayerBuild:
@@ -228,10 +244,7 @@ def build_layer(
     if kind is None:
         build.issues["data"] = "the data's type (Raster or Vector) is known once it has a result"
         return build
-    src = graph.node(data.src)
-    name = style.get("name")
-    if not isinstance(name, str) or not name.strip():
-        name = f"{src.title} › {data.src_port}"
+    name = _name(graph, node_id, style)
     opacity = style.get("opacity", DEFAULT_OPACITY)
     if not 0 <= opacity <= 1:
         build.issues["opacity"] = f"opacity {opacity:g} is not between 0 and 1"

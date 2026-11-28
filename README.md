@@ -89,7 +89,7 @@ and validated on CLMS IMD 2018. It needs three data files that you copy into
 | use a file | drag it from the folder tree on the left onto the canvas |
 | connect | drag from an output (right side) to an input (left side); colours show the type |
 | see a result | wire it into a **Panel** (Params tab), or hover an output |
-| see a map | wire rasters and vectors into a **Map Viewer** and double-click it |
+| see a map | wire rasters and vectors into a **Map Viewer** (Display tab) and double-click it; a **Map Layer** with a **Colormap** styles one layer |
 | change code | double-click a component → **Code**; **Test** runs just that one |
 | keep a component | in its window, **Save as component…** (it appears in the ribbon) |
 | run without the browser | `geoknit run my-workflow.geoknit` (prints every Panel) |

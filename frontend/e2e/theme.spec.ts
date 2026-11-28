@@ -63,9 +63,17 @@ test.describe.serial("theme screenshots", () => {
     }
     await api(page, "PATCH", "/api/view", { display: "text" });
 
-    const doc = JSON.parse(readFileSync(WORKFLOW, "utf-8")) as {
+    const file = JSON.parse(readFileSync(WORKFLOW, "utf-8")) as {
       nodes: { id: string; component: string }[];
-      wires: unknown[];
+      wires: { from: [string, string]; to: [string, string] }[];
+    };
+    // The baselines predate the example's own Map Viewer (change 03 step 5: Colormap,
+    // Map Layer, Map Viewer); leave those out so the canvas looks as it did.
+    const later = new Set(["param/colormap", "param/layer", "param/map"]);
+    const dropped = new Set(file.nodes.filter((n) => later.has(n.component)).map((n) => n.id));
+    const doc = {
+      nodes: file.nodes.filter((n) => !dropped.has(n.id)),
+      wires: file.wires.filter((w) => !dropped.has(w.from[0]) && !dropped.has(w.to[0])),
     };
     const { ids } = (await api(page, "POST", "/api/paste", {
       nodes: doc.nodes,

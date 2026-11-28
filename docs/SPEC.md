@@ -26,8 +26,9 @@ fix one of them in the same change.
   (section 7).
 - Component window: Settings and Code tabs that edit the same component,
   Output log always visible.
-- Panel component (inspect any output: values, lists, tables) and Map Viewer
-  component.
+- Panel component (inspect any output: values, lists, tables), Map Viewer with
+  any number of layers, and Map Layer, which styles one layer with a Colormap
+  or Color (section 8).
 - Project folder panel; drag a file onto the canvas to get a Text with its
   path.
 - Manual Run, Run to here, Test (one component), Stop.
@@ -89,16 +90,15 @@ Worker process                    imports geo libraries, runs components,
 | Model  | `geoknit.types.ModelBundle` | `#BE185D` / `#F472B6` | estimator type, task, target, feature names, parameters |
 | Color  | `geoknit.types.Color` | `#4D7C0F` / `#A3E635` | `Color #0B7A7C` |
 | Colormap | `geoknit.types.Colormap` | `#4338CA` / `#818CF8` | kind, name, min/max or number of classes (`Colormap · continuous · viridis · 2–98 % stretch`) |
-| Layer  | a map layer from Map Layer to Map Viewer (change 03) | `#A21CAF` / `#E879F9` | layer name, source type, style |
+| Layer  | `geoknit.types.MapLayer`, a styled map layer from Map Layer to Map Viewer | `#A21CAF` / `#E879F9` | `Layer · <name> · <kind>`, its source, its style |
 
 The port colours are the `--gk-type-<name>` tokens of the frontend theme
 (section 8, "Theme"): the dark theme uses lighter shades of the same hues, so
 wires stay visible on a dark canvas.
 
 `geoknit.types` here means `geoknit/core/types.py`. `DATA_TYPES` (Python, and
-`frontend/src/types.ts`) lists these ten types; Layer is only a name until
-change 03 defines its object, and only Map Layer makes one (no port editor
-offers it).
+`frontend/src/types.ts`) lists these ten types. Only Map Layer makes a Layer
+(no port editor offers it).
 
 `ModelBundle` is a dataclass: `estimator`, `task` (`"regression"` or
 `"classification"`), `target: str`, `feature_names: list[str]`,
@@ -132,6 +132,15 @@ colour such as `teal`) is an error naming the accepted forms.
   `{kind, name, stops?, min, max, reverse}` (a named ramp whose stops were not
   edited leaves out `stops`) or `{kind: "classes", classes: [[value, hex,
   label], …], other}`. Unknown keys are an error.
+
+**MapLayer** (the Layer value) is a frozen dataclass: `source` (the port key
+of the data, a Raster or Vector result in the cache), `kind` (`"raster"` |
+`"vector"`), `name`, `colormap: Colormap | None`, `color: Color | None`,
+`opacity: float` (0–1, default 1), `bands: tuple[int, ...] | None` (1 or 3
+band numbers from 1) and `field: str | None` (vectors only). `None` style
+fields mean the Map Viewer's default for that layer. It holds no pixels or
+features. Its JSON form (`to_json()` / `from_json()`) has the same keys,
+`colormap` in Colormap JSON, `color` as hex, `bands` as a list.
 
 `Any` is an input-only type (Panel, Map Viewer, inputs of the Python
 component). An output is `Any` only while it is unresolved: an unwired Panel,
@@ -304,7 +313,7 @@ print(f"{len(rules)} classes")
   `outputs`, `ports` (below), `requires` (pip package names).
 - A port is `name: Type`, or a mapping:
   - inputs: `type` (one type or a list, section 3), optional `access`
-    (`item` | `list`, e.g. `layers: {type: Any, access: list}`) and
+    (`item` | `list`, e.g. `values: {type: Number, access: list}`) and
     `file: write`;
   - outputs: `type` or `like: <input>` (section 3), optional `access: list`.
 - `file: write` on a Text input names a file the component writes, e.g.
@@ -566,9 +575,21 @@ JSON, UTF-8, sorted keys, 2-space indent, so it diffs well in git.
   | Color Swatch | `param/color` | Color | `value` (`"#RRGGBB[AA]"`) |
   | Colormap | `param/colormap` | Colormap | `value` (the Colormap JSON, section 3) |
   | Panel | `param/panel` | like its input | optional `size: [width, height]` once resized |
+  | Map Layer | `param/layer` | Layer | `style` (below; `{}` for a new one) |
   | Map Viewer | `param/map` | – | optional `map: {basemap, styles}` (section 8) |
 
   Component nodes always have `display`.
+- **Map Layer `style`** holds the values of its unwired style inputs and the
+  vector `field` (section 8, "Map Layer"): keys `colormap` (Colormap JSON),
+  `color` (upper-case `#RRGGBB[AA]`), `opacity` (a number 0–1), `bands`
+  (text such as `"4,3,2"` or `"B04"`, spaces removed), `name` and `field`
+  (non-empty text). It is checked on load and on `PATCH` (an unknown field or
+  a bad value is refused, naming the node) and stored in that normal form, so
+  save → load → save keeps the bytes. Editing it is one undo step; it is not a
+  layout-only key like `map`, but it marks nothing out of date (section 6).
+- **Map Viewer `map`**: `basemap` is `auto` (default, follows the theme),
+  `light`, `dark` or `none`; `styles` maps a layer id to its style, whose
+  `colormap` is a named ramp, `categorical`, or a Colormap JSON object.
 - **Integer mode.** With `integer: true` a Number or Slider value is a Python
   `int`. Values are rounded half up (`2.5` → `3`, `-2.5` → `-2`, like the
   frontend's `Math.round`), exactly: an integer stays as it is (also above
@@ -626,6 +647,30 @@ Changing a setting, the code, a wire, or a Params value marks that node and
 everything downstream `out_of_date`. On Run, components that read files also
 check the file's size and modification time.
 
+**View nodes.** Map Layer and Map Viewer only show results; they never need a
+Run:
+
+- Wires into a Map Layer's style inputs (`colormap`, `color`, `opacity`,
+  `bands`, `name`) carry no out-of-date. Changing a Colormap, Color Swatch or
+  Slider that only feeds those inputs marks that Params node itself out of
+  date, as every Params edit does, and the open maps redraw at once
+  (section 8). A `style` edit, wiring or unwiring a style input, and deleting
+  a node that only feeds style inputs mark nothing out of date either; a Panel
+  or component downstream of the Map Layer keeps its state until the next
+  Run, which finds its key changed and runs it again (as for a changed file).
+- View nodes are not in a run plan's work and are not counted in "N
+  components out of date". Their state (`Solver.view_state`) follows their
+  sources, which are a Map Layer's `data` wire and every wire into a Map
+  Viewer's `layers`: `done` when all sources are; `skipped` when one is
+  `error` or `skipped` (so a Panel on the layer is skipped too); `never_run`
+  without sources or when one never ran; otherwise `out_of_date`. Style
+  sources never affect it.
+- A Run with mode `test` on a view node plans nothing; `to_node` plans its
+  upstream. With view nodes in the graph, plans follow the whole graph's
+  topological order, so a Panel on a Map Layer runs after a component wired
+  into the layer's style.
+- A `style` PATCH is refused during a run (409), as other result edits.
+
 ### Run commands
 
 - **Run**: every node that is not `done` (out of date, never run, error,
@@ -656,8 +701,11 @@ so behaviour matches Windows):
     carry a list although declared `item` (section 3). The in-process
     executor uses the graph directly.
   - `put_value {cache_key, value}`: a Params value (Text, Number, Slider,
-    Boolean Toggle, Value List, Color Swatch, Colormap) or an empty Panel's
-    `None`, sent before each run so the worker can look it up.
+    Boolean Toggle, Value List, Color Swatch, Colormap), an empty Panel's
+    `None`, or a Map Layer's `MapLayer`, sent before each run so the worker
+    can look it up. Map Layers are sent again after a component wired into a
+    style input finishes (its result now resolves, so later nodes get the new
+    layer).
   - `clear_cache` (answered by `cleared {complete}`), `shutdown`.
 - worker → server: `ready {pid}`, `started`, `log {line}`,
   `done {outputs: {port: {cache_key, summary, view}}, cached}`,
@@ -682,8 +730,9 @@ so behaviour matches Windows):
   (the next Run sees the new size/mtime and recomputes), and the cache can
   delete its own files.
 - Params nodes (Text, Number, Slider, Boolean Toggle, Value List, Color
-  Swatch, Colormap, Panel, Map Viewer) are handled by the server, which also
-  builds their summaries and views; only components go to the worker.
+  Swatch, Colormap, Panel, Map Layer, Map Viewer) are handled by the server,
+  which also builds their summaries and views; only components go to the
+  worker.
 - If the worker dies on its own (e.g. a component calls `os._exit`), the
   running node gets `error` "the worker process stopped unexpectedly" and a
   fresh worker is started.
@@ -705,7 +754,11 @@ The server forwards these as WebSocket events to the browser.
     do not. A Slider whose value only changes type (`5` → `5.0`) gets a new
     key;
   - Panel: no key; its output reuses the key of the wire feeding it;
-  - Map Viewer: no key and no outputs; it is `done` once its inputs are.
+  - Map Layer: no node key and no cache entry; its `layer` port key is
+    `<sha256("layer" + data port key + style JSON)>.layer`, the style JSON
+    being `MapLayer.to_json()` without `source` (sorted keys, compact
+    separators). Without data the port key is the empty key (value `None`);
+  - Map Viewer: no key and no outputs.
 - A port key is `<node key>.<port>`.
 - **File fingerprint**: a Text value, or a text setting of a component, that
   names an existing file (relative to the project folder) adds its absolute
@@ -742,7 +795,9 @@ The server forwards these as WebSocket events to the browser.
   Otherwise `format: "list"`: a folder `<port>/` with one file per element
   named by its index in the element type's format (`0.tif`, `0.ref.json`,
   `1.parquet`, …) and `file: "<port>/index.json"` (`{"items": [<element
-  info>, ...]}`).
+  info>, ...]}`). One element is addressed by `<port key>[i]`
+  (`cache.split_element`; `DiskCache.port_info`, `read_port` and
+  `band_names` accept it), which is how the Map Viewer draws list elements.
 - COG overviews use nearest resampling for integer rasters (class values stay
   intact) and average for floats; the Map Viewer draws its tiles from them.
 - Entries are written to a temporary folder and renamed, so a crash never
@@ -799,9 +854,8 @@ Components are listed by tab and group, in ribbon order
 | Params › Input | Boolean Toggle | – | Boolean | value; click toggles |
 | Params › Input | Value List | – | Number or Text (from its options) | options (label, value), the chosen value |
 | Params › Style | Color Swatch | – | Color | value (hex) |
-| Params › Style | Colormap | – | Colormap | value (a named ramp until change 03's editor) |
+| Params › Style | Colormap | – | Colormap | value; double-click opens the Colormap editor (section 8) |
 | Params › Inspect | Panel | data: Any | data: `{like: data}` (pass-through) | shows the Panel viewer (section 8); yellow, resizable |
-| Params › Map | Map Viewer | layers: Any (list) | – | double-click opens the map window (section 8); no code; styles saved with the node |
 | Vector › Files | Read Vector | path: Text | vector | layer=None |
 | Vector › Files | Write Vector | vector, path: Text (`file: write`) | file: Text | format from extension: .gpkg, .shp, .geojson, .parquet |
 | Vector › CRS | Reproject | vector, crs: Text | reprojected: Vector | |
@@ -820,6 +874,8 @@ Components are listed by tab and group, in ribbon order
 | Model › Apply | Predict Raster | model, raster | map: Raster | window=512; band names must equal `model.feature_names`, else error listing the missing ones; float32 for regression, smallest int type for classes |
 | Validation › Classification | Confusion Matrix | map, reference: Vector, field: Text | matrix: Table, metrics: Table | matrix: reference classes as rows, map classes as columns; metrics: columns metric, class, value; overall accuracy and kappa first, then producer's/user's accuracy and F1 per class |
 | Validation › Regression | Regression Accuracy | map: Raster, reference: Vector, field: Text | metrics: Table | one row: n, dropped, RMSE, MAE, R², bias (observed − predicted); nearest pixel; points outside, on nodata or without a value dropped and counted |
+| Display › Style | Map Layer (`param/layer`) | data: Raster \| Vector; colormap: Colormap; color: Color; opacity: Number; bands: Text; name: Text | layer: Layer | a view node, no code; unwired style inputs set in its window and saved under `style` (section 8) |
+| Display › Map | Map Viewer (`param/map`) | layers: Raster \| Vector \| Layer (list) | – | a view node, no code; double-click opens the map window (section 8); styles saved with the node |
 | Script › Python | Python | user-defined | user-defined + out: Text | `ports: {inputs: editable, outputs: editable}`: ports added/removed in the component window; the template has no inputs |
 
 Random Forest and SVM inputs that also appear as settings (n_trees, max_depth,
@@ -829,8 +885,8 @@ Built-in references are `builtin/<folder>/<file>`, e.g.
 `builtin/sampling/split_points` and `builtin/validation/regression_accuracy`.
 Change 04 adds the Geometry components (Point, Polyline, Polygon, Bounding
 Box: ordinary components in `builtin/params/`, Params › Geometry, between
-Input and Style) and moves Map Viewer to Display (change 03; its id
-`param/map` stays).
+Input and Style). Map Viewer sits in Display › Map; its id `param/map` is
+the one it had under Params.
 
 ### Reference workflow: Milan IMD (`examples/milan_imd/`)
 
@@ -843,7 +899,14 @@ Text data/AlphaEarth_2018_Milan_UTM32N.tif ─ Read Raster ──┬─ Extract 
                                                            │        └─ Random Forest ← Text "IMD", Slider n_trees     │
                                                            └─ Predict Raster ← model ─┬─ Write Raster ← Text outputs/imd_rf.tif
                                                                                       └─ Regression Accuracy ← test points, Text "IMD" ─ Panel
+Reclassify ─ Map Layer "IMD classes" ← Colormap (7 classes, labelled) ─┬─ Map Viewer
+Split Points test ─────────────────────────────────────────────────────┘
 ```
+
+The Map Viewer (with its Map Layer and IMD class Colormap, one class per
+Reclassify rule) is off the metrics path: nothing reads it, so it never
+changes the metrics. `examples/synthetic/imd.geoknit` is the same workflow,
+map included, on generated data.
 
 Validation uses held-out sample points, not separate reference data:
 Stratified Sample stores the CLMS IMD of each point in the field `IMD`;
@@ -942,14 +1005,12 @@ light theme and are not made from the app; the app's own screenshots are in
     keeps the field's `AA`; the field also takes `r,g,b[,a]`, checked by the
     server.
   - Colormap: a gradient strip (class chips for a classes colormap) with the
-    ramp's name (`custom` for own stops, `N classes`). Double-click lists the
-    named ramps with a "Reversed" box; picking one sends `{kind: continuous,
-    name, min, max, reverse}`, keeping a continuous colormap's `min` / `max`.
-    A classes or custom colormap made through the API is drawn but can only
-    be replaced by a named ramp until change 03's colormap editor. Named
-    ramps are drawn from the 11 stops of `GET /api/colormaps`, loaded once
-    when the first Colormap node is drawn (a custom colormap from its own
-    `stops`; `reverse` flips them).
+    ramp's name (`custom` for own stops, `N classes`). Double-click opens the
+    Colormap editor (below). Named ramps are drawn from the 11 stops of
+    `GET /api/colormaps`, loaded once when the first Colormap node is drawn
+    (a custom colormap from its own `stops`; `reverse` flips them).
+  - Map Layer and Map Viewer (Display tab) are drawn as component nodes in the
+    Display colour; double-click opens their windows (below).
   - Panel: a yellow box with its input on the left and its pass-through
     output on the right, showing the Panel viewer (below).
 - **Icons** (section 4): `frontend/src/icons/registry.tsx` maps prefixed
@@ -1028,7 +1089,7 @@ A Panel shows what passes through it, by type:
 | list | the header line `list of N Type` (as `describe()`'s first line; `list of N` when mixed), then one row per element: its index and its one-line view (a Color: a small chip and the hex; a Colormap: a small strip and its name; otherwise the first line of `describe()`), and `… N more` past the first 50 |
 | Table | a scrollable grid with an index column and the column headers, under a header line "N rows × M columns" |
 | Vector | its attribute table, as for Table, with the geometry column showing the geometry type name (`Polygon`, `Point`, …, in italics) |
-| Raster, Model | the `describe()` summary |
+| Raster, Model, Layer | the `describe()` summary (a Layer: name, source and style, section 8 "Map Layer") |
 
 - **Views.** The worker sends a `view` next to each port's summary
   (section 6); Params nodes build theirs in the server. A Panel's view is the
@@ -1075,11 +1136,89 @@ A Panel shows what passes through it, by type:
 - `geoknit run` and the export keep printing the `describe()` text
   (section 10); only the canvas has the viewer.
 
+### Colormap editor
+
+Double-clicking a Colormap node opens a floating window:
+
+- **Kind**: Continuous | Classes, with a preview strip at the top.
+- **Continuous**: a named ramp (the ten of section 3) or Custom; Reverse;
+  min and max each "auto" (the layer's 2–98 % stretch) or a fixed number.
+  Custom shows the gradient with draggable stops; a click on the bar adds a
+  stop; each stop has a colour picker with a hex field and a position 0–1.
+- **Classes**: a table value | colour | label with Add, Remove and reorder;
+  "Other values": transparent or a colour; "Fill colours from ramp" assigns
+  colours from a named ramp to the listed values in order.
+- **Paste**: lines of `value, #hex, label` (tab or comma separated) pasted
+  into the table replace it, so a legend kept in a spreadsheet comes in at
+  once.
+- Each change is one `PATCH /api/nodes/{id}` `{value}`, so one undo step. It
+  makes a component that uses the Colormap out of date as usual, and redraws
+  open maps that use it through a Map Layer without a Run (section 6, "View
+  nodes").
+
+### Map Layer
+
+A Map Layer (`param/layer`, Display › Style, ribbon icon `gis:layers`)
+styles one map layer. It is a view node handled by the server, like Panel:
+no code, no worker run.
+
+| Input | Type | Default |
+|-------|------|---------|
+| data | Raster \| Vector | required |
+| colormap | Colormap | none → the Map Viewer's default for that layer |
+| color | Color | none → the Map Viewer's default vector colour (`#d62728`, both themes) |
+| opacity | Number | 1.0 (0–1) |
+| bands | Text | none → the default band choice (Map Viewer, "Rasters"); `"1"` or `"4,3,2"`, numbers or band names, 1 or 3 bands |
+| name | Text | the source node's title and port (`Reclassify › classes`) |
+
+Output: `layer: Layer` (a `MapLayer`, section 3).
+
+- **Style values** (`geoknit/core/layers.py`). Each style input takes, in
+  order: a wired Params node's current value (followed through Panels, also
+  when that node is out of date); a wired component's last done result, read
+  from its disk cache entry; the value saved in `style` (section 5); the
+  default. A wired value of the wrong type (after the usual Number → Text
+  conversion), an opacity outside 0–1, unknown band names, or a component
+  without a usable result (not run yet, or the disk cache is off) count as
+  unwired. A style input wired from a list is refused (they are `item`
+  inputs).
+- **Kind** comes from the data wire's type in the graph; when that is
+  ambiguous (a union output) it comes from the data's done result. So the
+  layer, and its port key (section 6), exist before any run whenever the
+  graph types say Raster or Vector. Band names in `bands` are matched against
+  the raster's band names read from its cache entry (no pixels); `field` is
+  kept only for vectors.
+- **Vectors by field**: a `colormap` on a vector layer colours its features
+  by the attribute `field`, chosen in the window from the vector's columns.
+  The colormap is continuous for numeric fields and matches classes on the
+  field's values. Without `colormap` (or without `field`), vectors use
+  `color`.
+- **Window** (double-click): colormap, opacity and name, plus bands for a
+  raster, colour and `field` for a vector (all but `field` before the data's
+  type is known), and any other input that is wired. A wired input whose
+  value is used is read-only with "from <node title>" ("(last result)" for a
+  component); one whose wired value is not used stays editable, with the
+  reason under it, and a problem with `data` shows at the top. The colormap
+  dropdown offers none and the named ramps (sent as the ramp name); a saved
+  colormap that is more than a plain ramp shows as "(edited)" until another
+  choice is made. Colour hex, bands and name are sent on Enter or blur (empty
+  resets the field); the colour picker and opacity slider send once they
+  rest (400 ms, or on pointer up), so a drag is one PATCH. "Reset all" sends
+  `style: null`. The `field` dropdown is filled from `GET /api/layer/{id}`
+  `columns`, and disabled until they are known. On `map_changed` (section 9)
+  the page re-reads the graph.
+- **Panel** on a Layer shows three lines: `Layer · <name> · <kind>`,
+  `source <key start>….<port>`, then the style (colormap, bands or colour and
+  field, opacity; `default` where the Map Viewer chooses).
+
 ### Map Viewer
 
 Map Viewer window: MapLibre map with an OpenStreetMap basemap (light or
-dark, following the theme by default), a layer list from the wired inputs, per-layer colormap / min / max / band(s) / opacity, a legend,
-and click-to-inspect pixel values of every layer.
+dark, following the theme by default), a layer list from the wired inputs,
+per-layer colormap / min / max / band(s) / opacity, a legend, and
+click-to-inspect pixel values of every layer. Its `layers` input is `{type:
+[Raster, Vector, Layer], access: list}`: a raw Raster or Vector wire is styled
+in the window, a Layer wire by its Map Layer.
 
 - **Node and window**: the canvas node shows its `layers` input and how many
   layers are wired; double-click opens the map window (no Settings/Code
@@ -1092,19 +1231,73 @@ and click-to-inspect pixel values of every layer.
 - **Layers**: one per wire, in wire order, with the id `<node id>.<port>` of
   its source. A layer is read from the disk cache by the port key of its
   source's last successful run, so it shows only after a Run, and not at all
-  with the disk cache off. Rasters and Vectors are shown; other types are
-  listed as "cannot be shown on a map". A list wired into it is reported as
-  unsupported ("a list of Raster cannot be shown on a map") until change 03
-  addresses list elements, and the tile, GeoJSON and inspect routes answer
-  `404` for it. Vectors are drawn above rasters; otherwise the first wire is
-  drawn on top.
+  with the disk cache off. A Table, Model, Text, … wire is refused (`X can't
+  connect to Raster | Vector | Layer`), and a Panel's wire is removed once the
+  Panel carries such a type, so "cannot be shown on a map" (`unsupported`) is
+  only reached by a value whose type the graph could not tell (a union output
+  or `Any` pass-through whose result is something else, or a list of simple
+  values stored as one JSON file). Vectors are drawn above rasters;
+  otherwise the first wire is drawn on top. The layer list is in wire order.
+- **Lists**: a list wire adds one layer per element. A done list result
+  stored one file per element gives the ids `<node id>.<port>[i]`, titles
+  `<title> › <port> [i]` and keys `<port key>[i]`; before a run (count
+  unknown) it is one `not_run` stub `<node id>.<port>`. The tile, GeoJSON,
+  stats and inspect routes answer element keys; the whole list port, an
+  index out of range, and `[i]` on a port that is no list answer 404.
+- **Layer wires** (from a Map Layer, also through Panels): the layer's data
+  is the Map Layer's `source`, so it is ready when that source is `done`, as
+  for a raw wire. The layer id stays the wire's `<src>.<port>` (the Panel's,
+  when wired through one); the title is the layer's `name`. Without data the
+  layer is a `not_run` stub with the Map Layer's data issue. The fields the
+  Map Layer sets (`colormap`, `color`, `bands`, `field` when not `None`, and
+  `opacity` only when wired or saved in the Map Layer) are `locked`: their
+  controls are disabled with "from Map Layer <name>" (also on hover), and a
+  "Go to Map Layer" link selects only that node on the canvas and frames it.
+  The layer shows "Layer" as its type; a vector coloured by a field shows
+  "coloured by <field>" instead of the colour swatches. A raster takes
+  `colormap`, `bands`, `opacity`, and `min` / `max` too when a continuous
+  Colormap has its own; a vector takes `color`, `opacity`, and `colormap` +
+  `field` only when both are set and the field exists (otherwise it is drawn
+  with `color`). The style is the server default, then the viewer's saved
+  `map.styles[id]`, then the locked values. `visible`, and any field not
+  locked, stay editable and saved in `map.styles`.
+- **Live redraw**: when a Map Layer, or a Params node that feeds one,
+  changes, the server sends `map_changed {node, viewers}` (section 9); an open
+  window whose node is among `viewers` re-reads `GET /api/map/{id}`. Raster
+  tiles get a new URL (new `cmap`), so MapLibre reloads them; vector paint is
+  set again from the new style. No component runs.
 - **Rasters**: 256 px Web Mercator PNG tiles rendered by rio-tiler from
   overviews, transparent outside the raster and on nodata. Defaults:
   exactly 3 bands → RGB; an integer band with at most 32 distinct values →
   classes in a fixed palette (class `v` gets colour `v mod 20`); otherwise
   band 1 with `viridis`. Min/max default to the 2–98 % percentiles of the
-  shown bands, read from an overview. Colormaps: viridis, magma, plasma,
-  cividis, turbo, greys_r, terrain, rdylgn, spectral, blues.
+  shown bands, read from an overview. Colormaps: the ten named ramps
+  (section 3), `categorical`, or a Colormap (section 3).
+- **Colour step** (`server/tiles.py`): rio-tiler only reads the pixels; the
+  colouring is GeoKnit's own numpy step. A named ramp that is not customised
+  uses rio-tiler's 256-entry table (`_lut`). A continuous Colormap becomes a
+  256-entry lookup table built from its stops and rescaled by its min/max
+  (else the layer's). A classes Colormap becomes a value → RGBA lookup in the
+  same step as the `categorical` palette: `other` colours the rest, or makes
+  it transparent when `None`, and an `#RRGGBBAA` colour multiplies the tile's
+  alpha. Without a Colormap, small-integer rasters keep the `v mod 20`
+  palette.
+- **Vector colours from a Colormap** (`fieldColour` in
+  `components/map/layers.ts`): classes → `["match", ["get", f], v1, c1, …,
+  other]` when every class value is an integer (a repeated value keeps its
+  first class), else a `case` of `==` tests; a transparent `other` is
+  `rgba(0, 0, 0, 0)`. Continuous → `["case", ["==", ["typeof", ["get", f]],
+  "number"], ["interpolate", ["linear"], ["get", f], …stops], transparent]`,
+  the stops being the Colormap's own (or its named ramp's, evenly) over
+  min/max. For an "auto" min/max the server computes the field's range over
+  the features the GeoJSON carries and sends it as `vector.field = {name,
+  numeric, min, max}` in `GET /api/map/{id}`; equal min and max give the top
+  colour. `#RRGGBBAA` colours go to MapLibre as `rgba(…)` (`cssColour` in
+  `palettes.ts`).
+- **Legend**: continuous → a gradient bar with min/max (custom stops
+  included); classes → one row per class with its label (the value when the
+  label is empty), and the Colormap's `other` colour; RGB → the three bands;
+  a vector with a colour → a swatch and the layer name.
 - **Overviews**: cached COGs carry them. A raster that is still a reference
   to a source file larger than 1024 px without overviews gets a VRT with
   external overviews (`<port>.view.vrt` + `.ovr`) inside its cache entry the
@@ -1126,9 +1319,10 @@ and click-to-inspect pixel values of every layer.
   point: the pixel the point falls in, as Extract Values reads it. Vector
   attributes come from the GeoJSON the window already has.
 - **Styles** (basemap `auto` | `light` | `dark` | `none`, per-layer
-  `colormap`, `bands`, `min`, `max`, `opacity`, `visible`, and `color` for
-  vectors) are saved in the workflow under the node's `map` key. Each change
-  is one undo step and never makes anything out of date.
+  `colormap` (a named ramp, `categorical` or a Colormap JSON object),
+  `bands`, `min`, `max`, `opacity`, `visible`, and `color` for vectors) are
+  saved in the workflow under the node's `map` key. Each change is one undo
+  step and never makes anything out of date.
 - **Basemap**: `auto` is the default (also for a map saved without a
   `basemap` key) and shows `light` or `dark` after the current theme,
   switching live when the theme changes; a saved `light` or `dark` stays as
@@ -1280,7 +1474,7 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/api/colormaps` | the named ramps: `{name: ["#RRGGBB", …11]}`, in `NAMED_RAMPS` order |
 | GET | `/api/graph` | current workflow |
 | POST | `/api/nodes` | add a node `{component, position}` |
-| PATCH | `/api/nodes/{id}` | change settings, source, ports, position, display, value, integer, options, Slider limits, Panel size, Map Viewer `map` |
+| PATCH | `/api/nodes/{id}` | change settings, source, ports, position, display, value, integer, options, Slider limits, Panel size, Map Layer `style`, Map Viewer `map` |
 | POST | `/api/nodes/{id}/save_component` | "Save as component…" `{overwrite}`; `409` if it exists (section 4) |
 | POST | `/api/nodes/{id}/vscode` | Open in VS Code: write a temp file, start `code`, watch it (section 4) |
 | PATCH | `/api/view` | canvas view: `display` (text \| icon), `zoom`, `offset` |
@@ -1304,10 +1498,11 @@ the user can. FastAPI publishes the OpenAPI schema at `/docs`.
 | GET | `/api/settings` | the user's settings: `{theme}` (section 8, "Theme") |
 | PATCH | `/api/settings` | change them: `{theme: system \| light \| dark}` |
 | POST | `/api/export/py` | Export .py `{path?, overwrite?}`: the script, written into the project if `path` (section 10) |
-| GET | `/api/map/{id}` | Map Viewer layers: status, bounds, bands, statistics, style (section 8) |
+| GET | `/api/map/{id}` | Map Viewer layers: status, bounds, bands, statistics, style, `from_layer`, `locked` (section 8) |
+| GET | `/api/layer/{id}` | a Map Layer for its window: its layer, state, style, a vector's columns, a raster's band names |
 | GET | `/api/map/{id}/inspect?lon&lat` | band values of every raster layer at a point |
 | GET | `/api/raster/{key}/stats?bands` | 2–98 % stretch of bands, classes of a small-integer band |
-| GET | `/tiles/{key}/{z}/{x}/{y}.png?bands&colormap&min&max` | raster tiles for Map Viewer (rio-tiler) |
+| GET | `/tiles/{key}/{z}/{x}/{y}.png?bands&colormap&cmap&min&max` | raster tiles for Map Viewer (rio-tiler); `cmap` a Colormap as compact JSON, replacing `colormap` |
 | GET | `/api/vector/{key}.geojson` | vector layer in EPSG:4326, max 50 000 features; total in `X-GeoKnit-Features` |
 | WS | `/ws` | events: node state changes, log lines, run finished |
 | GET | `/`, `/index.html` | the app, with the saved theme on `<html data-theme-setting>` |
@@ -1363,11 +1558,22 @@ Details:
   Boolean Toggle `{value: bool}`; Value List `{options: [{label, value}],
   value}`, with its current type in `outputs[0].type` / `resolved_type`;
   Color Swatch `{value: "#RRGGBB[AA]"}`; Colormap `{value: <Colormap JSON>}`.
+  A Map Layer carries `style` (the saved fields) and `layer: {key, value,
+  issues, wired}` or `null` before the server built it: `key` its `layer`
+  port key, `value` the `MapLayer` JSON (`source, kind, name, colormap,
+  color, opacity, bands, field`), `issues` input → why its wired or saved
+  value is not used (`data`, `colormap`, `color`, `opacity`, `bands`,
+  `name`), `wired` each wired input whose value is used → `params` |
+  `component`.
 - `PATCH /api/nodes/{id}` changes only the fields sent: `settings`
   (`{name: value}`), `source`, `ports`, `value`, `integer`, `options`,
-  `min`/`max`/`step`, `position`, `display`, and for a Map Viewer `map`
+  `min`/`max`/`step`, `position`, `display`, for a Map Viewer `map`
   (`{basemap?, styles?: {layer id: style | null}}`, merged into the saved
-  settings; `null` resets a layer to its defaults).
+  settings; `null` resets a layer to its defaults), and for a Map Layer
+  `style` (merged like `map`: a `null` field resets it, `style: null` resets
+  every field; a ramp name is accepted for `colormap` and saved as
+  `{"kind": "continuous", "name": …}`; an unknown field or bad value answers
+  `400`; refused during a run, `409`).
   - `ports` is `{inputs?, outputs?}`, each a list of `{name, type, types?,
     like?, access?, file?, was?}` where `was` is the old name of a renamed
     port. A side left out stays as it is; a side sent back unchanged keeps its
@@ -1420,14 +1626,29 @@ Details:
 - `GET /api/map/{id}` answers `{basemap, basemaps, layers, colormaps,
   max_features}`; `basemap` is the saved one or `auto`, and `basemaps` lists
   `auto`, `light`, `dark`, `none`. A Map Viewer `map` patch with another
-  basemap answers `400` (`basemap is one of auto, light, dark, none`).
+  basemap answers `400` (`basemap is one of auto, light, dark, none`). Each
+  layer has `from_layer` (the Map Layer's node id, or `null` for a raw wire)
+  and, for a Map Layer's layer, `locked` (a sorted list of the style fields
+  it sets) next to the effective `style`; a vector coloured by a continuous
+  Colormap with auto min/max has `vector.field = {name, numeric, min, max}`.
+- `GET /api/layer/{id}` (tag `map`) answers the Map Layer's build as in
+  `GET /api/graph` plus `node`, `state`, `style`, `columns` (a vector's
+  columns, from `describe_vector`, for the `field` dropdown) and `bands` (a
+  raster's band names); both `null` until the data is `done` with the disk
+  cache on. Another node answers `400`.
+- `GET /api/nodes/{id}/output` of a done Map Layer: `outputs.layer` is the
+  `describe()` text, `views.layer` a `summary` view, `keys.layer` the port
+  key.
 - `/api/settings` belongs to the user, not the workflow: a change is not part
   of undo, never makes anything out of date, and is allowed during a run and
   on a read-only workflow. A theme other than `system`, `light`, `dark`
   answers `422` (like any invalid request body) and `null` answers `400`;
   nothing is written.
 - `{key}` in the map routes is a port key `<node key>.<port>` from
-  `GET /api/map/{id}`; a key that is not in the disk cache answers `404`.
+  `GET /api/map/{id}`, or `<node key>.<port>[i]` for an element of a list
+  (section 8); a key that is not in the disk cache answers `404`. The tile
+  route stays stateless (a port key plus query parameters): the server never
+  resolves node ids there.
 - `POST /api/run` starts the run in the background and answers `202
   {plan}` at once; progress arrives on `/ws`. While a run is active, a second
   run and every edit that changes results answer `409` ("stop the run
@@ -1443,7 +1664,9 @@ Details:
   `run_finished {report: {ran, cached, failed, skipped, ok}}`;
   `workflow_opened {path}`; `worker {python, worker, pid}` when a run starts
   and ends; `node_changed {node}` when a file open in VS Code was applied to
-  its node.
+  its node; `map_changed {node, viewers}` after any edit, undo/redo or Run
+  that changes a Map Layer's port key (`node` the Map Layer, `viewers` the
+  Map Viewers downstream of it), sent before that edit's `states` event.
 - `POST /api/export/py` answers `{script, path, warnings}`. Without `path`
   it only returns the script. With `path` (a `.py` file inside the project)
   it also writes it; an existing file answers `409` unless `overwrite` is
@@ -1488,7 +1711,16 @@ vendored into the script if used):
   (`--- Panel <id> ---` and its `describe()` summary, `(empty)` when
   unconnected), and returns `{panel id: value}`. Number → Text and
   Boolean → Text wires become `str(...)`; a component with an `out: Text`
-  output collects what it prints; a Map Viewer is a comment only.
+  output collects what it prints.
+- Map Layer and Map Viewer are comments in `main()`, in topological order:
+  `# n24 Map Layer "IMD classes": n04.classes, colormap n23` (the layer's
+  name as GeoKnit builds it, the data's output, then each wired style input
+  and the node it comes from, nodes named as the script's functions name
+  them; `no data` without a data wire) and
+  `# n25 Map Viewer: n24.layer, n10.test` (its layers in wire order, or
+  `no layers`). A Panel on a Map Layer prints `(Map Layer, not exported)`.
+  Colormap and Color constants are exported, so a component that takes a
+  Colormap still runs.
 - Lists: a list output (also a `like:` output that carries a list) is
   returned as `list(x)` (a tuple becomes a list as in GeoKnit); a Boolean
   output as `bool(x)`, a list of them as `[bool(_v) for _v in x]`, so a

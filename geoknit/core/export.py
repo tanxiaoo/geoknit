@@ -24,6 +24,7 @@ from geoknit import __version__
 from geoknit.core import types
 from geoknit.core.component import INPUTS_NAME, PRINT_PORT, ComponentSpec
 from geoknit.core.graph import (
+    LAYER_STYLE_INPUTS,
     PARAM_COLOR,
     PARAM_COLORMAP,
     PARAM_LAYER,
@@ -36,9 +37,11 @@ from geoknit.core.graph import (
     PARAM_VALUE_LIST,
     VALUE_PARAMS,
     Graph,
+    GraphError,
     Node,
     param_output,
 )
+from geoknit.core.layers import layer_name
 from geoknit.core.workflow import relativize
 
 INDENT = "    "
@@ -406,6 +409,30 @@ class _Exporter:
             return f"[bool(_v) for _v in {port}]" if is_list else f"bool({port})"
         return f"list({port})" if is_list else port
 
+    # ── view nodes (comments only) ──
+    def _ref(self, src: str, port: str) -> str:
+        return f"{self.names[src]}.{port}"
+
+    def layer_comment(self, node: Node) -> str:
+        """``# n24 Map Layer "IMD classes": n04.classes, colormap n23`` (change 03):
+        the data's output, then each wired style input and the node it comes from."""
+        data = self.graph.wires_into(node.id, "data")
+        try:
+            name = layer_name(self.graph, node.id)
+        except (GraphError, ValueError):  # a saved style that no longer loads
+            name = node.title
+        parts = [self._ref(data[0].src, data[0].src_port) if data else "no data"]
+        for port in LAYER_STYLE_INPUTS:
+            for w in self.graph.wires_into(node.id, port):
+                parts.append(f"{port} {self.names[w.src]}")
+        return f'# {node.id} Map Layer "{name}": {", ".join(parts)}'
+
+    def viewer_comment(self, node: Node) -> str:
+        """``# n25 Map Viewer: n24.layer, n10.test``: its layers in wire order."""
+        wires = self.graph.wires_into(node.id, "layers")
+        shown = ", ".join(self._ref(w.src, w.src_port) for w in wires) or "no layers"
+        return f"# {node.id} Map Viewer: {shown}"
+
     def header_comment(self, node: Node) -> str:
         if node.component == "inline":
             where = f"inline, based on {node.based_on}" if node.based_on else "inline"
@@ -432,12 +459,12 @@ class _Exporter:
                 self.out_types[(nid, "data")] = self.graph.output_types(nid, "data")
                 panel_values[nid] = value if wires else None
             elif node.component == PARAM_LAYER:
-                # Change 03 step 5 writes the full comment; a Panel on it prints this.
-                steps.append(f"# {nid} Map Layer: view only, not exported")
+                steps.append(self.layer_comment(node))
+                # A Panel on a Map Layer prints this (the layer is not exported).
                 self.exprs[(nid, "layer")] = '"(Map Layer, not exported)"'
                 self.out_types[(nid, "layer")] = (types.TEXT,)
             elif node.component == PARAM_MAP:
-                steps.append(f"# {nid} Map Viewer: view only, not exported")
+                steps.append(self.viewer_comment(node))
             else:
                 fn = self.function(node)
                 functions.append(fn)

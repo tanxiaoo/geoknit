@@ -7,7 +7,9 @@ import pytest
 
 from geoknit.cli import main
 from geoknit.components.registry import default_registry
+from geoknit.core import types
 from geoknit.core.workflow import load_workflow, save_workflow
+from geoknit.helpers.breaks import parse_breaks
 from tests.conftest import ROOT, SYNTHETIC, load_make_data
 
 WORKFLOWS = [SYNTHETIC / "imd.geoknit", ROOT / "examples" / "milan_imd" / "milan_imd.geoknit"]
@@ -20,6 +22,32 @@ def test_example_loads_and_saves_identically(path: Path, tmp_path: Path) -> None
     out = tmp_path / path.name
     save_workflow(graph, out)
     assert out.read_bytes() == path.read_bytes()
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=lambda p: p.name)
+def test_example_maps_the_imd_classes(path: Path, tmp_path: Path) -> None:
+    """Change 03 step 5: a Map Viewer with a Map Layer and the IMD class Colormap,
+    one class per Reclassify rule, kept off the metrics path."""
+    graph = load_workflow(path, default_registry(tmp_path / "none", packs=False))
+    by_kind = {n.component: n for n in graph.nodes.values()}
+    layer, viewer, colormap = (by_kind[f"param/{k}"] for k in ("layer", "map", "colormap"))
+    reclassify = by_kind["builtin/raster/reclassify"]
+    breaks = graph.wires_into(reclassify.id, "breaks")[0].src
+    rules = parse_breaks(graph.nodes[breaks].value)
+    cmap = colormap.value
+    assert isinstance(cmap, types.Colormap) and cmap.kind == "classes" and cmap.other is None
+    assert [v for v, _, _ in cmap.classes] == [r.cls for r in rules]
+    assert all(label for _, _, label in cmap.classes)
+    assert [(w.src, w.src_port) for w in graph.wires_into(layer.id, "data")] == [
+        (reclassify.id, "classes")
+    ]
+    assert graph.wires_into(layer.id, "colormap")[0].src == colormap.id
+    assert layer.style == {"name": "IMD classes"}
+    shown = [(w.src, w.src_port) for w in graph.wires_into(viewer.id, "layers")]
+    assert (layer.id, "layer") in shown
+    # nothing reads the view nodes or the Colormap: the metrics cannot change
+    for nid in (layer.id, viewer.id, colormap.id):
+        assert [w for w in graph.wires if w.src == nid and w.dst not in (layer.id, viewer.id)] == []
 
 
 def _metrics(stdout: str) -> dict[str, float]:

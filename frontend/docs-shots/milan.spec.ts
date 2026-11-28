@@ -2,7 +2,8 @@
 // (serve_milan.py). They are written to docs/img/milan/; run again after UI changes.
 // A dark pass (change 02) writes 01-opened-dark.png and 06-map-viewer-dark.png; the theme
 // is set through the API (the settings file is private to the run, see serve_milan.py)
-// and set back to `system` (light here: colorScheme in the config) afterwards.
+// and set back to `system` (light here: colorScheme in the config) afterwards. The map
+// shots (change 03) use the example's own Map Viewer, then wire the predicted map into it.
 
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -130,37 +131,69 @@ test.describe.serial("Milan walkthrough", () => {
     await expect(win).toHaveCount(0);
   });
 
-  /** Open the Map Viewer and wait for its layers and tiles. */
-  async function openMap(id: string): Promise<Locator> {
+  /** Open the Map Viewer and wait for `layers` and their tiles. */
+  async function openMap(id: string, layers: string[]): Promise<Locator> {
     await page.getByTestId(`node-${id}`).dblclick();
     const win = page.getByTestId("map-window");
     await expect(win).toBeVisible();
-    await expect(page.getByTestId("layer-n17.map")).toHaveAttribute("data-status", "ready");
+    for (const layer of layers) {
+      await expect(page.getByTestId(`layer-${layer}`)).toHaveAttribute("data-status", "ready");
+    }
     await expect(page.getByTestId("map-canvas")).toHaveAttribute("data-ready", "true");
     await page.waitForTimeout(4_000); // basemap and raster tiles
     await page.waitForFunction(() => !!window.__geoknitMap?.loaded(), null, { timeout: 30_000 });
     return win;
   }
 
-  test("a Map Viewer with the predicted map and the test points", async () => {
-    const viewer = (await api(page, "POST", "/api/nodes", {
-      component: "param/map",
-      position: [2420, 560],
-    })) as { id: string };
-    await api(page, "POST", "/api/wires", { from: ["n17", "map"], to: [viewer.id, "layers"] });
-    await api(page, "POST", "/api/wires", { from: ["n10", "test"], to: [viewer.id, "layers"] });
-    await page.reload();
-    await collapseAssistant(page);
-    await runAndWait(page); // everything else comes from the cache
-    await shotAround(page, shot("06-map-viewer.png"), [await openMap(viewer.id)]);
+  // The example's Map Viewer (n25): Map Layer n24 draws Reclassify's classes with the
+  // IMD class Colormap n23, and the test points of Split Points come in raw.
+  const VIEWER = "n25";
+  const CLASSES = "n24.layer";
+  const POINTS = "n10.test";
+
+  test("the map nodes and the Colormap editor", async () => {
+    await zoomLeftOf(page, node(page, "n24"), 100);
+    await shotAround(page, shot("06-map-nodes.png"), [
+      node(page, "n23"),
+      node(page, "n24"),
+      node(page, VIEWER),
+    ], 24);
+    await page.getByTestId("node-n23").dblclick();
+    const editor = page.getByTestId("colormap-window");
+    await expect(editor).toBeVisible();
+    await shotAround(page, shot("06-colormap.png"), [editor]);
+    await page.getByTestId("colormap-close").click();
+    await expect(editor).toHaveCount(0);
+  });
+
+  test("the Map Viewer: IMD classes from a Map Layer, and the test points", async () => {
+    await page.getByTestId("fit").click();
+    await shotAround(page, shot("06-map-viewer.png"), [await openMap(VIEWER, [CLASSES, POINTS])]);
+    await expect(page.getByTestId(`layer-from-${CLASSES}`)).toBeVisible();
     await page.getByTestId("map-close").click();
 
     // dark: basemap "auto" (the default) follows the theme
     await setTheme(page, "dark");
-    await shotAround(page, shot("06-map-viewer-dark.png"), [await openMap(viewer.id)]);
+    const dark = await openMap(VIEWER, [CLASSES, POINTS]);
     await expect(page.getByTestId("map-basemap")).toHaveValue("auto");
+    await shotAround(page, shot("06-map-viewer-dark.png"), [dark]);
     await page.getByTestId("map-close").click();
     await setTheme(page, "system");
+  });
+
+  test("the predicted map in the same viewer", async () => {
+    await api(page, "POST", "/api/wires", { from: ["n17", "map"], to: [VIEWER, "layers"] });
+    await page.reload();
+    await collapseAssistant(page);
+    await expect(page.getByTestId("worker-status")).toContainText("idle");
+    await openMap(VIEWER, [CLASSES, POINTS, "n17.map"]);
+    // the classes are drawn above the predicted map (wire order); hide them
+    const visible = page.getByTestId(`layer-visible-${CLASSES}`);
+    await visible.click(); // saved through the API, then drawn: not checked at once
+    await expect(visible).not.toBeChecked();
+    await page.waitForTimeout(2_000);
+    await shotAround(page, shot("06-map-prediction.png"), [page.getByTestId("map-window")]);
+    await page.getByTestId("map-close").click();
   });
 
   test("Export .py", async () => {

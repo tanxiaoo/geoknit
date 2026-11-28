@@ -231,13 +231,13 @@ def test_helpers_are_vendored(tmp_path: Path) -> None:
     c = _inline(g, HELPERS)
     g.add_wire(_text(g, "0 | 0-20 | 100"), "value", c, "breaks")
     _panel(g, c, "n")
-    g.add_component(PARAM_MAP)
+    viewer = g.add_component(PARAM_MAP).id
     _ = g.add_component(PARAM_PANEL)  # not connected
     result = export_script(g)
     assert result.warnings == []
     assert "    pb = parse_breaks\n" in result.script
     assert "        pass\n" in result.script  # the indented import left a block
-    assert "Map Viewer: view only" in result.script
+    assert f"# {viewer} Map Viewer: no layers\n" in result.script
     proc = _run_blocked(result.script, tmp_path)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.endswith("--- Panel n3 ---\n3\n--- Panel n5 ---\n(empty)\n")

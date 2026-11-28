@@ -15,6 +15,7 @@ interface RecipeNode {
   component: string;
   position: [number, number];
   value?: unknown;
+  style?: Record<string, unknown>;
   min?: number;
   max?: number;
   step?: number;
@@ -43,6 +44,9 @@ const TABS: Record<string, string> = {
   model: "Model",
   validation: "Validation",
 };
+
+/** Params nodes outside the Params tab (ribbon groups, `_layout.yaml`). */
+const PARAM_TABS: Record<string, string> = { "param/layer": "Display", "param/map": "Display" };
 
 const ids: Record<string, string> = {}; // recipe id → id on the canvas
 
@@ -151,7 +155,9 @@ test.describe.serial("canvas", () => {
         await expect(page.getByTestId(`node-${ids[n.id]}`)).toContainText(value);
         continue;
       }
-      const tab = n.component.startsWith("param/") ? "Params" : TABS[n.component.split("/")[1]];
+      const tab = n.component.startsWith("param/")
+        ? (PARAM_TABS[n.component] ?? "Params")
+        : TABS[n.component.split("/")[1]];
       await page.getByTestId(`tab-${tab}`).click();
       ids[n.id] = await dropAt(page, page.getByTestId(`ribbon-${n.component}`), n.position);
       const id = ids[n.id];
@@ -169,6 +175,12 @@ test.describe.serial("canvas", () => {
         await page.getByTestId("slider-value").fill(String(n.value));
         await page.getByTestId("slider-ok").click();
         await expect(page.getByTestId(`slider-value-${id}`)).toHaveText(String(n.value));
+      } else if (n.component === "param/colormap" || n.component === "param/layer") {
+        // The IMD class Colormap and the Map Layer's name, as in the file (their editors
+        // are tested in params-colormap.spec.ts and layer.spec.ts).
+        const change = n.component === "param/colormap" ? { value: n.value } : { style: n.style };
+        const res = await page.request.patch(`/api/nodes/${id}`, { data: change });
+        expect(res.ok(), await res.text()).toBeTruthy();
       }
     }
 

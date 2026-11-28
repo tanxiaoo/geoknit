@@ -74,13 +74,13 @@ and Color nodes) and change 02 step 4 (basemap `auto`). Read `CLAUDE.md`,
 
 ## Step 5: Examples, docs, merge
 
-- [ ] `examples/synthetic/imd.geoknit` and `examples/milan_imd/` get a Map
+- [x] `examples/synthetic/imd.geoknit` and `examples/milan_imd/` get a Map
       Viewer with a Map Layer and an IMD class Colormap. Neither example has
       a Map Viewer today, so this adds one, kept off the metrics path.
-- [ ] Milan walkthrough screenshots updated (`npm run screenshots`, light
+- [x] Milan walkthrough screenshots updated (`npm run screenshots`, light
       and dark from change 02)
-- [ ] Export comments for Map Layer
-- [ ] Merge this SPEC into `docs/SPEC.md`; mark change 03 done
+- [x] Export comments for Map Layer
+- [x] Merge this SPEC into `docs/SPEC.md`; mark change 03 done
 
 **Done when:**
 - `geoknit run` prints the same metrics on the examples, and the export

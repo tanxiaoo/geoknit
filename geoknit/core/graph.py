@@ -78,7 +78,18 @@ _PARAM_PORTS: dict[str, tuple[dict[str, Port], dict[str, Port]]] = {
         },
         {"layer": Port("layer", types.LAYER)},
     ),
-    PARAM_MAP: ({"layers": Port("layers", types.ANY, access="list")}, {}),
+    # Change 03, section 4: rasters, vectors and Map Layers; a Panel's Any still connects.
+    PARAM_MAP: (
+        {
+            "layers": Port(
+                "layers",
+                types.RASTER,
+                types=(types.RASTER, types.VECTOR, types.LAYER),
+                access="list",
+            )
+        },
+        {},
+    ),
 }
 
 _VALUE_LIST_PORTS: dict[str, dict[str, Port]] = {

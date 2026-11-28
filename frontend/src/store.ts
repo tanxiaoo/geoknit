@@ -73,6 +73,8 @@ export interface AppState {
   windowNode: string | null;
   /** The Map Viewer whose map window is open (SPEC 8). */
   mapNode: string | null;
+  /** `map_changed` events so far: the open map re-reads its layers on each (change 03). */
+  mapVersion: number;
   /** The Colormap node whose editor window is open (change 03, section 2). */
   colormapNode: string | null;
   /** The Map Layer whose style window is open (change 03, section 3). */
@@ -111,6 +113,7 @@ export const initialState: AppState = {
   logs: {},
   windowNode: null,
   mapNode: null,
+  mapVersion: 0,
   colormapNode: null,
   layerNode: null,
   ramps: null,
@@ -275,6 +278,10 @@ export class Store {
       void this.refreshGraph(); // edited in VS Code
     } else if (ev.type === "map_changed") {
       void this.refreshGraph(); // the Map Layer's `layer` (also when another page edited it)
+      // an open map that shows this layer redraws at once, without a Run
+      if (this.state.mapNode && ev.viewers.includes(this.state.mapNode)) {
+        this.set({ mapVersion: this.state.mapVersion + 1 });
+      }
     }
   }
 
@@ -422,6 +429,11 @@ export class Store {
 
   closeMap(): void {
     this.set({ mapNode: null });
+  }
+
+  /** Select one node on the canvas (the map window's Go to Map Layer, change 03). */
+  selectNode(id: string): void {
+    this.set({ pendingSelect: [id] });
   }
 
   // ── colormap editor (change 03, section 2) ──

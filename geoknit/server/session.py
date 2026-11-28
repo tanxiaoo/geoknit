@@ -46,6 +46,7 @@ from geoknit.core.graph import (
     GraphError,
     Node,
 )
+from geoknit.core.layers import origin_wire, set_fields
 from geoknit.core.solver import DONE, RUN_ALL, Solver
 from geoknit.core.trust import TrustStore
 from geoknit.core.workflow import (
@@ -134,6 +135,42 @@ def report_dict(report: RunReport) -> dict[str, Any]:
         "skipped": report.skipped,
         "ok": report.ok,
     }
+
+
+def _locked_style(
+    cache: DiskCache,
+    key: str,
+    layer: types.MapLayer,
+    fields: frozenset[str],
+    view: dict[str, Any],
+) -> dict[str, Any]:
+    """The style fields a Map Layer sets (``fields``), as Map Viewer style values.
+
+    A raster takes ``colormap`` (Colormap JSON; a continuous one's own min/max
+    lock ``min`` and ``max`` too), ``bands`` and ``opacity``; a vector ``color``,
+    ``opacity``, and ``colormap`` with ``field`` when both are set and the field
+    exists (``view["vector"]["field"]`` then gives the field's range).
+    """
+    out: dict[str, Any] = {}
+    if "opacity" in fields:
+        out["opacity"] = layer.opacity
+    if layer.kind == "raster" and view["type"] == types.RASTER:
+        if layer.bands is not None:
+            out["bands"] = list(layer.bands)
+        cm = layer.colormap
+        if cm is not None:
+            out["colormap"] = cm.to_json()
+            if cm.kind == types.CONTINUOUS and (cm.min is not None or cm.max is not None):
+                out["min"], out["max"] = cm.min, cm.max
+    elif layer.kind == "vector" and view["type"] == types.VECTOR:
+        if layer.color is not None:
+            out["color"] = layer.color.hex
+        if layer.colormap is not None and layer.field is not None:
+            with contextlib.suppress(tiles.MapError):
+                view["vector"]["field"] = tiles.vector_field(cache, key, layer.field)
+                out["colormap"] = layer.colormap.to_json()
+                out["field"] = layer.field
+    return out
 
 
 class Session:
@@ -969,24 +1006,79 @@ class Session:
         return DiskCache(folder)
 
     def _map_inputs(self, node_id: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        """Each wire into the Map Viewer as a layer stub, and its saved settings."""
+        """Each wire into the Map Viewer as layer stubs, and its saved settings.
+
+        One stub per wire, in wire order; a list result stored one file per element
+        gives one stub per element (``<id>.<port>[i]``, key ``<port key>[i]``). A
+        wire from a Map Layer (also through Panels) draws the layer's ``source``;
+        its stub carries ``from_layer`` and, internally, the ``MapLayer`` and the
+        fields the Map Layer sets (``_layer``, ``_set``).
+        """
         with self.lock:
             node = self._node(node_id)
             if node.component != PARAM_MAP:
                 raise BadRequest(f"{node.title} is not a Map Viewer")
-            layers = []
+            ex = self._executor
+            folder = ex.cache_dir if ex is not None else None
+            cache = DiskCache(folder) if folder is not None else None
+            layers: list[dict[str, Any]] = []
             for w in self.graph.wires_into(node_id, "layers"):
                 src = self.graph.nodes[w.src]
+                stub: dict[str, Any] = {
+                    "id": f"{w.src}.{w.src_port}",
+                    "title": f"{src.title} › {w.src_port}",
+                    "source": [w.src, w.src_port],
+                    "key": None,
+                    "from_layer": None,
+                }
+                origin = origin_wire(self.graph, w)
+                if self.graph.nodes[origin.src].component == PARAM_LAYER:
+                    layers.append(self._layer_stub(stub, origin.src))
+                    continue
                 done = self.solver.states.get(w.src) == DONE
-                layers.append(
-                    {
-                        "id": f"{w.src}.{w.src_port}",
-                        "title": f"{src.title} › {w.src_port}",
-                        "source": [w.src, w.src_port],
-                        "key": self.executor.done_port_key(w.src, w.src_port) if done else None,
-                    }
-                )
+                key = ex.done_port_key(w.src, w.src_port) if done and ex is not None else None
+                stub["key"] = key
+                layers.extend(self._list_stubs(stub, cache) if key is not None else [stub])
             return layers, copy.deepcopy(node.extra.get("map", {}))
+
+    def _layer_stub(self, stub: dict[str, Any], layer_id: str) -> dict[str, Any]:
+        """A Map Layer's wire: its layer's data, once that is done (change 03, section 4)."""
+        ex = self._executor
+        build = ex.layers.get(layer_id) if ex is not None else None
+        stub["from_layer"] = layer_id
+        layer = build.layer if build is not None else None
+        if build is None or layer is None:
+            issue = build.issues.get("data") if build is not None else None
+            stub["_issue"] = issue or "wire a Raster or Vector into the Map Layer"
+            return stub
+        stub["title"] = layer.name
+        stub["_layer"] = layer
+        stub["_set"] = set_fields(self.graph, layer_id, build)
+        if self.solver.states.get(layer_id) == DONE:
+            stub["key"] = layer.source
+        return stub
+
+    @staticmethod
+    def _list_stubs(stub: dict[str, Any], cache: DiskCache | None) -> list[dict[str, Any]]:
+        """A list result stored one file per element: one stub per element."""
+        if cache is None:
+            return [stub]
+        try:
+            _, info = cache.port_info(stub["key"])
+        except CacheMiss:
+            return [stub]
+        if info.get("access") != "list" or info.get("format") != "list":
+            return [stub]
+        count = int(info.get("count") or 0)
+        return [
+            {
+                **stub,
+                "id": f"{stub['id']}[{i}]",
+                "title": f"{stub['title']} [{i}]",
+                "key": f"{stub['key']}[{i}]",
+            }
+            for i in range(count)
+        ]
 
     def map_view(self, node_id: str) -> dict[str, Any]:
         """The layers of a Map Viewer, described from the disk cache.
@@ -994,7 +1086,9 @@ class Session:
         ``status`` per layer: ``ready``, ``not_run`` (no result yet, or no longer
         cached), ``no_cache`` (disk cache off), ``unsupported`` (not a Raster or
         Vector) or ``error``. A large source raster gets its viewing overviews
-        here, the first time it is shown.
+        here, the first time it is shown. A layer from a Map Layer has
+        ``from_layer`` (its node id) and ``locked``: the style fields the Map Layer
+        sets, whose values in ``style`` win over the ones saved in ``map.styles``.
         """
         stubs, settings = self._map_inputs(node_id)
         folder = self.executor.cache_dir
@@ -1002,17 +1096,22 @@ class Session:
         saved = settings.get("styles", {})
         layers = []
         for layer in stubs:
-            layer.update(status="ready", message=None, type=None)
+            map_layer: types.MapLayer | None = layer.pop("_layer", None)
+            fields: frozenset[str] = layer.pop("_set", frozenset())
+            issue: str | None = layer.pop("_issue", None)
+            layer.update(status="ready", message=None, type=None, locked=[])
             key = layer["key"]
             try:
-                if key is None:
+                if issue is not None:
+                    layer.update(status="not_run", message=issue)
+                elif key is None:
                     layer.update(status="not_run", message="run to see this layer")
                 elif cache is None:
                     layer.update(status="no_cache", message="the disk cache is off")
                 else:
                     _, info = cache.port_info(key)
                     layer["type"] = info.get("type")
-                    if info.get("access") == "list":  # elements as layers: change 03
+                    if info.get("access") == "list":  # a list of simple values (one JSON file)
                         layer["type"] = f"list of {layer['type'] or 'values'}"
                     if layer["type"] == "Raster":
                         layer["raster"] = tiles.describe_raster(cache, key)
@@ -1026,7 +1125,13 @@ class Session:
                             message=f"a {layer['type']} cannot be shown on a map",
                         )
                     if layer["status"] == "ready":
-                        layer["style"] = {**default, **saved.get(layer["id"], {})}
+                        locked: dict[str, Any] = {}
+                        if map_layer is not None:
+                            locked = _locked_style(cache, key, map_layer, fields, layer)
+                        own = saved.get(layer["id"], {})
+                        free = {k: v for k, v in own.items() if k not in locked}
+                        layer["style"] = {**default, **free, **locked}
+                        layer["locked"] = sorted(locked)
             except CacheMiss:
                 layer.update(status="not_run", message="the result is no longer cached; run again")
             except tiles.MapError as exc:

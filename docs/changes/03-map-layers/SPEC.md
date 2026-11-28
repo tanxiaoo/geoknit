@@ -287,6 +287,71 @@ Points the sections above leave open, as built in step 3 (backend):
   `# nX Map Layer: view only, not exported`, and a Panel on it prints
   `"(Map Layer, not exported)"`.
 
+## 9. Implementation choices (step 4)
+
+Points sections 4 and 6 leave open, as built in step 4 (Map Viewer with Layers):
+
+- **Wires**: `layers` is `Port("layers", Raster, types=[Raster, Vector, Layer],
+  access=list)`. A Model, Table, Text, … wire is refused (400, `X can't connect
+  to Raster | Vector | Layer`), and a Panel's wire is removed once the Panel
+  carries such a type (the usual re-check). So "cannot be shown on a map"
+  (`unsupported`) is now only reached by a value whose type the graph could
+  not tell (a union output or `Any` pass-through whose result is something
+  else, or a list of simple values stored as one JSON file); the code path is
+  kept.
+- **Lists**: a done list result stored one file per element gives one layer
+  per element, id `<src>.<port>[i]`, title `<title> › <port> [i]`, key
+  `<port key>[i]`; before a run (count unknown) it is one `not_run` stub
+  `<src>.<port>`. `DiskCache.port_info` (and so `read_port`, `band_names`)
+  accepts `<port key>[i]` itself (`cache.split_element`); `tiles._KEY` takes an
+  optional `[\d+]`, so tiles, GeoJSON, stats and inspect answer element keys;
+  the whole list port, an index out of range, and `[i]` on a port that is no
+  list stay 404.
+- **Layer wires** are found by following Panels back (`layers.origin_wire`): a
+  Panel on a Map Layer wired in draws that Map Layer's layer. The layer id stays
+  the wire's `<src>.<port>` (the Panel's, when wired through one); `title` is the
+  layer's `name`; `key` is the layer's `source` once the Map Layer is `done`.
+  Without data the stub is `not_run` with the Map Layer's `issues.data`.
+- **`locked`** is a per-layer list next to `style` (not inside it), sorted. It
+  holds the fields the Map Layer sets (`layers.set_fields`): `colormap`,
+  `color`, `bands`, `field` when not `None`, and `opacity` only when wired or
+  saved in the Map Layer (its default 1.0 leaves the viewer's opacity
+  editable). Mapped to viewer style: a raster takes `colormap` (Colormap JSON),
+  `bands`, `opacity`, and `min`/`max` too when a continuous Colormap has its own
+  min or max; a vector takes `color`, `opacity`, and `colormap` + `field` only
+  when both are set and the field exists (otherwise it is drawn with `color`).
+  `style` = server default, then the viewer's saved `map.styles[id]`, then the
+  locked values. `visible`, and any field not locked, stay editable and saved
+  in `map.styles` as before.
+- **Field range**: for a vector coloured by a continuous Colormap with auto
+  min/max, the server computes the field's min/max over the features the
+  GeoJSON carries (the first 50 000) and sends it as `vector.field = {name,
+  numeric, min, max}` in `GET /api/map/{id}` (rather than the window scanning
+  the GeoJSON itself, which MapLibre loads by URL).
+- **Expressions** (`fieldColour` in `components/map/layers.ts`): classes →
+  `["match", ["get", f], v1, c1, …, other]` when every class value is an
+  integer (MapLibre's `match` takes integer labels only; a repeated value keeps
+  its first class), else a `case` of `==` tests; a transparent `other` is
+  `rgba(0, 0, 0, 0)`. Continuous → `["case", ["==", ["typeof", ["get", f]],
+  "number"], ["interpolate", ["linear"], ["get", f], …stops], transparent]`, the
+  stops being the Colormap's own (or its named ramp's 9 colours evenly) over
+  min/max; equal min and max give the top colour. `#RRGGBBAA` colours go to
+  MapLibre as `rgba(…)` (`cssColour`, in `palettes.ts`).
+- **Draw order** stays as for raw wires: vectors above rasters, then wire order
+  (first on top). The layer list is in wire order.
+- **Window**: a layer from a Map Layer shows "Layer" as its type, a line "from
+  Map Layer <name>" with a "Go to Map Layer" link, and its locked controls
+  disabled (hovering one shows the same "from Map Layer <name>"); a vector
+  coloured by a field shows "coloured by <field>" instead of the swatches.
+  "Go to Map Layer" selects only that node on the canvas and frames it
+  (`store.selectNode`, through `pendingSelect`). The vector legend is now drawn:
+  a swatch and the layer's name.
+- **Live redraw**: the store counts `map_changed` events whose `viewers`
+  include the open Map Viewer (`mapVersion`); the window re-reads
+  `GET /api/map/{id}` on each. Raster tiles get a new URL (new `cmap`), so
+  MapLibre reloads them; vector paint is set again from the new style. A
+  `map_changed` for another viewer does not re-read.
+
 ---
 
 ## Not in this change

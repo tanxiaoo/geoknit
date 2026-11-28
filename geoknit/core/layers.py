@@ -77,8 +77,9 @@ def layer_key(data_key: str, layer: types.MapLayer) -> str:
     return hashlib.sha256(("layer" + data_key + text).encode("utf-8")).hexdigest()
 
 
-def _origin(graph: Graph, wire: Wire) -> Wire:
-    """Follow Panels back to the wire that brings the value to the first of them."""
+def origin_wire(graph: Graph, wire: Wire) -> Wire:
+    """Follow Panels back to the wire that brings the value to the first of them
+    (also used by the Map Viewer to find the Map Layer behind a Panel)."""
     seen: set[str] = set()
     while True:
         src = graph.nodes.get(wire.src)
@@ -97,7 +98,7 @@ _UNWIRED = object()
 def _wired_value(graph: Graph, wire: Wire, results: DoneResults | None, build: LayerBuild) -> Any:
     """The value a style wire brings, or ``_UNWIRED`` (with an issue) when it has none."""
     name = wire.dst_port
-    origin = _origin(graph, wire)
+    origin = origin_wire(graph, wire)
     src = graph.nodes.get(origin.src)
     if src is None:
         return _UNWIRED
@@ -153,7 +154,7 @@ def _kind(graph: Graph, data: Wire, results: DoneResults | None) -> str | None:
         t for t in graph.output_types(data.src, data.src_port) if t in (types.RASTER, types.VECTOR)
     ]
     if len(found) != 1 and results is not None:
-        origin = _origin(graph, data)
+        origin = origin_wire(graph, data)
         known = results.data_type(origin.src, origin.src_port)
         found = [known] if known in (types.RASTER, types.VECTOR) else []
     return found[0].lower() if len(found) == 1 else None
@@ -169,7 +170,7 @@ def _bands(
         return None
     if all(isinstance(b, int) for b in wanted):
         return tuple(int(b) for b in wanted)
-    origin = _origin(graph, data)
+    origin = origin_wire(graph, data)
     names = results.band_names(origin.src, origin.src_port) if results is not None else None
     if names is None:
         build.issues["bands"] = "band names are known once the raster has a result"
@@ -184,6 +185,29 @@ def _bands(
             build.issues["bands"] = f'no band "{b}" (bands: {", ".join(names)})'
             return None
     return tuple(out)
+
+
+def set_fields(graph: Graph, node_id: str, build: LayerBuild) -> frozenset[str]:
+    """The ``MapLayer`` fields a Map Layer sets itself (wired, or saved in its window),
+    as opposed to the Map Viewer's defaults: the ones the Map Viewer locks (change 03,
+    section 4). Opacity always has a value, so it counts only when wired or saved."""
+    layer = build.layer
+    if layer is None:
+        return frozenset()
+    out = {
+        name
+        for name, value in (
+            ("colormap", layer.colormap),
+            ("color", layer.color),
+            ("bands", layer.bands),
+            ("field", layer.field),
+        )
+        if value is not None
+    }
+    saved = graph.node(node_id).style
+    if "opacity" in build.wired or ("opacity" in saved and "opacity" not in build.issues):
+        out.add("opacity")
+    return frozenset(out)
 
 
 def build_layer(

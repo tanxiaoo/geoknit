@@ -77,7 +77,7 @@ def imd(
 
     Layers in wire order: prediction (n17.map, a COG), reference test points
     (n10.test), classes (n4.classes), predictors (n12.raster, a ref to the
-    source file) and the model (n16.model, not a map layer).
+    source file). The model (n16.model) cannot be wired in since change 03.
     """
     root = tmp_path_factory.mktemp("map")
     project = root / "project"
@@ -94,9 +94,10 @@ def imd(
             ("n10", "test"),
             ("n4", "classes"),
             ("n12", "raster"),
-            ("n16", "model"),
         ):
             _wire(client, src, port, viewer)
+        r = client.post("/api/wires", json={"from": ["n16", "model"], "to": [viewer, "layers"]})
+        assert r.status_code == 400 and "Raster | Vector | Layer" in r.json()["detail"]
         before = client.get(f"/api/map/{viewer}").json()
         assert {layer["status"] for layer in before["layers"]} == {"not_run"}
         _run(client)
@@ -118,15 +119,15 @@ def test_layers_describe_each_wire(imd: tuple[TestClient, str, Path]) -> None:
     view = client.get(f"/api/map/{viewer}").json()
     assert view["basemap"] == "auto" and "viridis" in view["colormaps"]
     layers = {layer["id"]: layer for layer in view["layers"]}
-    assert list(layers) == ["n17.map", "n10.test", "n4.classes", "n12.raster", "n16.model"]
+    assert list(layers) == ["n17.map", "n10.test", "n4.classes", "n12.raster"]
     assert layers["n17.map"]["title"] == "Predict Raster › map"
     assert {k: v["status"] for k, v in layers.items()} == {
         "n17.map": "ready",
         "n10.test": "ready",
         "n4.classes": "ready",
         "n12.raster": "ready",
-        "n16.model": "unsupported",
     }
+    assert all(layer["from_layer"] is None and layer["locked"] == [] for layer in layers.values())
 
     pred = layers["n17.map"]
     assert pred["type"] == "Raster"

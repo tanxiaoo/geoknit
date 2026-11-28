@@ -130,12 +130,12 @@ function sync(map: MlMap, layers: RenderLayer[], basemap: ShownBasemap, urls: Ma
         map.addLayer({ id: line, type: "line", source: src, filter: LINE as never });
         map.addLayer({ id: circle, type: "circle", source: src, filter: POINT as never });
       }
-      map.setPaintProperty(fill, "fill-color", l.colour);
+      map.setPaintProperty(fill, "fill-color", l.colour as never);
       map.setPaintProperty(fill, "fill-opacity", 0.25 * l.opacity);
-      map.setPaintProperty(line, "line-color", l.colour);
+      map.setPaintProperty(line, "line-color", l.colour as never);
       map.setPaintProperty(line, "line-opacity", l.opacity);
       map.setPaintProperty(line, "line-width", 1.5);
-      map.setPaintProperty(circle, "circle-color", l.colour);
+      map.setPaintProperty(circle, "circle-color", l.colour as never);
       map.setPaintProperty(circle, "circle-opacity", l.opacity);
       map.setPaintProperty(circle, "circle-radius", 4);
       map.setPaintProperty(circle, "circle-stroke-color", themeColor("map-point-outline"));

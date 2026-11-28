@@ -393,6 +393,16 @@ export interface LayerStyle {
   opacity: number;
   visible: boolean;
   color: string;
+  /** A vector coloured by a field with `colormap` (set by a Map Layer, change 03). */
+  field?: string;
+}
+
+/** A vector field's range over the features of the GeoJSON (`GET /api/map`). */
+export interface FieldRange {
+  name: string;
+  numeric: boolean;
+  min: number | null;
+  max: number | null;
 }
 
 export interface MapSettings {
@@ -431,12 +441,14 @@ export interface VectorInfo {
   crs: string;
   bounds: [number, number, number, number] | null;
   default_style: Partial<LayerStyle>;
+  /** The field a Map Layer colours the vector by, with its range. */
+  field?: FieldRange;
 }
 
 export type LayerStatus = "ready" | "not_run" | "no_cache" | "unsupported" | "error";
 
 export interface MapLayer {
-  /** `<source node id>.<port>` */
+  /** `<source node id>.<port>`, and `<source node id>.<port>[i]` for list elements */
   id: string;
   title: string;
   source: [string, string];
@@ -447,6 +459,10 @@ export interface MapLayer {
   raster?: RasterInfo;
   vector?: VectorInfo;
   style?: Partial<LayerStyle>;
+  /** The Map Layer node this layer comes from (change 03), else `null`. */
+  from_layer?: string | null;
+  /** Style fields the Map Layer sets: read-only in the viewer, values in `style`. */
+  locked?: (keyof LayerStyle)[];
 }
 
 export interface MapView {

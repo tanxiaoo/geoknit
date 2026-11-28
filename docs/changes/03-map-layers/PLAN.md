@@ -57,13 +57,13 @@ and Color nodes) and change 02 step 4 (basemap `auto`). Read `CLAUDE.md`,
 
 ## Step 4: Map Viewer with Layers
 
-- [ ] `layers: [Raster, Vector, Layer]` list input; list wires give one
+- [x] `layers: [Raster, Vector, Layer]` list input; list wires give one
       layer per element (`<id>.<port>[i]`, key pattern extended)
-- [ ] Locked style fields with "from Map Layer …", Go to Map Layer
-- [ ] Live redraw when a Map Layer or Colormap changes (`map_changed` event,
+- [x] Locked style fields with "from Map Layer …", Go to Map Layer
+- [x] Live redraw when a Map Layer or Colormap changes (`map_changed` event,
       no Run)
-- [ ] Vector colour by field (MapLibre `match` / `interpolate`)
-- [ ] Legends for continuous, classes and vector colours
+- [x] Vector colour by field (MapLibre `match` / `interpolate`)
+- [x] Legends for continuous, classes and vector colours
 
 **Done when** (Playwright, synthetic example):
 - two layers (classed raster via Map Layer, sample points raw) show in the

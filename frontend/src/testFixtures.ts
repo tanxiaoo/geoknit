@@ -55,7 +55,14 @@ export const PARAM_ENTRIES: ComponentEntry[] = [
     [port("layer", "Layer", { like: null })],
     "Display",
   ),
-  param("param/map", "Map Viewer", "Map", [port("layers", "Any", { access: "list" })], [], "Display"),
+  param(
+    "param/map",
+    "Map Viewer",
+    "Map",
+    [port("layers", "Raster", { types: ["Raster", "Vector", "Layer"], access: "list" })],
+    [],
+    "Display",
+  ),
 ];
 
 export function paramEntry(ref: string): ComponentEntry {

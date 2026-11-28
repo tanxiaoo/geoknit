@@ -19,6 +19,7 @@ import {
   formatValue,
   gradientStops,
   isColormap,
+  isLocked,
   isRgb,
   legendFor,
   range,
@@ -57,6 +58,7 @@ interface Inspected {
 function Window({ view }: { view: NodeView }) {
   const id = view.id;
   const runCount = useStore((s) => s.runCount);
+  const mapVersion = useStore((s) => s.mapVersion); // a Map Layer changed: no Run
   const colour = useCategoryColour("Display");
   // the wires into the viewer, as a string so the effect below only reruns when they change
   const wired = useStore((s) =>
@@ -79,7 +81,7 @@ function Window({ view }: { view: NodeView }) {
     return () => {
       live = false;
     };
-  }, [id, runCount, wired]);
+  }, [id, runCount, wired, mapVersion]);
 
   const saved = useMemo(() => view.map?.styles ?? {}, [view.map]);
   const basemap: Basemap = view.map?.basemap ?? "auto";
@@ -101,7 +103,10 @@ function Window({ view }: { view: NodeView }) {
     }
   }, [layers, saved, stats]);
 
-  const rendered = useMemo(() => renderLayers(layers, saved), [layers, saved]);
+  const rendered = useMemo(
+    () => renderLayers(layers, saved, data?.colormaps ?? {}),
+    [layers, saved, data?.colormaps],
+  );
   const bounds = useMemo(() => unionBounds(layers), [layers]);
   const fitKey = layers
     .filter((l) => l.status === "ready")
@@ -231,8 +236,17 @@ interface LayerItemProps {
 
 export function LayerItem({ layer, style, stats, colormaps, customised, onChange }: LayerItemProps) {
   const ready = layer.status === "ready";
+  const from = layer.from_layer ?? null;
+  const locked = (field: keyof LayerStyle) => isLocked(layer, field);
+  const byField = isColormap(style.colormap) && !!style.field;
+  const lockedTitle = from ? strings.fromMapLayer(layer.title) : undefined;
   return (
-    <li className="gk-map-layer" data-testid={`layer-${layer.id}`} data-status={layer.status}>
+    <li
+      className="gk-map-layer"
+      data-testid={`layer-${layer.id}`}
+      data-status={layer.status}
+      data-from-layer={from ?? undefined}
+    >
       <div className="gk-map-layer-head">
         <input
           type="checkbox"
@@ -243,7 +257,9 @@ export function LayerItem({ layer, style, stats, colormaps, customised, onChange
           data-testid={`layer-visible-${layer.id}`}
         />
         <span className="gk-map-layer-title">{layer.title}</span>
-        {layer.type && <span className="gk-map-layer-type">{layer.type}</span>}
+        {layer.type && (
+          <span className="gk-map-layer-type">{from ? strings.layerTypeLayer : layer.type}</span>
+        )}
         {customised && (
           <button
             className="gk-icon-button"
@@ -256,36 +272,83 @@ export function LayerItem({ layer, style, stats, colormaps, customised, onChange
           </button>
         )}
       </div>
+      {from && (
+        <p className="gk-map-note gk-map-from" data-testid={`layer-from-${layer.id}`}>
+          <span>{strings.fromMapLayer(layer.title)}</span>
+          <button
+            className="gk-map-link"
+            onClick={() => store.selectNode(from)}
+            data-testid={`layer-goto-${layer.id}`}
+          >
+            {strings.goToMapLayer}
+          </button>
+        </p>
+      )}
       {!ready && layer.message && <p className="gk-map-note">{layer.message}</p>}
       {ready && layer.raster && (
-        <RasterControls layer={layer} style={style} stats={stats} colormaps={colormaps} onChange={onChange} />
+        <RasterControls
+          layer={layer}
+          style={style}
+          stats={stats}
+          colormaps={colormaps}
+          onChange={onChange}
+          lockedTitle={lockedTitle}
+        />
       )}
       {ready && layer.vector && (
         <>
-          <div className="gk-map-row">
-            <span>{strings.colour}</span>
-            <div className="gk-map-swatches">
-              {VECTOR_COLOURS.map((c) => (
-                <button
-                  key={c}
-                  className={`gk-map-swatch${c === style.color ? " gk-map-swatch-on" : ""}`}
-                  style={{ background: c }}
-                  onClick={() => onChange({ color: c })}
-                  aria-label={c}
-                  data-testid={`layer-colour-${layer.id}-${c.slice(1)}`}
-                />
-              ))}
+          {byField ? (
+            <p className="gk-map-note" data-testid={`layer-field-${layer.id}`} data-locked="true">
+              {strings.colourByField(style.field ?? "")}
+            </p>
+          ) : (
+            <div
+              className="gk-map-row"
+              data-locked={locked("color")}
+              title={locked("color") ? lockedTitle : undefined}
+            >
+              <span>{strings.colour}</span>
+              <div className="gk-map-swatches">
+                {locked("color") ? (
+                  <span
+                    className="gk-map-swatch gk-map-swatch-on"
+                    style={{ background: style.color }}
+                    aria-label={style.color}
+                    data-testid={`layer-colour-${layer.id}-locked`}
+                  />
+                ) : (
+                  VECTOR_COLOURS.map((c) => (
+                    <button
+                      key={c}
+                      className={`gk-map-swatch${c === style.color ? " gk-map-swatch-on" : ""}`}
+                      style={{ background: c }}
+                      onClick={() => onChange({ color: c })}
+                      aria-label={c}
+                      data-testid={`layer-colour-${layer.id}-${c.slice(1)}`}
+                    />
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
           <p className="gk-map-note">
             {strings.featuresShown(layer.vector.shown, layer.vector.features)}
           </p>
         </>
       )}
       {ready && (
-        <label className="gk-map-row">
+        <label
+          className="gk-map-row"
+          data-locked={locked("opacity")}
+          title={locked("opacity") ? lockedTitle : undefined}
+        >
           <span>{strings.opacity}</span>
-          <Opacity value={style.opacity} onCommit={(opacity) => onChange({ opacity })} id={layer.id} />
+          <Opacity
+            value={style.opacity}
+            onCommit={(opacity) => onChange({ opacity })}
+            id={layer.id}
+            disabled={locked("opacity")}
+          />
         </label>
       )}
       {ready && <LegendView legend={legendFor(layer, style, stats, colormaps)} layer={layer.id} />}
@@ -299,20 +362,28 @@ function RasterControls({
   stats,
   colormaps,
   onChange,
+  lockedTitle,
 }: {
   layer: MapLayer;
   style: LayerStyle;
   stats: RasterStats | null;
   colormaps: Record<string, string[]>;
   onChange: (change: Partial<LayerStyle>) => void;
+  /** "from Map Layer <name>" on the fields a Map Layer sets (read-only). */
+  lockedTitle?: string;
 }) {
   const names = layer.raster?.bands ?? [];
+  const bandsLocked = isLocked(layer, "bands");
+  const colormapLocked = isLocked(layer, "colormap");
+  const rangeLocked = isLocked(layer, "min") || isLocked(layer, "max");
   const rgb = isRgb(style);
   // new bands: let the server stretch them again
   const setBands = (bands: number[]) => onChange({ bands, min: null, max: null });
   const bandSelect = (value: number, onPick: (b: number) => void, testid: string, label: string) => (
     <select
       value={value}
+      disabled={bandsLocked}
+      title={bandsLocked ? lockedTitle : undefined}
       onChange={(e) => onPick(Number(e.target.value))}
       aria-label={label}
       data-testid={testid}
@@ -335,6 +406,7 @@ function RasterControls({
           <div className="gk-map-segmented">
             <button
               className={!rgb ? "gk-on" : ""}
+              disabled={bandsLocked}
               onClick={() => rgb && setBands([style.bands[0]])}
               data-testid={`layer-single-${layer.id}`}
             >
@@ -342,6 +414,7 @@ function RasterControls({
             </button>
             <button
               className={rgb ? "gk-on" : ""}
+              disabled={bandsLocked}
               onClick={() => !rgb && setBands(names.length === 3 ? [1, 2, 3] : [3, 2, 1])}
               data-testid={`layer-rgb-${layer.id}`}
             >
@@ -373,10 +446,15 @@ function RasterControls({
         )
       )}
       {!rgb && (
-        <label className="gk-map-row">
+        <label
+          className="gk-map-row"
+          data-locked={colormapLocked}
+          title={colormapLocked ? lockedTitle : undefined}
+        >
           <span>{strings.colormap}</span>
           <select
             value={isColormap(style.colormap) ? CUSTOM : style.colormap}
+            disabled={colormapLocked}
             onChange={(e) => onChange({ colormap: e.target.value })}
             data-testid={`layer-colormap-${layer.id}`}
           >
@@ -398,6 +476,7 @@ function RasterControls({
           <NumberField
             label={strings.min}
             value={style.min}
+            disabled={rangeLocked}
             placeholder={r ? formatValue(r[0]) : strings.autoStretch}
             onCommit={(min) => onChange({ min })}
             testid={`layer-min-${layer.id}`}
@@ -405,6 +484,7 @@ function RasterControls({
           <NumberField
             label={strings.max}
             value={style.max}
+            disabled={rangeLocked}
             placeholder={r ? formatValue(r[1]) : strings.autoStretch}
             onCommit={(max) => onChange({ max })}
             testid={`layer-max-${layer.id}`}
@@ -422,12 +502,14 @@ function NumberField({
   placeholder,
   onCommit,
   testid,
+  disabled = false,
 }: {
   label: string;
   value: number | null;
   placeholder: string;
   onCommit: (v: number | null) => void;
   testid: string;
+  disabled?: boolean;
 }) {
   const shown = value === null ? "" : formatValue(value);
   const [text, setText] = useState(shown);
@@ -446,6 +528,7 @@ function NumberField({
         value={text}
         placeholder={placeholder}
         inputMode="decimal"
+        disabled={disabled}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === "Enter" && commit()}
@@ -456,7 +539,17 @@ function NumberField({
 }
 
 /** Opacity slider: one change (one undo step) when the slider is let go. */
-function Opacity({ value, onCommit, id }: { value: number; onCommit: (v: number) => void; id: string }) {
+function Opacity({
+  value,
+  onCommit,
+  id,
+  disabled = false,
+}: {
+  value: number;
+  onCommit: (v: number) => void;
+  id: string;
+  disabled?: boolean;
+}) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
   const commit = () => v !== value && onCommit(v);
@@ -467,6 +560,7 @@ function Opacity({ value, onCommit, id }: { value: number; onCommit: (v: number)
       max={1}
       step={0.05}
       value={v}
+      disabled={disabled}
       onChange={(e) => setV(Number(e.target.value))}
       onPointerUp={commit}
       onKeyUp={commit}
@@ -517,7 +611,14 @@ export function LegendView({ legend, layer }: { legend: Legend | null; layer: st
         </div>
       );
     case "vector":
-      return null; // the swatches above already show the colour
+      return (
+        <ul className="gk-map-legend gk-map-classes" data-testid={testid} data-kind="vector">
+          <li>
+            <span className="gk-map-swatch-small" style={{ background: legend.colour }} />
+            {legend.name}
+          </li>
+        </ul>
+      );
   }
 }
 

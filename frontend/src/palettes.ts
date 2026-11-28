@@ -35,3 +35,16 @@ export const NEW_CLASS_COLOURS = [
 
 /** The colour "Other values" starts from when it stops being transparent. */
 export const DEFAULT_OTHER_COLOUR = "#808080";
+
+/** What a vector feature gets for "other values" of a transparent classes Colormap, and when
+ * its field has no number (Map Viewer colour by field, change 03). */
+export const TRANSPARENT = "rgba(0, 0, 0, 0)";
+
+/** A colour MapLibre reads: `#RRGGBBAA` becomes `rgba(r, g, b, a)`, the rest is kept. */
+export function cssColour(hex: string): string {
+  const m = /^#([0-9a-fA-F]{6})([0-9a-fA-F]{2})$/.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const a = Number((parseInt(m[2], 16) / 255).toFixed(3));
+  return "rgba(" + [(n >> 16) & 255, (n >> 8) & 255, n & 255, a].join(", ") + ")";
+}

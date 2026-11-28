@@ -174,6 +174,17 @@ export function Canvas() {
     }
   }, [graph, flow]);
 
+  // a selection asked for without a new graph (Go to Map Layer): select and show the nodes
+  const pending = useStore((s) => s.pendingSelect);
+  useEffect(() => {
+    if (!pending || !graph || !pending.every((id) => id in graph.nodes)) return;
+    if (store.getState().pendingSelect !== pending) return; // taken by a new graph (paste)
+    store.set({ pendingSelect: null });
+    setNodes((prev) => prev.map((n) => ({ ...n, selected: pending.includes(n.id) })));
+    setEdges((prev) => prev.map((e) => ({ ...e, selected: false })));
+    void flow.fitView({ nodes: pending.map((id) => ({ id })), padding: 0.5, maxZoom: 1, duration: 200 });
+  }, [pending, graph, flow]);
+
   const onNodesChange = useCallback(
     (changes: NodeChange<GkNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
     [],

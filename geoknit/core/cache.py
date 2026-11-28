@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -230,6 +231,15 @@ def split_port_key(key: str) -> tuple[str, str]:
     return node_key, port
 
 
+_ELEMENT = re.compile(r"^(.*)\[(\d+)\]$")
+
+
+def split_element(key: str) -> tuple[str, int | None]:
+    """``"<port key>[i]"`` → ``(port key, i)``; a plain port key → ``(key, None)``."""
+    m = _ELEMENT.match(key)
+    return (m.group(1), int(m.group(2))) if m else (key, None)
+
+
 def _dir_size(path: Path) -> int:
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
 
@@ -279,12 +289,19 @@ class DiskCache:
         return outputs, dict(meta.get("summaries", {}))
 
     def port_info(self, key: str) -> tuple[Path, dict[str, Any]]:
-        """``(entry folder, port info from meta.json)`` for a port key; raises ``CacheMiss``."""
+        """``(entry folder, port info from meta.json)`` for a port key; raises ``CacheMiss``.
+
+        ``<node key>.<port>[i]`` names element ``i`` of a list port stored one file
+        per element (change 03): its folder and its own info.
+        """
+        key, index = split_element(key)
         node_key, port = split_port_key(key)
         meta = self.meta(node_key)
         info = meta.get("ports", {}).get(port)
         if meta.get("format") != CACHE_FORMAT or info is None:
             raise CacheMiss(key)
+        if index is not None:
+            return list_element_info(self._entry(node_key), info, index)
         return self._entry(node_key), info
 
     def read_port(self, key: str) -> Any:

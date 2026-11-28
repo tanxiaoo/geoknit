@@ -1,6 +1,7 @@
 """Map Viewer data (SPEC 8, 9): layer descriptions, raster tiles, GeoJSON, inspect.
 
-Everything is read from the disk cache by port key (``<node key>.<port>``):
+Everything is read from the disk cache by port key (``<node key>.<port>``, or
+``<node key>.<port>[i]`` for element ``i`` of a list output, change 03):
 a raster is the cached COG, or the source file a ``.ref.json`` names; a vector
 is the cached GeoParquet. Cache entries never change under a key, so
 descriptions and statistics are memoised by key.
@@ -92,7 +93,8 @@ PALETTE = (
 POOL_IDLE = 20.0
 """Seconds an unused raster stays open for the next tile."""
 
-_KEY = re.compile(r"^[0-9a-f]{64}\.[A-Za-z_][A-Za-z0-9_]*$")
+_KEY = re.compile(r"^[0-9a-f]{64}\.[A-Za-z_][A-Za-z0-9_]*(\[\d+\])?$")
+"""A port key, or ``<port key>[i]`` for element ``i`` of a list output (change 03)."""
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -711,6 +713,29 @@ def describe_vector(cache: DiskCache, key: str) -> dict[str, Any]:
     desc = dict(_describe_vector(str(cache.root), key))
     desc["default_style"] = {"color": PALETTE[3], "opacity": 1.0, "visible": True}
     return desc
+
+
+@functools.lru_cache(maxsize=64)
+def _vector_field(cache_root: str, key: str, name: str) -> dict[str, Any]:
+    gdf = _vector(DiskCache(Path(cache_root)), key)
+    if name not in gdf.columns or name == gdf.geometry.name:
+        raise MapError(f'the vector has no field "{name}"')
+    import pandas as pd
+
+    column = gdf[name].head(MAX_FEATURES)
+    numeric = pd.api.types.is_numeric_dtype(column) and not pd.api.types.is_bool_dtype(column)
+    values = pd.to_numeric(column, errors="coerce") if numeric else None
+    finite = values[values.notna()] if values is not None else None
+    if finite is None or finite.empty:
+        return {"name": name, "numeric": numeric, "min": None, "max": None}
+    return {"name": name, "numeric": True, "min": float(finite.min()), "max": float(finite.max())}
+
+
+def vector_field(cache: DiskCache, key: str, name: str) -> dict[str, Any]:
+    """``{name, numeric, min, max}`` of a vector's field over the features the GeoJSON
+    carries (at most MAX_FEATURES): the "auto" range of a continuous Colormap that
+    colours the vector by that field (change 03, section 4)."""
+    return dict(_vector_field(str(cache.root), key, name))
 
 
 def vector_geojson(cache: DiskCache, key: str) -> tuple[str, int]:

@@ -1596,6 +1596,26 @@ pre.gk-output-error {
   font-size: 11px;
   color: var(--gk-muted);
 }
+/* a layer from a Map Layer: "from Map Layer <name>" and the Go to link (change 03) */
+.gk-map-from {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+}
+.gk-map-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--gk-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.gk-map-layer [data-locked="true"] {
+  opacity: 0.7;
+}
 .gk-map-error {
   margin: 0;
   font-size: 12px;
